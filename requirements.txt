@@ -1,0 +1,8 @@
+ultralytics
+streamlit
+opencv-python-headless
+pandas
+Pillow
+python-dotenv
+supabase
+psycopg[binary,pool]
