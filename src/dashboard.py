@@ -1,19 +1,48 @@
 from __future__ import annotations
 
+import json
 import math
 import os
+import re
+import time
 from pathlib import Path
 
 import pandas as pd
 import streamlit as st
 from dotenv import load_dotenv
 
-from cloud_sync import fetch_recent_detections
+from cloud_sync import fetch_recent_detections, sync_detection_to_supabase
+from detector import process_image
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 CSV_PATH = ROOT_DIR / "data" / "processed" / "detections.csv"
+RAW_DIR = ROOT_DIR / "data" / "raw"
+PROCESSED_DIR = ROOT_DIR / "data" / "processed"
 TARGET_LOCALIZATION_M = 20.0
 load_dotenv(ROOT_DIR / ".env")
+SUPPORTED_UPLOAD_TYPES = ("jpg", "jpeg", "png", "bmp", "tif", "tiff")
+CSV_FIELDS = [
+    "image_name",
+    "processed_path",
+    "detection_count",
+    "max_confidence",
+    "severity",
+    "gps_lat",
+    "gps_lon",
+    "localization_m",
+    "localization_target_met",
+    "estimated_accuracy",
+    "accuracy_target_met",
+    "processing_seconds",
+    "timestamp_utc",
+    "supabase_status",
+    "supabase_url",
+    "storage_path",
+    "db_row_id",
+    "upload_seconds",
+    "total_elapsed_seconds",
+    "boxes",
+]
 
 
 def _bool_env(name: str, default: bool) -> bool:
@@ -21,6 +50,99 @@ def _bool_env(name: str, default: bool) -> bool:
     if value is None:
         return default
     return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _safe_filename(name: str) -> str:
+    base_name = Path(name).name
+    stem = re.sub(r"[^A-Za-z0-9._-]+", "_", Path(base_name).stem).strip("._")
+    stem = stem or "uploaded"
+    suffix = Path(base_name).suffix.lower()
+    if suffix.lstrip(".") not in SUPPORTED_UPLOAD_TYPES:
+        suffix = ".jpg"
+    return f"{stem}{suffix}"
+
+
+def _append_detection_csv(row: dict) -> None:
+    CSV_PATH.parent.mkdir(parents=True, exist_ok=True)
+    writable = {field: row.get(field, "") for field in CSV_FIELDS}
+    writable["boxes"] = json.dumps(row.get("boxes", []), ensure_ascii=True)
+
+    file_exists = CSV_PATH.exists() and CSV_PATH.stat().st_size > 0
+    with CSV_PATH.open("a", newline="", encoding="utf-8") as csv_file:
+        import csv
+
+        writer = csv.DictWriter(csv_file, fieldnames=CSV_FIELDS)
+        if not file_exists:
+            writer.writeheader()
+        writer.writerow(writable)
+
+
+def _supabase_ready() -> bool:
+    has_api = bool(os.getenv("SUPABASE_URL") and os.getenv("SUPABASE_SERVICE_ROLE_KEY"))
+    has_db = bool(os.getenv("SUPABASE_DB_POOLER_URL") or os.getenv("SUPABASE_DB_URL"))
+    return has_api and has_db
+
+
+def render_upload_panel() -> None:
+    st.subheader("Upload and Process Image")
+    uploaded = st.file_uploader("Upload a drone image", type=list(SUPPORTED_UPLOAD_TYPES))
+    conf_threshold = st.slider("Confidence threshold", min_value=0.05, max_value=0.9, value=0.25, step=0.05)
+
+    can_sync = _supabase_ready()
+    sync_choice = st.checkbox("Sync uploaded result to Supabase", value=can_sync, disabled=not can_sync)
+    if not can_sync:
+        st.caption("Supabase sync is disabled because required env vars are incomplete.")
+
+    run_clicked = st.button("Process Uploaded Image", type="primary", disabled=uploaded is None)
+    if not run_clicked or uploaded is None:
+        return
+
+    RAW_DIR.mkdir(parents=True, exist_ok=True)
+    PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
+    safe_name = _safe_filename(uploaded.name)
+    raw_path = RAW_DIR / f"upload_{int(time.time() * 1000)}_{safe_name}"
+    with raw_path.open("wb") as target_file:
+        target_file.write(uploaded.getbuffer())
+
+    with st.spinner("Running crack detection..."):
+        start_time = time.time()
+        result = process_image(raw_path, PROCESSED_DIR, conf_threshold=conf_threshold)
+        if result.get("detection_count", 0) <= 0:
+            st.warning("No crack detections above the selected threshold.")
+            return
+
+        result["supabase_status"] = "skipped"
+        result["supabase_url"] = ""
+        result["storage_path"] = ""
+        result["db_row_id"] = ""
+        result["upload_seconds"] = ""
+        result["total_elapsed_seconds"] = ""
+
+        if sync_choice:
+            try:
+                sync_result = sync_detection_to_supabase(
+                    detection=result,
+                    process_started_at=start_time,
+                    max_total_seconds=300,
+                )
+                result["supabase_status"] = sync_result.get("status", "uploaded")
+                result["supabase_url"] = sync_result.get("image_url", "")
+                result["storage_path"] = sync_result.get("storage_path", "")
+                result["db_row_id"] = sync_result.get("db_row_id", "")
+                result["upload_seconds"] = sync_result.get("upload_seconds", "")
+                result["total_elapsed_seconds"] = sync_result.get("total_elapsed_seconds", "")
+            except Exception as exc:
+                result["supabase_status"] = f"error: {exc}"
+                st.error(f"Supabase sync failed: {exc}")
+
+        _append_detection_csv(result)
+
+    st.success(
+        f"Processed `{result['image_name']}` with {result['detection_count']} detections "
+        f"(max confidence {result['max_confidence']:.2f})."
+    )
+    if result.get("processed_path") and Path(result["processed_path"]).exists():
+        st.image(result["processed_path"], caption="Processed output", width="stretch")
 
 
 def build_mock_map(df: pd.DataFrame) -> pd.DataFrame:
@@ -209,6 +331,7 @@ def main() -> None:
     st.set_page_config(page_title="SkyLink MVP Dashboard", layout="wide")
     st.title("SkyLink MVP Dashboard")
     st.caption("Crack detection, GPS localization, and severity triage for drone imagery.")
+    render_upload_panel()
 
     has_supabase_config = bool(os.getenv("SUPABASE_DB_POOLER_URL") or os.getenv("SUPABASE_DB_URL"))
     df = load_detections_from_supabase() if has_supabase_config else pd.DataFrame()
