@@ -17,6 +17,10 @@ The system detects cracks from 1080p images, annotates outputs, syncs results to
    - Geo map.
    - Location index with Google Maps links.
 6. Demo GPS mode when real GPS EXIF is missing.
+7. FastAPI bridge (`src/server.py`) for web client:
+   - `/api/analyze` proxy to VLM server.
+   - `/api/history` local history storage (project files).
+   - `/api/sync` saves analyzed image locally and syncs metadata/image to Supabase.
 
 ## Tech Stack
 
@@ -25,6 +29,7 @@ The system detects cracks from 1080p images, annotates outputs, syncs results to
 3. Streamlit
 4. Supabase Python client
 5. Psycopg + psycopg_pool
+6. FastAPI + Uvicorn
 
 ## Project Structure
 
@@ -35,11 +40,14 @@ SkyLink-MVP/
 |   |-- detector.py
 |   |-- cloud_sync.py
 |   |-- dashboard.py
+|   |-- server.py
 |   `-- mock_gps.py
+|   `-- static/
 |-- models/
 |-- data/
 |   |-- raw/
 |   `-- processed/
+|       `-- history/
 |-- sql/
 |   `-- supabase_schema.sql
 |-- Dockerfile
@@ -104,6 +112,18 @@ streamlit run src/dashboard.py --server.port 8501
 http://localhost:8501
 ```
 
+6. Start web bridge + project frontend:
+
+```powershell
+python src/server.py
+```
+
+7. Open:
+
+```text
+http://localhost:8001
+```
+
 ## Demo GPS (for presentations)
 
 If images have no GPS EXIF, dashboard can generate realistic demo points.
@@ -121,6 +141,8 @@ python src/mock_gps.py --center-lat 26.3073 --center-lon 50.1456 --radius-deg 0.
 1. `SUPABASE_SERVICE_ROLE_KEY` is backend secret. Do not expose it publicly.
 2. Use Supabase Transaction pooler connection string (`port 6543`) to avoid IPv6/direct-DB issues.
 3. Model file `models/crack.pt` is auto-downloaded on first run if missing.
+4. Old Supabase trial rows are hidden by default in dashboard board view.
+5. New bridge rows are tagged with `bridge_` image names.
 
 ## Sharing with Team
 

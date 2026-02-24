@@ -6,3 +6,6 @@ Pillow
 python-dotenv
 supabase
 psycopg[binary,pool]
+fastapi
+uvicorn[standard]
+httpx

@@ -42,3 +42,11 @@ data/raw/*
 !data/raw/.gitkeep
 data/processed/*
 !data/processed/.gitkeep
+!data/processed/history/
+data/processed/history/*
+!data/processed/history/.gitkeep
+
+# Web bridge runtime history
+src/static/history.json
+src/static/history_images/*
+!src/static/history_images/.gitkeep

@@ -3,16 +3,14 @@ from __future__ import annotations
 import json
 import math
 import os
-import re
-import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
 import streamlit as st
 from dotenv import load_dotenv
 
-from cloud_sync import fetch_recent_detections, sync_detection_to_supabase
-from detector import process_image
+from cloud_sync import fetch_recent_detections
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 CSV_PATH = ROOT_DIR / "data" / "processed" / "detections.csv"
@@ -84,65 +82,12 @@ def _supabase_ready() -> bool:
 
 
 def render_upload_panel() -> None:
-    st.subheader("Upload and Process Image")
-    uploaded = st.file_uploader("Upload a drone image", type=list(SUPPORTED_UPLOAD_TYPES))
-    conf_threshold = st.slider("Confidence threshold", min_value=0.05, max_value=0.9, value=0.25, step=0.05)
-
-    can_sync = _supabase_ready()
-    sync_choice = st.checkbox("Sync uploaded result to Supabase", value=can_sync, disabled=not can_sync)
-    if not can_sync:
-        st.caption("Supabase sync is disabled because required env vars are incomplete.")
-
-    run_clicked = st.button("Process Uploaded Image", type="primary", disabled=uploaded is None)
-    if not run_clicked or uploaded is None:
-        return
-
-    RAW_DIR.mkdir(parents=True, exist_ok=True)
-    PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
-    safe_name = _safe_filename(uploaded.name)
-    raw_path = RAW_DIR / f"upload_{int(time.time() * 1000)}_{safe_name}"
-    with raw_path.open("wb") as target_file:
-        target_file.write(uploaded.getbuffer())
-
-    with st.spinner("Running crack detection..."):
-        start_time = time.time()
-        result = process_image(raw_path, PROCESSED_DIR, conf_threshold=conf_threshold)
-        if result.get("detection_count", 0) <= 0:
-            st.warning("No crack detections above the selected threshold.")
-            return
-
-        result["supabase_status"] = "skipped"
-        result["supabase_url"] = ""
-        result["storage_path"] = ""
-        result["db_row_id"] = ""
-        result["upload_seconds"] = ""
-        result["total_elapsed_seconds"] = ""
-
-        if sync_choice:
-            try:
-                sync_result = sync_detection_to_supabase(
-                    detection=result,
-                    process_started_at=start_time,
-                    max_total_seconds=300,
-                )
-                result["supabase_status"] = sync_result.get("status", "uploaded")
-                result["supabase_url"] = sync_result.get("image_url", "")
-                result["storage_path"] = sync_result.get("storage_path", "")
-                result["db_row_id"] = sync_result.get("db_row_id", "")
-                result["upload_seconds"] = sync_result.get("upload_seconds", "")
-                result["total_elapsed_seconds"] = sync_result.get("total_elapsed_seconds", "")
-            except Exception as exc:
-                result["supabase_status"] = f"error: {exc}"
-                st.error(f"Supabase sync failed: {exc}")
-
-        _append_detection_csv(result)
-
-    st.success(
-        f"Processed `{result['image_name']}` with {result['detection_count']} detections "
-        f"(max confidence {result['max_confidence']:.2f})."
+    st.subheader("Analysis Source")
+    st.info(
+        "Local model analysis is disabled in this dashboard. "
+        "Run analysis through the bridge web app (`python src/server.py` -> `http://localhost:8001`) "
+        "so annotated images and metadata are synced to Supabase."
     )
-    if result.get("processed_path") and Path(result["processed_path"]).exists():
-        st.image(result["processed_path"], caption="Processed output", width="stretch")
 
 
 def build_mock_map(df: pd.DataFrame) -> pd.DataFrame:
@@ -208,6 +153,36 @@ def load_detections(csv_path: Path) -> pd.DataFrame:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
     return df
+
+
+def filter_board_records(df: pd.DataFrame) -> tuple[pd.DataFrame, str]:
+    if df.empty:
+        return df, ""
+
+    filtered = df.copy()
+    notes = []
+    show_legacy = _bool_env("SKYLINK_BOARD_SHOW_LEGACY", False)
+    prefixes_raw = os.getenv("SKYLINK_BOARD_PREFIXES", "bridge_,standalone_")
+    prefixes = tuple(p.strip() for p in prefixes_raw.split(",") if p.strip())
+
+    if not show_legacy and prefixes and "image_name" in filtered.columns:
+        mask = filtered["image_name"].astype(str).str.startswith(prefixes)
+        if mask.any():
+            removed = int((~mask).sum())
+            filtered = filtered[mask].copy()
+            notes.append(f"Hiding {removed} legacy row(s) by default.")
+
+    board_start = os.getenv("SKYLINK_BOARD_START_UTC", "").strip()
+    if board_start and "timestamp_utc" in filtered.columns:
+        try:
+            cutoff = datetime.fromisoformat(board_start.replace("Z", "+00:00"))
+            ts = pd.to_datetime(filtered["timestamp_utc"], errors="coerce", utc=True)
+            filtered = filtered[ts >= cutoff.astimezone(timezone.utc)]
+            notes.append(f"Showing rows from {cutoff.astimezone(timezone.utc).isoformat()} onward.")
+        except ValueError:
+            notes.append("Ignoring invalid SKYLINK_BOARD_START_UTC format.")
+
+    return filtered, " ".join(notes).strip()
 
 
 def _map_palette(severity: str) -> str:
@@ -335,16 +310,24 @@ def main() -> None:
 
     has_supabase_config = bool(os.getenv("SUPABASE_DB_POOLER_URL") or os.getenv("SUPABASE_DB_URL"))
     df = load_detections_from_supabase() if has_supabase_config else pd.DataFrame()
-    data_source = "Supabase" if not df.empty else "Local CSV"
-    if df.empty:
-        df = load_detections(CSV_PATH)
+    data_source = "Supabase"
 
     if df.empty:
-        st.warning("No detections found. Run `python src/main.py` first.")
+        st.warning("No synced detections found yet. Run analysis from `python src/server.py` first.")
+        render_flight_equations()
+        return
+
+    df, board_filter_note = filter_board_records(df)
+    if df.empty:
+        st.warning("No new bridge detections yet. Process an image from the web bridge first.")
+        if board_filter_note:
+            st.caption(board_filter_note)
         render_flight_equations()
         return
 
     st.caption(f"Data source: {data_source}")
+    if board_filter_note:
+        st.caption(board_filter_note)
 
     total = int(df["detection_count"].sum()) if "detection_count" in df.columns else 0
     high_severity = int((df.get("severity", "") == "High Severity").sum()) if "severity" in df.columns else 0
