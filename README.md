@@ -1,157 +1,101 @@
-# SkyLink MVP
+# SkyLink2 (Reproducible)
 
-Crack-inspection MVP for drone images.
+`Skylink2` is the app repo. It does not run your hosted VLM model locally.
 
-The system detects cracks from 1080p images, annotates outputs, syncs results to Supabase (Storage + Postgres), and shows findings in a Streamlit dashboard with map/location navigation.
+It provides:
+- A web bridge UI/API (`src/server.py`) that forwards analysis to your hosted model server.
+- Supabase sync for annotated images and detection metadata.
+- A Streamlit dashboard (`src/dashboard.py`) for reviewing synced results.
+- A packaged hosted-model server drop at `road_inspector_server/` plus the original zip at `artifacts/road_inspector_updated.zip`.
 
-## Features
+## Architecture
 
-1. YOLO crack detection (`crack.pt`) with confidence threshold.
-2. Processed image export with bounding boxes.
-3. Severity tagging (`High Severity` / `Low Severity`).
-4. Supabase sync:
-   - Processed images to Storage.
-   - Metadata to Postgres with transactions.
-5. Dashboard:
-   - KPIs.
-   - Geo map.
-   - Location index with Google Maps links.
-6. Demo GPS mode when real GPS EXIF is missing.
-7. FastAPI bridge (`src/server.py`) for web client:
-   - `/api/analyze` proxy to VLM server.
-   - `/api/history` local history storage (project files).
-   - `/api/sync` saves analyzed image locally and syncs metadata/image to Supabase.
+1. Browser opens `http://localhost:8001` (served by `src/server.py`).
+2. `POST /api/analyze` proxies request to your hosted model URL/API key.
+3. Frontend draws boxes on canvas.
+4. `POST /api/sync` sends annotated image (base64) to bridge.
+5. Bridge stores a local copy in `data/processed/history/` and uploads that same annotated image + metadata to Supabase.
+6. Dashboard reads Supabase records and shows only new bridge-prefixed rows by default.
 
-## Tech Stack
-
-1. Python 3.9+
-2. Ultralytics YOLO
-3. Streamlit
-4. Supabase Python client
-5. Psycopg + psycopg_pool
-6. FastAPI + Uvicorn
-
-## Project Structure
+## Repository Layout
 
 ```text
-SkyLink-MVP/
+Skylink2/
 |-- src/
-|   |-- main.py
-|   |-- detector.py
-|   |-- cloud_sync.py
-|   |-- dashboard.py
 |   |-- server.py
-|   `-- mock_gps.py
+|   |-- dashboard.py
+|   |-- cloud_sync.py
 |   `-- static/
-|-- models/
 |-- data/
-|   |-- raw/
-|   `-- processed/
-|       `-- history/
-|-- sql/
-|   `-- supabase_schema.sql
-|-- Dockerfile
-|-- requirements.txt
+|   `-- processed/history/
+|-- road_inspector_server/           # extracted hosted model server code
+|-- artifacts/road_inspector_updated.zip
 |-- .env.example
-|-- SETUP_SUPABASE.md
-`-- PROJECT_REPORT.md
+|-- requirements.txt
+`-- scripts/
 ```
 
-## Quick Start
-
-1. Open terminal in `SkyLink-MVP`.
-2. Create and activate virtual environment:
+## Reproducible Setup (Windows / PowerShell)
 
 ```powershell
+cd D:\downloads\SeniorProject\Skylink2
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-```
-
-3. Install dependencies:
-
-```powershell
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
-```
-
-4. Create `.env` from template:
-
-```powershell
 Copy-Item .env.example .env
 ```
 
-5. Fill Supabase values in `.env`:
-   - `SUPABASE_URL`
-   - `SUPABASE_SERVICE_ROLE_KEY`
-   - `SUPABASE_DB_POOLER_URL`
+Set required values in `.env`:
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `SUPABASE_DB_POOLER_URL`
+- `SKYLINK_VLM_API_URL`
+- `SKYLINK_VLM_API_KEY`
 
-## Run
+## Run (Recommended)
 
-1. Put input images in `data/raw`.
-2. Run detection only (local CSV/images):
-
+Terminal 1:
 ```powershell
-python src/main.py --conf-threshold 0.25
-```
-
-3. Run full flow with Supabase sync:
-
-```powershell
-python src/main.py --conf-threshold 0.25 --sync
-```
-
-4. Start dashboard:
-
-```powershell
-streamlit run src/dashboard.py --server.port 8501
-```
-
-5. Open:
-
-```text
-http://localhost:8501
-```
-
-6. Start web bridge + project frontend:
-
-```powershell
+cd D:\downloads\SeniorProject\Skylink2
+.\.venv\Scripts\Activate.ps1
 python src/server.py
 ```
 
-7. Open:
+Open:
+- `http://localhost:8001` (web app + analysis flow)
 
-```text
-http://localhost:8001
+Terminal 2:
+```powershell
+cd D:\downloads\SeniorProject\Skylink2
+.\.venv\Scripts\Activate.ps1
+streamlit run src/dashboard.py --server.port 8501
 ```
 
-## Demo GPS (for presentations)
+Open:
+- `http://localhost:8501` (dashboard)
 
-If images have no GPS EXIF, dashboard can generate realistic demo points.
+## Verification
 
-1. Enabled by default in `.env`:
-   - `SKYLINK_DEMO_GPS_IF_MISSING=true`
-2. Optional manual injection into local CSV:
-
+Bridge health:
 ```powershell
-python src/mock_gps.py --center-lat 26.3073 --center-lon 50.1456 --radius-deg 0.00012 --overwrite
+Invoke-RestMethod http://127.0.0.1:8001/api/health
+```
+
+Expected output:
+```json
+{"status":"ok"}
 ```
 
 ## Notes
 
-1. `SUPABASE_SERVICE_ROLE_KEY` is backend secret. Do not expose it publicly.
-2. Use Supabase Transaction pooler connection string (`port 6543`) to avoid IPv6/direct-DB issues.
-3. Model file `models/crack.pt` is auto-downloaded on first run if missing.
-4. Old Supabase trial rows are hidden by default in dashboard board view.
-5. New bridge rows are tagged with `bridge_` image names.
-
-## Sharing with Team
-
-1. Push project to GitHub (without `.env`).
-2. Teammates clone the repo.
-3. Teammates create `.env` from `.env.example`.
-4. Teammates run Quick Start and Run commands.
+- `web_client/` at repo root is not used for runtime.
+- Old Supabase trial rows are hidden by default from the board.
+- New records are tagged with `bridge_` image names.
+- Never expose `SUPABASE_SERVICE_ROLE_KEY` in browser code.
 
 ## Extra Docs
 
-1. Setup guide: `SETUP_SUPABASE.md`
-2. Full report: `PROJECT_REPORT.md`
+- [SETUP_SUPABASE.md](SETUP_SUPABASE.md)
+- [PROJECT_REPORT.md](PROJECT_REPORT.md)
+- [road_inspector_server/README.md](road_inspector_server/README.md)
