@@ -130,12 +130,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const result = await response.json();
             const data = result.data || result;
-            const report = data.vlm_report || {};
+            const report = data.report || data.vlm_report || null;
 
             if (report) {
                 displayResults(data); // Pass data root to handle detections
             } else {
-                throw new Error("Invalid API response: 'vlm_report' key missing.");
+                throw new Error("Invalid API response: missing report payload.");
             }
 
         } catch (err) {
