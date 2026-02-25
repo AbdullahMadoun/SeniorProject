@@ -1,10 +1,23 @@
-# SkyLink2 (Reproducible)
+# SkyLink: Road Inspection VLM
 
-`Skylink2` is the app repo. It does not run your hosted VLM model locally.
+This repository contains the software suite for autonomous drone road inspection using the Qwen2.5-VL-7B-Instruct Vision Language Model.
 
-It provides:
+## Problem Solving & Architectural Decisions
+
+To ensure the system works reliably in real-world, edge-deployed scenarios, we made significant architectural shifts from the initial prototype:
+
+1.  **Decoupling Edge Client & Model Server (`app/` vs `model_server/`)**
+    *   **Problem:** Mixing the lightweight edge tools (drone bridge, dashboards) with the heavy PyTorch/CUDA model server made the repository bloated, difficult to navigate, and hard to deploy on edge devices (like a laptop or Jetson) that lack large GPUs.
+    *   **Solution:** The repository is now split into two clean directories: `app/` (Edge client, bridge, and dashboard) and `model_server/` (GPU inference API). This Separation of Concerns means the edge client can be installed with minimal dependencies, while the model server can be deployed on specialized hardware (e.g., Vast.ai).
+2.  **Offline-First via Supabase Removal**
+    *   **Problem:** The system originally relied on Supabase (a cloud PostgreSQL service) to sync detections. In remote road inspection scenarios, internet connectivity is often spotty or non-existent. A hard dependency on a cloud database prevented the system from running on air-gapped edge devices.
+    *   **Solution:** We stripped out Supabase and SQL integrations, replacing them with local file-based persistence (CSVs and JSON). The Streamlit dashboard now reads directly from local storage, making the system 100% capable of offline operation.
+3.  **Enhanced Security & Key Management**
+    *   **Problem:** API keys were previously handled directly in the frontend browser code, posing a security risk.
+    *   **Solution:** We routed all VLM requests through the local Bridge server. The frontend talks to the Bridge, and the Bridge securely manages the API key and communicates with the `model_server`, keeping secrets out of the browser.
+
+## Components
 - A web bridge UI/API (`src/server.py`) that forwards analysis to your hosted model server.
-- Supabase sync for annotated images and detection metadata.
 - A Streamlit dashboard (`src/dashboard.py`) for reviewing synced results.
 - A packaged hosted-model server drop at `road_inspector_server/` plus the original zip at `artifacts/road_inspector_updated.zip`.
 
@@ -13,26 +26,25 @@ It provides:
 1. Browser opens `http://localhost:8001` (served by `src/server.py`).
 2. `POST /api/analyze` proxies request to your hosted model URL/API key.
 3. Frontend draws boxes on canvas.
-4. `POST /api/sync` sends annotated image (base64) to bridge.
-5. Bridge stores a local copy in `data/processed/history/` and uploads that same annotated image + metadata to Supabase.
-6. Dashboard reads Supabase records and shows only new bridge-prefixed rows by default.
+4. Bridge stores a local copy in `data/processed/history/` and also saves the detection record.
+5. Dashboard reads records and shows only new bridge-prefixed rows by default.
 
 ## Repository Layout
 
 ```text
-Skylink2/
-|-- src/
-|   |-- server.py
-|   |-- dashboard.py
-|   |-- cloud_sync.py
-|   `-- static/
-|-- data/
-|   `-- processed/history/
-|-- road_inspector_server/           # extracted hosted model server code
-|-- artifacts/road_inspector_updated.zip
-|-- .env.example
-|-- requirements.txt
-`-- scripts/
+├── app/                      <-- Edge client tools
+│   ├── src/
+│   │   ├── server.py         (Bridge Server)
+│   │   ├── dashboard.py      (Streamlit Viewer)
+│   │   `-- static/           (Frontend UI)
+│   ├── data/                 (Local persistence)
+│   ├── scripts/
+│   ├── Dockerfile
+│   └── requirements.txt
+├── model_server/             <-- GPU Inference Server
+│   ├── app.py
+│   └── docs/
+└── artifacts/
 ```
 
 ## Reproducible Setup (Windows / PowerShell)
@@ -47,11 +59,7 @@ Copy-Item .env.example .env
 ```
 
 Set required values in `.env`:
-- `SUPABASE_URL`
-- `SUPABASE_SERVICE_ROLE_KEY`
-- `SUPABASE_DB_POOLER_URL`
 - `SKYLINK_VLM_API_URL`
-- `SKYLINK_VLM_API_KEY`
 
 ## Run (Recommended)
 
@@ -90,12 +98,11 @@ Expected output:
 ## Notes
 
 - `web_client/` at repo root is not used for runtime.
-- Old Supabase trial rows are hidden by default from the board.
-- New records are tagged with `bridge_` image names.
-- Never expose `SUPABASE_SERVICE_ROLE_KEY` in browser code.
+
+- Netlify hosting instructions: [NETLIFY_DEPLOY.md](NETLIFY_DEPLOY.md)
 
 ## Extra Docs
 
-- [SETUP_SUPABASE.md](SETUP_SUPABASE.md)
+
 - [PROJECT_REPORT.md](PROJECT_REPORT.md)
 - [road_inspector_server/README.md](road_inspector_server/README.md)

@@ -1,0 +1,7 @@
+[build]
+  publish = "src/static"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

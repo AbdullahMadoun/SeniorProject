@@ -23,7 +23,7 @@ The goal is to provide an automated inspection flow that:
 
 1. Detects crack-like defects from drone images.
 2. Assigns severity and organizes findings.
-3. Shares findings centrally through cloud storage/database.
+3. Shares findings centrally through local storage/database.
 4. Presents actionable map and image views for operators.
 
 ---
@@ -35,8 +35,7 @@ The goal is to provide an automated inspection flow that:
 1. Image ingestion from `data/raw`.
 2. YOLO inference for crack detection.
 3. Annotation generation and processed image export.
-4. Metadata persistence in CSV and Supabase Postgres.
-5. Processed image upload to Supabase Storage.
+4. Metadata persistence in CSV.
 6. Dashboard visualization:
    - KPIs
    - Detection map
@@ -59,9 +58,6 @@ The goal is to provide an automated inspection flow that:
 Raw Images (1080p)
    -> detector.py (YOLO crack inference + severity + GPS extraction)
    -> processed/*.jpg + detections.csv
-   -> cloud_sync.py
-      -> Supabase Storage (processed images)
-      -> Supabase Postgres (metadata rows via transaction)
    -> dashboard.py (Streamlit)
       -> KPIs + Map + Location Index + Latest Detections
 ```
@@ -75,7 +71,7 @@ SkyLink-MVP/
 ├── src/
 │   ├── main.py
 │   ├── detector.py
-│   ├── cloud_sync.py
+
 │   ├── dashboard.py
 │   └── mock_gps.py
 ├── models/
@@ -84,11 +80,9 @@ SkyLink-MVP/
 ├── data/
 │   ├── raw/
 │   └── processed/
-├── sql/
-│   └── supabase_schema.sql
+
 ├── Dockerfile
 ├── requirements.txt
-├── SETUP_SUPABASE.md
 └── PROJECT_REPORT.md
 ```
 

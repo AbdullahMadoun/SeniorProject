@@ -4,8 +4,6 @@ opencv-python-headless
 pandas
 Pillow
 python-dotenv
-supabase
-psycopg[binary,pool]
 fastapi
 uvicorn[standard]
 httpx

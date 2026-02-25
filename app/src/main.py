@@ -7,8 +7,6 @@ import time
 from pathlib import Path
 from typing import Dict, Iterable, List
 
-from cloud_sync import ensure_database_schema, sync_detection_to_supabase
-from detector import process_image
 from dotenv import load_dotenv
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -49,12 +47,6 @@ def write_results_csv(rows: List[Dict[str, object]], output_file: Path) -> None:
         "accuracy_target_met",
         "processing_seconds",
         "timestamp_utc",
-        "supabase_status",
-        "supabase_url",
-        "storage_path",
-        "db_row_id",
-        "upload_seconds",
-        "total_elapsed_seconds",
         "boxes",
     ]
     with output_file.open("w", newline="", encoding="utf-8") as csv_file:
@@ -65,39 +57,14 @@ def write_results_csv(rows: List[Dict[str, object]], output_file: Path) -> None:
             writer.writerow(row)
 
 
-def run_pipeline(raw_dir: Path, processed_dir: Path, conf_threshold: float, do_sync: bool) -> Path:
+def run_pipeline(raw_dir: Path, processed_dir: Path, conf_threshold: float) -> Path:
     start_time = time.time()
     rows: List[Dict[str, object]] = []
-    if do_sync:
-        ensure_database_schema()
 
     for image_path in list_images(raw_dir):
         result = process_image(image_path=image_path, processed_dir=processed_dir, conf_threshold=conf_threshold)
         if result["detection_count"] == 0:
             continue
-
-        result["supabase_status"] = "skipped"
-        result["supabase_url"] = ""
-        result["storage_path"] = ""
-        result["db_row_id"] = ""
-        result["upload_seconds"] = ""
-        result["total_elapsed_seconds"] = ""
-
-        if do_sync and result["processed_path"]:
-            try:
-                sync_result = sync_detection_to_supabase(
-                    detection=result,
-                    process_started_at=start_time,
-                    max_total_seconds=300,
-                )
-                result["supabase_status"] = sync_result.get("status", "uploaded")
-                result["supabase_url"] = sync_result.get("image_url", "")
-                result["storage_path"] = sync_result.get("storage_path", "")
-                result["db_row_id"] = sync_result.get("db_row_id", "")
-                result["upload_seconds"] = sync_result.get("upload_seconds", "")
-                result["total_elapsed_seconds"] = sync_result.get("total_elapsed_seconds", "")
-            except Exception as exc:
-                result["supabase_status"] = f"error: {exc}"
 
         rows.append(result)
 
@@ -123,8 +90,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--raw-dir", type=Path, default=RAW_DIR, help="Path to raw drone images")
     parser.add_argument("--processed-dir", type=Path, default=PROCESSED_DIR, help="Path for processed images")
     parser.add_argument("--conf-threshold", type=float, default=0.25, help="YOLO confidence threshold")
-    parser.add_argument("--sync", action="store_true", help="Sync processed images + metadata to Supabase")
-    parser.add_argument("--upload", action="store_true", help="Alias for --sync")
     return parser
 
 
@@ -135,7 +100,6 @@ if __name__ == "__main__":
             raw_dir=args.raw_dir,
             processed_dir=args.processed_dir,
             conf_threshold=args.conf_threshold,
-            do_sync=(args.sync or args.upload),
         )
     except ValueError as exc:
         raise SystemExit(f"Configuration error: {exc}") from exc

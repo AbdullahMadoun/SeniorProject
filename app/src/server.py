@@ -15,10 +15,6 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-try:
-    from cloud_sync import sync_detection_to_supabase
-except ImportError:
-    sync_detection_to_supabase = None
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 STATIC_DIR = Path(__file__).parent / "static"
@@ -33,8 +29,8 @@ PROCESSED_HISTORY_DIR.mkdir(parents=True, exist_ok=True)
 if not HISTORY_FILE.exists():
     HISTORY_FILE.write_text("[]", encoding="utf-8")
 
-VLM_API_URL = os.getenv("SKYLINK_VLM_API_URL", "https://essentially-contests-trip-delicious.trycloudflare.com/analyze")
-VLM_API_KEY = os.getenv("SKYLINK_VLM_API_KEY", "road-inspector-secret-key-2024")
+VLM_API_URL = os.getenv("SKYLINK_VLM_API_URL", "")
+VLM_API_KEY = os.getenv("SKYLINK_VLM_API_KEY", "")
 
 app = FastAPI(title="SkyLink Bridge")
 app.add_middleware(
@@ -160,12 +156,12 @@ async def analyze(request: Request) -> Any:
     try:
         payload = await request.json()
         forward_url = str(payload.pop("api_url", VLM_API_URL)).strip() or VLM_API_URL
-        forward_key = str(payload.pop("api_key", VLM_API_KEY)).strip() or VLM_API_KEY
+        forward_key = VLM_API_KEY
         async with httpx.AsyncClient(timeout=180.0) as client:
             response = await client.post(
                 forward_url,
                 json=payload,
-                headers={"X-API-Key": forward_key, "Content-Type": "application/json"},
+                headers={"X-API-Key": forward_key, "Content-Type": "application/json"} if forward_key else {"Content-Type": "application/json"},
             )
         if response.status_code != 200:
             raise HTTPException(status_code=response.status_code, detail=response.text)
@@ -175,46 +171,6 @@ async def analyze(request: Request) -> Any:
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
-
-@app.post("/api/sync")
-async def sync(request: Request) -> Dict[str, Any]:
-    if not sync_detection_to_supabase:
-        return {"status": "skipped", "message": "Supabase sync not configured"}
-
-    start_time = time.time()
-    try:
-        data = await request.json()
-        encoded_image = str(data.get("processed_image_base64", "")).strip()
-        if not encoded_image:
-            raise HTTPException(status_code=400, detail="processed_image_base64 is required")
-
-        saved_image = _decode_image_to_file(encoded_image, PROCESSED_HISTORY_DIR, prefix="analysis")
-        boxes = data.get("boxes") if isinstance(data.get("boxes"), list) else []
-        gps_lat, gps_lon = _extract_location(data)
-
-        detection = {
-            "image_name": _bridge_image_name(data.get("image_name"), saved_image.name),
-            "processed_path": str(saved_image),
-            "detection_count": int(data.get("detection_count", len(boxes))),
-            "max_confidence": float(data.get("max_confidence", _max_confidence_from_boxes(boxes))),
-            "severity": _normalize_severity(str(data.get("severity", ""))),
-            "gps_lat": gps_lat,
-            "gps_lon": gps_lon,
-            "localization_m": 20.0,
-            "localization_target_met": True,
-            "estimated_accuracy": min(1.0, float(data.get("max_confidence", 0.85))),
-            "accuracy_target_met": True,
-            "processing_seconds": float(data.get("processing_seconds", 0.0)),
-            "timestamp_utc": datetime.now(timezone.utc).isoformat(),
-            "boxes": boxes,
-        }
-        result = sync_detection_to_supabase(detection, start_time, 300)
-        result["local_image_path"] = str(saved_image)
-        return {"status": "success", "result": result}
-    except HTTPException:
-        raise
-    except Exception as exc:
-        return {"status": "error", "message": str(exc)}
 
 
 app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")

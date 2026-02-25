@@ -13,6 +13,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let currentImageBase64 = null;
     let currentImageDataUrl = null;
+    const appConfig = window.APP_CONFIG || {};
+    const bridgeBase = String(appConfig.BRIDGE_BASE_URL || '').trim().replace(/\/+$/, '');
+    const historyStorageKey = 'skylink_history_v1';
+
+    function hasBridge() {
+        return bridgeBase.length > 0;
+    }
+
+    function bridgeUrl(path) {
+        return `${bridgeBase}${path}`;
+    }
 
     // Handle drag and drop styling
     ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
@@ -111,13 +122,25 @@ document.addEventListener('DOMContentLoaded', () => {
         const startTime = performance.now();
 
         try {
-            const response = await fetch('/api/analyze', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(payload)
-            });
+            let response;
+            if (hasBridge()) {
+                response = await fetch(bridgeUrl('/api/analyze'), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+            } else {
+                response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        image_b64: currentImageBase64,
+                        location: [26.305, 50.146]
+                    })
+                });
+            }
 
             clearInterval(timerInterval);
             const duration = ((performance.now() - startTime) / 1000).toFixed(1);
@@ -216,15 +239,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     });
                 }
 
-                // Sync after image and boxes are completely drawn
-                syncToSupabase(data);
+                // Done drawing
             };
             img.src = currentImageDataUrl;
-        } else {
-            // Sync immediately if no image/canvas
-            syncToSupabase(data);
         }
-
         document.getElementById('reportSummary').textContent = report.summary || "Analysis successful";
 
         // Engineering Report (Markdown)
@@ -274,51 +292,6 @@ document.addEventListener('DOMContentLoaded', () => {
         resultSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
-    async function syncToSupabase(data) {
-        const canvas = document.getElementById('resultCanvas');
-        const processedImageBase64 = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
-
-        // Handle new API Format
-        const report = data.report || data.vlm_report || {};
-        const boxes = report.boxes || data.detections || [];
-        const md = report.report_markdown || '';
-
-        // Create a thumbnail for local history (to save localStorage space)
-        const thumbCanvas = document.createElement('canvas');
-        const scale = 300 / canvas.width;
-        thumbCanvas.width = 300;
-        thumbCanvas.height = canvas.height * scale;
-        const thumbCtx = thumbCanvas.getContext('2d');
-        thumbCtx.drawImage(canvas, 0, 0, thumbCanvas.width, thumbCanvas.height);
-        const thumbDataUrl = thumbCanvas.toDataURL('image/jpeg', 0.5);
-
-        // Track locally for the Dashboard Map & Grid
-        trackHistoricalAnalysis(boxes, report.summary || '', thumbDataUrl);
-
-        try {
-            await fetch('/api/sync', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    image_name: `bridge_${Date.now()}.jpg`,
-                    processed_image_base64: processedImageBase64,
-                    detection_count: boxes.length,
-                    max_confidence: 0.85,
-                    severity: boxes.some(b => b.severity === 'high') ? 'High' : 'Moderate',
-                    boxes: boxes,
-                    report_markdown: md,
-                    location: {
-                        "lat": 26.3073,
-                        "lon": 50.1456
-                    }
-                })
-            });
-            console.log('Synced to Supabase via Bridge server');
-        } catch (err) {
-            console.warn('Supabase sync from standalone failed (Bridge server unreachable?):', err);
-        }
-    }
-
     // ==========================================
     // Tab Navigation Logic
     // ==========================================
@@ -357,21 +330,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function loadHistoricalAnalysis() {
         try {
-            const res = await fetch('/api/history');
-            if (res.ok) {
-                localHistory = await res.json();
-                updateDashboardKPI();
-            }
-        } catch (e) {
-            console.error('Failed to load history', e);
+            localHistory = JSON.parse(localStorage.getItem(historyStorageKey) || '[]');
+        } catch (_) {
+            localHistory = [];
         }
+        updateDashboardKPI();
     }
 
     async function trackHistoricalAnalysis(boxes, summary, thumbUrl) {
-        // Al-Khobar Base Coordinates center area:
-        const AL_KHOBAR_LAT = 26.2833;
-        const AL_KHOBAR_LON = 50.1983;
-
         // Randomize slightly around Al-Khobar for demo spread
         const plotLat = AL_KHOBAR_LAT + (Math.random() - 0.5) * 0.05;
         const plotLon = AL_KHOBAR_LON + (Math.random() - 0.5) * 0.05;
@@ -388,16 +354,24 @@ document.addEventListener('DOMContentLoaded', () => {
             timestamp: new Date().toISOString()
         };
 
-        try {
-            await fetch('/api/history', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(record)
-            });
-            await loadHistoricalAnalysis();
-        } catch (e) {
-            console.error('Failed to save history', e);
+        if (hasBridge()) {
+            try {
+                await fetch(bridgeUrl('/api/history'), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(record)
+                });
+                await loadHistoricalAnalysis();
+                return;
+            } catch (e) {
+                console.error('Failed to save history to bridge', e);
+            }
         }
+
+        localHistory.push(record);
+        localHistory = localHistory.slice(-50);
+        localStorage.setItem(historyStorageKey, JSON.stringify(localHistory));
+        updateDashboardKPI();
     }
 
     function updateDashboardKPI() {

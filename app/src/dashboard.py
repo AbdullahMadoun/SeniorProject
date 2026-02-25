@@ -10,9 +10,7 @@ import pandas as pd
 import streamlit as st
 from dotenv import load_dotenv
 
-from cloud_sync import fetch_recent_detections
-
-ROOT_DIR = Path(__file__).resolve().parents[1]
+from dotenv import load_dotenvROOT_DIR = Path(__file__).resolve().parents[1]
 CSV_PATH = ROOT_DIR / "data" / "processed" / "detections.csv"
 RAW_DIR = ROOT_DIR / "data" / "raw"
 PROCESSED_DIR = ROOT_DIR / "data" / "processed"
@@ -33,12 +31,6 @@ CSV_FIELDS = [
     "accuracy_target_met",
     "processing_seconds",
     "timestamp_utc",
-    "supabase_status",
-    "supabase_url",
-    "storage_path",
-    "db_row_id",
-    "upload_seconds",
-    "total_elapsed_seconds",
     "boxes",
 ]
 
@@ -75,18 +67,12 @@ def _append_detection_csv(row: dict) -> None:
         writer.writerow(writable)
 
 
-def _supabase_ready() -> bool:
-    has_api = bool(os.getenv("SUPABASE_URL") and os.getenv("SUPABASE_SERVICE_ROLE_KEY"))
-    has_db = bool(os.getenv("SUPABASE_DB_POOLER_URL") or os.getenv("SUPABASE_DB_URL"))
-    return has_api and has_db
-
-
 def render_upload_panel() -> None:
     st.subheader("Analysis Source")
     st.info(
         "Local model analysis is disabled in this dashboard. "
         "Run analysis through the bridge web app (`python src/server.py` -> `http://localhost:8001`) "
-        "so annotated images and metadata are synced to Supabase."
+        "so annotated images and metadata are synced locally."
     )
 
 
@@ -112,28 +98,6 @@ def build_mock_map(df: pd.DataFrame) -> pd.DataFrame:
         )
     return pd.DataFrame(points)
 
-
-def load_detections_from_supabase() -> pd.DataFrame:
-    try:
-        records = fetch_recent_detections(limit=300)
-    except Exception:
-        return pd.DataFrame()
-    df = pd.DataFrame(records)
-    if df.empty:
-        return df
-    numeric_columns = [
-        "detection_count",
-        "max_confidence",
-        "gps_lat",
-        "gps_lon",
-        "localization_m",
-        "processing_seconds",
-        "estimated_accuracy",
-    ]
-    for col in numeric_columns:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors="coerce")
-    return df
 
 
 def load_detections(csv_path: Path) -> pd.DataFrame:
@@ -308,12 +272,11 @@ def main() -> None:
     st.caption("Crack detection, GPS localization, and severity triage for drone imagery.")
     render_upload_panel()
 
-    has_supabase_config = bool(os.getenv("SUPABASE_DB_POOLER_URL") or os.getenv("SUPABASE_DB_URL"))
-    df = load_detections_from_supabase() if has_supabase_config else pd.DataFrame()
-    data_source = "Supabase"
+    df = load_detections(CSV_PATH)
+    data_source = "Local CSV"
 
     if df.empty:
-        st.warning("No synced detections found yet. Run analysis from `python src/server.py` first.")
+        st.warning("No detections found yet. Run analysis from `python src/server.py` first.")
         render_flight_equations()
         return
 
