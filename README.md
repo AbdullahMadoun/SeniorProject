@@ -19,7 +19,19 @@ To ensure the system works reliably in real-world, edge-deployed scenarios, we m
 ## Components
 - A web bridge UI/API (`src/server.py`) that forwards analysis to your hosted model server.
 - A Streamlit dashboard (`src/dashboard.py`) for reviewing synced results.
-- A packaged hosted-model server drop at `road_inspector_server/` plus the original zip at `artifacts/road_inspector_updated.zip`.
+- A packaged hosted-model server drop at `model_server/` plus the original zip at `artifacts/road_inspector_updated.zip`.
+
+## Examples Showcase
+
+The following examples demonstrate how the two-part system works together to identify and classify road defects:
+
+### 1. Detection and Severity Assignment
+![Annotated Anomalies](examples/Road_anomalies_annotated_by_yolo_and-severity_by_Qwen.png)
+*This example demonstrates the system's core mapping: the local YOLO model first detects road anomalies (drawing the bounding boxes), and then the Qwen Vision-Language Model analyzes the cropped regions to classify the severity of each detected anomaly (e.g., High, Moderate, Low).*
+
+### 2. Generated Engineering Report
+![Engineering Report](examples/Example_Report_from_a_different_image.png)
+*In addition to visual bounding boxes, the system leverages the VLM to generate a detailed engineering report. This report summarizes the specific defects found, their context, and provides recommended maintenance actions based on the analysis.*
 
 ## Architecture
 
