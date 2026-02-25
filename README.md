@@ -2,36 +2,41 @@
 
 This repository contains the software suite for autonomous drone road inspection using the Qwen2.5-VL-7B-Instruct Vision Language Model.
 
-## Problem Solving & Architectural Decisions
+## The SkyLink Story: From Cloud to Edge
 
-To ensure the system works reliably in real-world, edge-deployed scenarios, we made significant architectural shifts from the initial prototype:
+Building a fully autonomous drone road inspection system is hard. Building one that actually works when deployed in the real world—where internet is spotty, edge devices have limited power, and security is paramount—is a completely different beast. Here is how we tackled the biggest challenges in taking SkyLink from a proof-of-concept to a field-ready application.
 
-1.  **Decoupling Edge Client & Model Server (`app/` vs `model_server/`)**
-    *   **Problem:** Mixing the lightweight edge tools (drone bridge, dashboards) with the heavy PyTorch/CUDA model server made the repository bloated, difficult to navigate, and hard to deploy on edge devices (like a laptop or Jetson) that lack large GPUs.
-    *   **Solution:** The repository is now split into two clean directories: `app/` (Edge client, bridge, and dashboard) and `model_server/` (GPU inference API). This Separation of Concerns means the edge client can be installed with minimal dependencies, while the model server can be deployed on specialized hardware (e.g., Vast.ai).
-2.  **Offline-First via Supabase Removal**
-    *   **Problem:** The system originally relied on Supabase (a cloud PostgreSQL service) to sync detections. In remote road inspection scenarios, internet connectivity is often spotty or non-existent. A hard dependency on a cloud database prevented the system from running on air-gapped edge devices.
-    *   **Solution:** We stripped out Supabase and SQL integrations, replacing them with local file-based persistence (CSVs and JSON). The Streamlit dashboard now reads directly from local storage, making the system 100% capable of offline operation.
-3.  **Enhanced Security & Key Management**
-    *   **Problem:** API keys were previously handled directly in the frontend browser code, posing a security risk.
-    *   **Solution:** We routed all VLM requests through the local Bridge server. The frontend talks to the Bridge, and the Bridge securely manages the API key and communicates with the `model_server`, keeping secrets out of the browser.
+### The Heavyweight Problem: Splitting the Monolith
+**The Problem:** Our initial prototype was a monolith. We had lightweight edge tools (like the drone bridge and dashboards) tangled up with a massive PyTorch/CUDA model server. It was bloated and impossible to deploy on edge devices like a laptop or a Jetson Nano that lack massive GPUs.
+**The Solution:** We deliberately decoupled the system. The repository is now neatly split into two worlds: `app/` and `model_server/`. 
+- `app/` contains the Edge client, bridge, and dashboard. It installs in seconds and runs on anything. 
+- `model_server/` handles the heavy GPU inference API and can be deployed remotely on specialized hardware (like Vast.ai). You bring the muscle where you need it, and keep the edge lean.
 
-## Components
-- A web bridge UI/API (`src/server.py`) that forwards analysis to your hosted model server.
-- A Streamlit dashboard (`src/dashboard.py`) for reviewing synced results.
-- A packaged hosted-model server drop at `model_server/` plus the original zip at `artifacts/road_inspector_updated.zip`.
+### The Connectivity Problem: Cutting the Cloud Cord
+**The Problem:** Originally, SkyLink relied heavily on Supabase, a cloud PostgreSQL service, to sync every detection. But what happens when a drone is inspecting a remote highway with zero cell reception? The system would grind to a halt. A hard dependency on the cloud meant our edge devices weren't truly "edge."
+**The Solution:** We aggressively stripped out Supabase and all SQL integrations. We replaced the entire cloud dependency with robust, local file-based persistence using CSVs and JSON. Now, the Streamlit dashboard reads directly from the local disk. The system is 100% capable of offline operation—when the drone flies into a dead zone, SkyLink doesn't blink.
 
-## Examples Showcase
+### The Security Problem: Hiding the Keys
+**The Problem:** In our rush to get the dashboard working, we ended up handling API keys directly in the frontend browser code. Any user opening the web app could potentially intercept the keys, posing a massive security risk.
+**The Solution:** We introduced a local Bridge server that acts as a secure middleman. The frontend now only talks to the Bridge, and the Bridge securely holds the API keys and communicates with the `model_server`. Secrets stay on the server, safely out of the browser.
 
-The following examples demonstrate how the two-part system works together to identify and classify road defects:
+---
 
-### 1. Detection and Severity Assignment
+## Action in the Field: How It Works
+
+So, how does this all come together when the drone is actually flying?
+
+### 1. The Detection Core
+Imagine the drone flying over a stretch of cracked pavement. The first step happens locally: our lightweight YOLO model scans the live feed and instantly draws bounding boxes around anomalies. But drawing a box isn't enough—we need to know how bad it is. That's where the second step kicks in. The cropped image is securely sent via the Bridge to the Qwen Vision-Language Model, which analyzes the crack and classifies its severity (High, Moderate, Low).
+
 ![Annotated Anomalies](examples/Road_anomalies_annotated_by_yolo_and-severity_by_Qwen.png)
-*This example demonstrates the system's core mapping: the local YOLO model first detects road anomalies (drawing the bounding boxes), and then the Qwen Vision-Language Model analyzes the cropped regions to classify the severity of each detected anomaly (e.g., High, Moderate, Low).*
+*(Above: The local YOLO model detects the anomalies, and the VLM assigns the severity).*
 
-### 2. Generated Engineering Report
+### 2. The Final Engineering Report
+Once the severity is assessed, the VLM doesn't just return a label; it generates a comprehensive, human-readable engineering report. This report details the specific defects found, explains the context, and provides actionable maintenance recommendations for the road crew.
+
 ![Engineering Report](examples/Example_Report_from_a_different_image.png)
-*In addition to visual bounding boxes, the system leverages the VLM to generate a detailed engineering report. This report summarizes the specific defects found, their context, and provides recommended maintenance actions based on the analysis.*
+*(Above: The detailed report generated by the VLM based on the visual evidence).*
 
 ## Architecture
 
