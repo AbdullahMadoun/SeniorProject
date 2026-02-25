@@ -2,41 +2,54 @@
 
 This repository contains the software suite for autonomous drone road inspection using the Qwen2.5-VL-7B-Instruct Vision Language Model.
 
-## The SkyLink Story: From Cloud to Edge
+## The SkyLink Vision: AI-Driven Infrastructure Inspection
 
-Building a fully autonomous drone road inspection system is hard. Building one that actually works when deployed in the real world—where internet is spotty, edge devices have limited power, and security is paramount—is a completely different beast. Here is how we tackled the biggest challenges in taking SkyLink from a proof-of-concept to a field-ready application.
+The world’s road networks are aging rapidly, but the way we inspect them hasn’t evolved. Traditional road maintenance relies on manual surveys—crews driving slowly down highways or walking on foot to visually identify cracks and potholes. It’s slow, dangerous, expensive, and incredibly subjective. Two different inspectors might look at the same crack and assign it a different severity rating based on their experience or fatigue level.
 
-### The Heavyweight Problem: Splitting the Monolith
-**The Problem:** Our initial prototype was a monolith. We had lightweight edge tools (like the drone bridge and dashboards) tangled up with a massive PyTorch/CUDA model server. It was bloated and impossible to deploy on edge devices like a laptop or a Jetson Nano that lack massive GPUs.
-**The Solution:** We deliberately decoupled the system. The repository is now neatly split into two worlds: `app/` and `model_server/`. 
-- `app/` contains the Edge client, bridge, and dashboard. It installs in seconds and runs on anything. 
-- `model_server/` handles the heavy GPU inference API and can be deployed remotely on specialized hardware (like Vast.ai). You bring the muscle where you need it, and keep the edge lean.
+There has to be a better way.
 
-### The Connectivity Problem: Cutting the Cloud Cord
-**The Problem:** Originally, SkyLink relied heavily on Supabase, a cloud PostgreSQL service, to sync every detection. But what happens when a drone is inspecting a remote highway with zero cell reception? The system would grind to a halt. A hard dependency on the cloud meant our edge devices weren't truly "edge."
-**The Solution:** We aggressively stripped out Supabase and all SQL integrations. We replaced the entire cloud dependency with robust, local file-based persistence using CSVs and JSON. Now, the Streamlit dashboard reads directly from the local disk. The system is 100% capable of offline operation—when the drone flies into a dead zone, SkyLink doesn't blink.
+### The Problem: Automating the Subjectiveness of Human Eyes
 
-### The Security Problem: Hiding the Keys
-**The Problem:** In our rush to get the dashboard working, we ended up handling API keys directly in the frontend browser code. Any user opening the web app could potentially intercept the keys, posing a massive security risk.
-**The Solution:** We introduced a local Bridge server that acts as a secure middleman. The frontend now only talks to the Bridge, and the Bridge securely holds the API keys and communicates with the `model_server`. Secrets stay on the server, safely out of the browser.
+While drones have made it easier to capture high-definition imagery of infrastructure without putting humans in traffic, processing that massive amount of data remains a bottleneck. Sending thousands of images back for human review defeats the purpose of automation. 
+
+Standard Computer Vision (like YOLO) can detect *where* a crack is, but it lacks reasoning. It draws a box, but it doesn't know if that crack is a minor cosmetic issue or a structural failure requiring immediate patching. It can't explain *why* it matters.
+
+### The Innovation: Bringing Vision-Language Models to the Asphalt
+
+SkyLink bridges this gap by introducing **Vision-Language Models (VLMs)** to civil engineering. 
+
+Instead of just relying on bounding boxes, SkyLink implements a two-stage pipeline:
+1. **The Spotter (YOLO):** A lightweight, fast object detection model scans the raw image to locate potential anomalies.
+2. **The Engineer (Qwen2.5-VL-7B):** The cropped anomaly is sent to the VLM. The VLM acts as an AI civil engineer. It doesn't just look at pixels; it reasons about the image. It classifies the severity (High, Moderate, Low) based on context, depth, and structural implications. Crucially, it generates a human-readable engineering report explaining its decision and recommending maintenance actions.
+
+This combination of fast, local detection with deep, reasoning-based AI analysis represents a massive leap forward. It transforms raw pixel data into actionable maintenance intelligence, eliminating human subjectivity and drastically reducing the time from inspection to repair.
+
+### 🚀 Future Roadmap: Taking Flight
+
+Currently, SkyLink is a powerful software suite capable of processing live or static image feeds and returning intelligent analysis. **The next major phase of this project is full hardware integration.**
+
+In the future, SkyLink will be integrated with an autonomous drone's workflow. The drone will execute pre-programmed waypoint missions over road segments to capture high-resolution imagery. Because edge AI processing consumes significant battery power, the drone will not run heavy models mid-flight. Instead, upon returning to its **automated docking station**, the heavy lifting begins:
+1. The drone offloads the captured imagery to the dock's companion computer.
+2. The dock runs the lightweight YOLO model to instantly scan the structural data.
+3. The dock utilizes a secure bridge to ping the remote VLM for severity assessment and final engineering report generation.
 
 ---
 
 ## Action in the Field: How It Works
 
-So, how does this all come together when the drone is actually flying?
+Here is a look at the AI pipeline in action:
 
-### 1. The Detection Core
-Imagine the drone flying over a stretch of cracked pavement. The first step happens locally: our lightweight YOLO model scans the live feed and instantly draws bounding boxes around anomalies. But drawing a box isn't enough—we need to know how bad it is. That's where the second step kicks in. The cropped image is securely sent via the Bridge to the Qwen Vision-Language Model, which analyzes the crack and classifies its severity (High, Moderate, Low).
+### 1. Detection and Contextual Analysis
+In this example, the system processes a raw feed. The local model identifies the defect areas (drawing the bounding boxes). The cropped regions are then analyzed by the VLM, which reasons about the visual data to assign a contextual severity rating.
 
 ![Annotated Anomalies](examples/Road_anomalies_annotated_by_yolo_and-severity_by_Qwen.png)
-*(Above: The local YOLO model detects the anomalies, and the VLM assigns the severity).*
+*(Above: The system identifies road anomalies and the VLM assesses their structural severity).*
 
-### 2. The Final Engineering Report
-Once the severity is assessed, the VLM doesn't just return a label; it generates a comprehensive, human-readable engineering report. This report details the specific defects found, explains the context, and provides actionable maintenance recommendations for the road crew.
+### 2. Generated Engineering Report
+The true power of the VLM is its ability to communicate like an engineer. Once the severity is calculated, the VLM generates a detailed, structured report summarizing the defects, explaining the visual evidence, and advising on the necessary maintenance steps.
 
 ![Engineering Report](examples/Example_Report_from_a_different_image.png)
-*(Above: The detailed report generated by the VLM based on the visual evidence).*
+*(Above: The automated engineering report generated by the VLM).*
 
 ## Architecture
 
