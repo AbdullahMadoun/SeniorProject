@@ -1,0 +1,76 @@
+[project]
+name = "SkyLink"
+baseline_version = "2026-03-31"
+baseline_document = "autonomy/docs/system_baseline.md"
+
+[references]
+primary_report = "D:/downloads/SeniorProject/info.txt"
+real_flight_stack = "PX4"
+operator_station = "QGroundControl"
+mission_api = "MAVSDK-Python"
+
+[home]
+lat = 24.689000
+lon = 50.174000
+alt_m = 584.0
+
+[mission]
+max_operating_radius_m = 100.0
+max_altitude_m = 100.0
+target_endurance_min = 20.0
+validated_endurance_min = 21.0
+processing_latency_max_min = 5.0
+geotag_error_max_m = 20.0
+
+[survey]
+altitude_agl_m = 25.0
+width_m = 44.0
+height_m = 44.0
+row_spacing_m = 5.0
+cruise_speed_mps = 5.0
+
+[vehicle]
+cruise_speed_min_mps = 3.0
+cruise_speed_nominal_mps = 5.0
+cruise_speed_max_mps = 7.0
+
+[safety]
+geofence_radius_m = 100.0
+max_altitude_m = 100.0
+max_mission_area_m2 = 2500.0
+max_mission_dimension_m = 50.0
+battery_rtl_percent = 20.0
+battery_warn_percent = 30.0
+battery_emergency_percent = 10.0
+min_speed_mps = 3.0
+max_speed_mps = 7.0
+wind_limit_mps = 7.0
+
+[weather]
+max_operating_wind_mps = 7.0
+nominal_validation_wind_mps = 3.0
+
+[docking]
+charge_power_w = 50.0
+landing_accuracy_target_m = 0.4
+landing_platform_diameter_min_m = 0.4
+landing_platform_diameter_max_m = 0.6
+dock_center_north_m = 0.0
+dock_center_east_m = 0.0
+dock_center_down_m = 0.0
+approach_activation_radius_m = 12.0
+landing_target_stream_rate_hz = 5.0
+precision_landing_strategy = "camera_marker_plus_rangefinder"
+rtl_precision_land_mode = "required"
+
+[vision]
+capture_resolution_min = "1920x1080"
+preferred_physical_camera_resolution = "3840x2160"
+detection_accuracy_min = 0.75
+irlock_enabled = false
+
+[hardware]
+flight_controller = "Pixhawk/PX4"
+gps_model = "M9N"
+rangefinder_primary = "TFmini-S"
+rangefinder_secondary = "MTF-01P"

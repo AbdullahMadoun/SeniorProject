@@ -18,6 +18,7 @@ pip-wheel-metadata/
 
 # Virtual environments
 .venv/
+.venv-wsl/
 venv/
 env/
 
@@ -36,6 +37,45 @@ env/
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Local upstream simulator checkouts
+vendor/**
+!vendor/README.md
+
+# Generated autonomy artifacts (track curated latest evidence only)
+artifacts/**
+!artifacts/live_px4/
+artifacts/live_px4/**
+!artifacts/live_px4/latest_execution_validation.json
+!artifacts/live_px4/latest_mission_validation.json
+!artifacts/live_px4/latest_precision_landing_profile.json
+!artifacts/live_px4/latest_landing_target_consumption.json
+!artifacts/live_px4/latest_dock_approach_validation.json
+!artifacts/precision_landing/
+artifacts/precision_landing/**
+!artifacts/precision_landing/latest/
+artifacts/precision_landing/latest/**
+!artifacts/precision_landing/latest/manifest.json
+!artifacts/precision_landing/latest/summary.md
+!artifacts/replay_bundle/
+artifacts/replay_bundle/**
+!artifacts/replay_bundle/latest/
+artifacts/replay_bundle/latest/**
+!artifacts/replay_bundle/latest/manifest.json
+!artifacts/replay_bundle/latest/summary.md
+!artifacts/replay_bundle/latest/dock_approach_timeline.csv
+!artifacts/showcase/
+artifacts/showcase/**
+!artifacts/showcase/latest/
+artifacts/showcase/latest/**
+!artifacts/showcase/latest/index.html
+!artifacts/showcase/latest/showcase_data.json
+!artifacts/weather_scenarios/
+artifacts/weather_scenarios/**
+!artifacts/weather_scenarios/latest/
+artifacts/weather_scenarios/latest/**
+!artifacts/weather_scenarios/latest/manifest.json
+!artifacts/weather_scenarios/latest/summary.md
 
 # Runtime data (keep folders only)
 data/raw/*

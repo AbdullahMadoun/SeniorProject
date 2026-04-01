@@ -1,138 +1,94 @@
-# SkyLink: Road Inspection VLM
+# SkyLink
 
-This repository contains the software suite for autonomous drone road inspection using the Qwen2.5-VL-7B-Instruct Vision Language Model.
+SkyLink is now an integrated repository for two connected systems:
 
-## The SkyLink Vision: AI-Driven Infrastructure Inspection
+1. a PX4-targeted drone autonomy and simulation stack
+2. a road-inspection AI application stack
 
-The world’s road networks are aging rapidly, but the way we inspect them hasn’t evolved. Traditional road maintenance relies on manual surveys—crews driving slowly down highways or walking on foot to visually identify cracks and potholes. It’s slow, dangerous, expensive, and incredibly subjective. Two different inspectors might look at the same crack and assign it a different severity rating based on their experience or fatigue level.
+The drone/autonomy stack is the current primary workstream.
 
-There has to be a better way.
+## Start Here
 
-### The Problem: Automating the Subjectiveness of Human Eyes
+- [Drone Platform Overview](drone_platform/README.md)
+- [Drone Platform Evidence](drone_platform/EVIDENCE.md)
+- [Drone Platform Runbook](drone_platform/RUNBOOK.md)
+- [Latest Showcase HTML](artifacts/showcase/latest/index.html)
+- [Autonomy Milestones](autonomy/docs/milestone_results.md)
+- [Autonomy Reproducibility Runbook](autonomy/docs/reproducibility_runbook.md)
 
-While drones have made it easier to capture high-definition imagery of infrastructure without putting humans in traffic, processing that massive amount of data remains a bottleneck. Sending thousands of images back for human review defeats the purpose of automation. 
+## Current Drone Stack
 
-Standard Computer Vision (like YOLO) can detect *where* a crack is, but it lacks reasoning. It draws a box, but it doesn't know if that crack is a minor cosmetic issue or a structural failure requiring immediate patching. It can't explain *why* it matters.
+The repo now contains a simulation-first flight software backbone that is intended to move from local validation to real PX4 hardware with minimal rewrite.
 
-### The Innovation: Bringing Vision-Language Models to the Asphalt
+Current implemented scope includes:
 
-SkyLink bridges this gap by introducing **Vision-Language Models (VLMs)** to civil engineering. 
+- PX4 SITL plus Gazebo simulation path
+- MAVSDK mission upload and execution validation
+- geofence, wind-gate, and RTL safety logic
+- landing-target streaming and receiver proof
+- dock approach validation with live telemetry
+- precision-landing controller and PX4 landing profile
+- judge-facing Three.js replay showcase generated from validated artifacts
 
-Instead of just relying on bounding boxes, SkyLink implements a two-stage pipeline:
-1. **The Spotter (YOLO):** A lightweight, fast object detection model scans the raw image to locate potential anomalies.
-2. **The Engineer (Qwen2.5-VL-7B):** The cropped anomaly is sent to the VLM. The VLM acts as an AI civil engineer. It doesn't just look at pixels; it reasons about the image. It classifies the severity (High, Moderate, Low) based on context, depth, and structural implications. Crucially, it generates a human-readable engineering report explaining its decision and recommending maintenance actions.
+Latest validated snapshot:
 
-This combination of fast, local detection with deep, reasoning-based AI analysis represents a massive leap forward. It transforms raw pixel data into actionable maintenance intelligence, eliminating human subjectivity and drastically reducing the time from inspection to repair.
-
-### 🚀 Future Roadmap: Taking Flight
-
-Currently, SkyLink is a powerful software suite capable of processing live or static image feeds and returning intelligent analysis. **The next major phase of this project is full hardware integration.**
-
-In the future, SkyLink will be integrated with an autonomous drone's workflow. The drone will execute pre-programmed waypoint missions over road segments to capture high-resolution imagery. Because edge AI processing consumes significant battery power, the drone will not run heavy models mid-flight. Instead, upon returning to its **automated docking station**, the heavy lifting begins:
-1. The drone offloads the captured imagery to the dock's companion computer.
-2. The dock runs the lightweight YOLO model to instantly scan the structural data.
-3. The dock utilizes a secure bridge to ping the remote VLM for severity assessment and final engineering report generation.
-
----
-
-## Action in the Field: How It Works
-
-Here is a look at the AI pipeline in action:
-
-### 1. Detection and Contextual Analysis
-In this example, the system processes a raw feed. The local model identifies the defect areas (drawing the bounding boxes). The cropped regions are then analyzed by the VLM, which reasons about the visual data to assign a contextual severity rating.
-
-![Annotated Anomalies](examples/Road_anomalies_annotated_by_yolo_and-severity_by_Qwen.png)
-*(Above: The system identifies road anomalies and the VLM assesses their structural severity).*
-
-### 2. Generated Engineering Report
-The true power of the VLM is its ability to communicate like an engineer. Once the severity is calculated, the VLM generates a detailed, structured report summarizing the defects, explaining the visual evidence, and advising on the necessary maintenance steps.
-
-![Engineering Report](examples/Example_Report_from_a_different_image.png)
-*(Above: The automated engineering report generated by the VLM).*
-
-## Architecture
-
-1. Browser opens `http://localhost:8001` (served by `src/server.py`).
-2. `POST /api/analyze` proxies request to your hosted model URL/API key.
-3. Frontend draws boxes on canvas.
-4. Bridge stores a local copy in `data/processed/history/` and also saves the detection record.
-5. Dashboard reads records and shows only new bridge-prefixed rows by default.
+- mission waypoint count: `6`
+- unified flight telemetry frames: `13`
+- landing-target receiver count: `50`
+- dock proof: `consumed_from_live_telemetry_projection`
+- final dock horizontal distance: `0.07548274437382324 m`
+- full regression suite: `51` tests passing
 
 ## Repository Layout
 
 ```text
-├── app/                      <-- Edge client tools
-│   ├── src/
-│   │   ├── server.py         (Bridge Server)
-│   │   ├── dashboard.py      (Streamlit Viewer)
-│   │   `-- static/           (Frontend UI)
-│   ├── data/                 (Local persistence)
-│   ├── scripts/
-│   ├── Dockerfile
-│   └── requirements.txt
-├── model_server/             <-- GPU Inference Server
-│   ├── app.py
-│   └── docs/
-└── artifacts/
+Skylink2/
+├── drone_platform/          GitHub-facing entry for the drone stack
+├── autonomy/                Drone autonomy code, docs, scripts, and tests
+├── artifacts/               Curated latest evidence and showcase outputs
+├── app/                     Road-inspection bridge and frontend
+├── model_server/            Hosted model-serving components
+├── vendor/                  Local upstream simulator checkout area
+├── examples/                Static example media
+├── PROJECT_REPORT.md        Older road-inspection MVP report
+└── REPRODUCIBLE_SETUP.md    Older bridge-stack setup notes
 ```
 
-## Reproducible Setup (Windows / PowerShell)
+## Main Paths
+
+### Drone Platform
+
+- [Overview](drone_platform/README.md)
+- [Evidence](drone_platform/EVIDENCE.md)
+- [Runbook](drone_platform/RUNBOOK.md)
+- [Autonomy Source Tree](autonomy/README.md)
+- [Latest Showcase](artifacts/showcase/latest/index.html)
+
+### Road Inspection Stack
+
+This subsystem remains in the repo, but it is no longer the main entrypoint.
+
+Primary paths:
+
+- `app/`
+- `model_server/`
+- [PROJECT_REPORT.md](PROJECT_REPORT.md)
+- [REPRODUCIBLE_SETUP.md](REPRODUCIBLE_SETUP.md)
+
+## Reproduce The Drone Showcase
 
 ```powershell
-cd D:\downloads\SeniorProject\Skylink2
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
-Copy-Item .env.example .env
+python -m unittest discover -s D:\downloads\SeniorProject\Skylink2\autonomy\tests -p "test_*.py"
+python D:\downloads\SeniorProject\Skylink2\autonomy\scripts\build_latest_replay_bundle.py
+python D:\downloads\SeniorProject\Skylink2\autonomy\scripts\build_showcase.py
+python -m http.server 8888 --directory D:\downloads\SeniorProject\Skylink2\artifacts\showcase\latest
 ```
 
-Set required values in `.env`:
-- `SKYLINK_VLM_API_URL`
+Then open:
 
-## Run (Recommended)
-
-Terminal 1:
-```powershell
-cd D:\downloads\SeniorProject\Skylink2
-.\.venv\Scripts\Activate.ps1
-python src/server.py
-```
-
-Open:
-- `http://localhost:8001` (web app + analysis flow)
-
-Terminal 2:
-```powershell
-cd D:\downloads\SeniorProject\Skylink2
-.\.venv\Scripts\Activate.ps1
-streamlit run src/dashboard.py --server.port 8501
-```
-
-Open:
-- `http://localhost:8501` (dashboard)
-
-## Verification
-
-Bridge health:
-```powershell
-Invoke-RestMethod http://127.0.0.1:8001/api/health
-```
-
-Expected output:
-```json
-{"status":"ok"}
-```
+- `http://127.0.0.1:8888`
 
 ## Notes
 
-- `web_client/` at repo root is not used for runtime.
-
-- Netlify hosting instructions: [NETLIFY_DEPLOY.md](NETLIFY_DEPLOY.md)
-
-## Extra Docs
-
-
-- [PROJECT_REPORT.md](PROJECT_REPORT.md)
-- [road_inspector_server/README.md](road_inspector_server/README.md)
+- `vendor/` is intentionally a local bootstrap area for upstream PX4, ArduPilot, and MAVSDK checkouts.
+- The generated showcase and replay bundle in `artifacts/` are the current review-ready outputs for the drone stack.

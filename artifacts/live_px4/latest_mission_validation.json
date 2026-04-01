@@ -1,0 +1,102 @@
+{
+  "system_address": "udpin://0.0.0.0:14540",
+  "connect_timeout_s": 15.0,
+  "geofence": {
+    "center": {
+      "lat": 47.3979709,
+      "lon": 8.5461638,
+      "alt_m": 0.0
+    },
+    "radius_m": 100.0
+  },
+  "mission": {
+    "mission_id": "live-sitl-smoke",
+    "waypoint_count": 6,
+    "cruise_speed_mps": 5.0,
+    "area_m2": 399.99931726839714,
+    "north_span_m": 19.9999999998922,
+    "east_span_m": 19.99998293174467,
+    "waypoints_local": [
+      {
+        "index": 0,
+        "north_m": 0.0,
+        "east_m": 0.0,
+        "altitude_m": 10.0
+      },
+      {
+        "index": 1,
+        "north_m": 0.0,
+        "east_m": 19.9999999999432,
+        "altitude_m": 10.0
+      },
+      {
+        "index": 2,
+        "north_m": 9.9999999999461,
+        "east_m": 19.99998293174467,
+        "altitude_m": 10.0
+      },
+      {
+        "index": 3,
+        "north_m": 9.9999999999461,
+        "east_m": 0.0,
+        "altitude_m": 10.0
+      },
+      {
+        "index": 4,
+        "north_m": 19.9999999998922,
+        "east_m": 0.0,
+        "altitude_m": 10.0
+      },
+      {
+        "index": 5,
+        "north_m": 19.9999999998922,
+        "east_m": 19.99996586353381,
+        "altitude_m": 10.0
+      }
+    ]
+  },
+  "before_upload": {
+    "connected": true,
+    "armed": false,
+    "in_air": false,
+    "mode": "hold",
+    "battery_percent": 100.0,
+    "position": {
+      "lat": 47.3979709,
+      "lon": 8.5461638,
+      "alt_m": -0.017000000923871994
+    },
+    "mission_progress": {
+      "current": 0,
+      "total": 0
+    }
+  },
+  "before_upload_local_pose": {
+    "north_m": -0.02283077873289585,
+    "east_m": -0.039676010608673096,
+    "down_m": -0.04761335253715515,
+    "yaw_deg": 97.1838607788086
+  },
+  "after_upload": {
+    "connected": true,
+    "armed": false,
+    "in_air": false,
+    "mode": "hold",
+    "battery_percent": 100.0,
+    "position": {
+      "lat": 47.3979709,
+      "lon": 8.5461633,
+      "alt_m": 0.036000002175569534
+    },
+    "mission_progress": {
+      "current": 0,
+      "total": 0
+    }
+  },
+  "after_upload_local_pose": {
+    "north_m": -0.001851381384767592,
+    "east_m": -0.02024540677666664,
+    "down_m": 0.04514594376087189,
+    "yaw_deg": 97.24092102050781
+  }
+}

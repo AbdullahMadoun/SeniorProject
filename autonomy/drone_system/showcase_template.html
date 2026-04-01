@@ -1,0 +1,1063 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SkyLink Mission Showcase</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.min.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"
+    }
+  }
+  </script>
+  <style>
+    :root {
+      --bg: #0a0a0f;
+      --surface: #12121a;
+      --surface-strong: rgba(18, 18, 26, 0.92);
+      --surface-soft: rgba(255, 255, 255, 0.04);
+      --border: rgba(255, 255, 255, 0.06);
+      --text: #e8e8ed;
+      --muted: #9ca3b3;
+      --accent-primary: #00d4aa;
+      --accent-secondary: #6366f1;
+      --mission: #53b7ff;
+      --rtl: #ff9f43;
+      --dock: #00d4aa;
+      --shadow: 0 24px 80px rgba(0, 0, 0, 0.38);
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      font-family: "Inter", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(0, 212, 170, 0.12), transparent 28%),
+        radial-gradient(circle at top right, rgba(99, 102, 241, 0.14), transparent 32%),
+        linear-gradient(180deg, #09090d 0%, #0a0a0f 100%);
+    }
+    .page {
+      width: min(1480px, calc(100% - 32px));
+      margin: 24px auto 40px;
+      display: grid;
+      gap: 20px;
+    }
+    .panel {
+      position: relative;
+      background: linear-gradient(180deg, rgba(18, 18, 26, 0.92), rgba(18, 18, 26, 0.78));
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      overflow: hidden;
+    }
+    .panel-inner {
+      padding: 22px;
+    }
+    .hero {
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 20px;
+    }
+    .hero-copy {
+      min-height: 100%;
+      background:
+        linear-gradient(140deg, rgba(0, 212, 170, 0.08), rgba(99, 102, 241, 0.12)),
+        rgba(18, 18, 26, 0.88);
+    }
+    .eyebrow {
+      color: var(--accent-primary);
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      font-size: 0.72rem;
+      font-weight: 700;
+      margin-bottom: 14px;
+    }
+    h1, h2, h3 {
+      margin: 0;
+      letter-spacing: -0.03em;
+    }
+    h1 {
+      font-size: clamp(2.2rem, 4vw, 4.25rem);
+      line-height: 0.95;
+      margin-bottom: 14px;
+    }
+    h2 { font-size: 1.35rem; margin-bottom: 12px; }
+    h3 { font-size: 1rem; margin-bottom: 8px; }
+    p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+    .hero-summary {
+      margin-top: 18px;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .chip {
+      padding: 14px 16px;
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      min-height: 88px;
+    }
+    .chip label, .stat label, .hud-card label, .metric-card label, .lifecycle-card label, .scenario-chip label, .evidence-card label {
+      display: block;
+      color: var(--muted);
+      font-size: 0.72rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    .chip strong, .stat strong, .metric-card strong, .hud-card strong, .evidence-card strong {
+      font-size: 1.1rem;
+      line-height: 1.2;
+    }
+    .hero-metrics {
+      display: grid;
+      gap: 14px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      align-content: start;
+    }
+    .metric-card, .stat {
+      padding: 18px;
+      border-radius: 20px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      min-height: 120px;
+    }
+    .metric-card strong {
+      font-size: 1.65rem;
+    }
+    .muted { color: var(--muted); }
+    .good { color: var(--accent-primary); }
+    .warn { color: #ffb454; }
+    .bad { color: #ff6b6b; }
+    .scene-panel .panel-inner {
+      padding: 0;
+    }
+    .scene-header {
+      padding: 22px 22px 0;
+      display: grid;
+      gap: 10px;
+    }
+    .scene-shell {
+      position: relative;
+      height: 560px;
+      margin: 18px 22px 0;
+      border-radius: 22px;
+      border: 1px solid rgba(255,255,255,0.05);
+      background: linear-gradient(180deg, rgba(9, 12, 19, 0.92), rgba(8, 9, 13, 0.96));
+      overflow: hidden;
+    }
+    #flight-scene {
+      position: absolute;
+      inset: 0;
+    }
+    .hud {
+      position: absolute;
+      top: 18px;
+      left: 18px;
+      right: 18px;
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      pointer-events: none;
+    }
+    .hud-stack {
+      display: grid;
+      gap: 10px;
+      max-width: min(460px, 100%);
+    }
+    .hud-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .hud-card, .legend-card {
+      background: rgba(12, 14, 22, 0.72);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 16px;
+      padding: 12px 14px;
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+    }
+    .legend-card ul {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: grid;
+      gap: 8px;
+    }
+    .legend-card li {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+    .swatch {
+      width: 12px;
+      height: 12px;
+      border-radius: 999px;
+      display: inline-block;
+    }
+    .controls-bar {
+      padding: 18px 22px 22px;
+      display: grid;
+      grid-template-columns: auto minmax(220px, 1fr) auto auto;
+      gap: 12px;
+      align-items: center;
+    }
+    .button, .segmented button {
+      appearance: none;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.04);
+      color: var(--text);
+      padding: 11px 16px;
+      border-radius: 999px;
+      cursor: pointer;
+      font: inherit;
+      font-weight: 600;
+      transition: background 180ms ease, border-color 180ms ease, transform 180ms ease;
+    }
+    .button:hover, .segmented button:hover { background: rgba(255,255,255,0.08); }
+    .button.active, .segmented button.active {
+      background: linear-gradient(135deg, rgba(0, 212, 170, 0.26), rgba(99, 102, 241, 0.28));
+      border-color: rgba(0, 212, 170, 0.45);
+    }
+    .segmented {
+      display: inline-flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+    input[type=range] {
+      width: 100%;
+      accent-color: var(--accent-primary);
+    }
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 20px;
+    }
+    .chart-card, .table-card {
+      padding: 22px;
+    }
+    .chart-wrap {
+      margin-top: 16px;
+      border-radius: 20px;
+      border: 1px solid rgba(255,255,255,0.06);
+      background: linear-gradient(180deg, rgba(8, 10, 16, 0.88), rgba(8, 10, 16, 0.96));
+      padding: 12px;
+    }
+    svg {
+      width: 100%;
+      display: block;
+    }
+    .lifecycle-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 18px;
+    }
+    .lifecycle-card {
+      padding: 16px;
+      border-radius: 18px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+    .lifecycle-card .mode {
+      font-size: 1rem;
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+    .lifecycle-card .meta {
+      color: var(--muted);
+      font-size: 0.9rem;
+      line-height: 1.6;
+    }
+    .scenario-grid, .evidence-grid {
+      display: grid;
+      gap: 12px;
+      margin-top: 16px;
+    }
+    .scenario-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .evidence-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .scenario-chip, .evidence-card {
+      padding: 16px;
+      border-radius: 18px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.95rem;
+      margin-top: 12px;
+    }
+    th, td {
+      text-align: left;
+      padding: 12px 10px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      vertical-align: top;
+    }
+    th {
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-size: 0.72rem;
+      font-weight: 700;
+    }
+    .wind-meter {
+      display: grid;
+      gap: 8px;
+    }
+    .meter-track {
+      height: 10px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.08);
+      overflow: hidden;
+    }
+    .meter-fill {
+      height: 100%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #00d4aa, #6366f1, #ff9f43);
+    }
+    .footer-note {
+      color: var(--muted);
+      font-size: 0.9rem;
+      padding: 0 22px 22px;
+    }
+    @media (max-width: 1200px) {
+      .hero, .grid-2 { grid-template-columns: 1fr; }
+      .controls-bar { grid-template-columns: 1fr; }
+      .hud { flex-direction: column; align-items: stretch; }
+      .hud-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .lifecycle-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .scenario-grid, .evidence-grid, .hero-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 720px) {
+      .page { width: min(100% - 16px, 1480px); margin: 12px auto 28px; }
+      .panel-inner, .chart-card, .table-card { padding: 18px; }
+      .scene-shell { margin: 16px 16px 0; height: 460px; }
+      .controls-bar { padding: 16px; }
+      .hero-summary, .hud-grid, .lifecycle-grid, .scenario-grid, .evidence-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <section class="hero">
+      <article class="panel hero-copy">
+        <div class="panel-inner">
+          <div class="eyebrow">SkyLink Autonomous Flight Showcase</div>
+          <h1>Full-flight replay from validated PX4 telemetry, safety policy, and docking proof.</h1>
+          <p>The page is generated directly from the latest live artifacts on disk. It combines mission entry, departure, RTL approach, and dock-stream telemetry into one replay surface so the rendered flight path reflects the full validation run rather than the last eight dock frames.</p>
+          <div class="hero-summary" id="hero-summary"></div>
+        </div>
+      </article>
+      <article class="panel">
+        <div class="panel-inner">
+          <div class="eyebrow">Execution Envelope</div>
+          <div class="hero-metrics" id="hero-metrics"></div>
+        </div>
+      </article>
+    </section>
+
+    <section class="panel scene-panel">
+      <div class="scene-header">
+        <div class="eyebrow">3D Flight Replay</div>
+        <h2>Mission, RTL, and dock approach rendered in WebGL</h2>
+        <p>The scene is driven by the unified <code>flight_telemetry</code> payload. It includes the 100 m geofence, waypoint markers, a physical quadcopter mesh, color-coded mode trail, altitude indicator, and replay controls for camera presets and playback speed.</p>
+      </div>
+      <div class="scene-shell">
+        <div id="flight-scene"></div>
+        <div class="hud">
+          <div class="hud-stack">
+            <div class="hud-grid" id="hud-grid"></div>
+          </div>
+          <div class="legend-card">
+            <label>Flight Legend</label>
+            <ul>
+              <li><span class="swatch" style="background:#53b7ff"></span> Mission path</li>
+              <li><span class="swatch" style="background:#ff9f43"></span> RTL path</li>
+              <li><span class="swatch" style="background:#00d4aa"></span> Dock / landing path</li>
+              <li><span class="swatch" style="background:#6366f1"></span> Waypoint markers</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      <div class="controls-bar">
+        <button id="play-toggle" class="button" type="button">Play</button>
+        <input id="timeline-slider" type="range" min="0" max="0" value="0">
+        <div class="segmented" id="speed-controls">
+          <button type="button" data-speed="1">1x</button>
+          <button type="button" data-speed="2">2x</button>
+          <button type="button" data-speed="4">4x</button>
+        </div>
+        <div class="segmented" id="camera-controls">
+          <button type="button" data-camera="top">Top-down</button>
+          <button type="button" data-camera="side">Side</button>
+          <button type="button" data-camera="follow">Follow</button>
+          <button type="button" data-camera="free">Free</button>
+        </div>
+      </div>
+      <div class="footer-note">Bundle source: <span id="bundle-name"></span></div>
+    </section>
+
+    <section class="grid-2">
+      <article class="panel">
+        <div class="chart-card">
+          <div class="eyebrow">Mission State Machine</div>
+          <h2>Mission Lifecycle</h2>
+          <p>Operator-visible state transitions from upload through dock completion.</p>
+          <div class="lifecycle-grid" id="mission-lifecycle"></div>
+        </div>
+      </article>
+      <article class="panel">
+        <div class="chart-card">
+          <div class="eyebrow">Flight Telemetry</div>
+          <h2>Altitude and Dock Error</h2>
+          <p>Unified telemetry across mission entry, departure, RTL ingress, and dock stream.</p>
+          <div class="chart-wrap">
+            <svg id="flight-chart" viewBox="0 0 640 300" aria-label="Flight telemetry chart"></svg>
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <section class="grid-2">
+      <article class="panel">
+        <div class="chart-card">
+          <div class="eyebrow">Precision Landing</div>
+          <h2>Altitude and Touchdown Error</h2>
+          <p>Nominal landing-controller trajectory, rendered with the same dark visual language as the live flight telemetry.</p>
+          <div class="chart-wrap">
+            <svg id="precision-chart" viewBox="0 0 640 300" aria-label="Precision landing chart"></svg>
+          </div>
+          <div class="scenario-grid" id="precision-scenarios"></div>
+        </div>
+      </article>
+      <article class="panel">
+        <div class="table-card">
+          <div class="eyebrow">Weather Safety</div>
+          <h2>Weather Gate Evidence</h2>
+          <p>Launch, mission continuation, and docking policy decisions under the configured 7 m/s wind limit.</p>
+          <div id="weather-table"></div>
+        </div>
+      </article>
+    </section>
+
+    <section class="grid-2">
+      <article class="panel">
+        <div class="table-card">
+          <div class="eyebrow">PX4 Proof Chain</div>
+          <h2>Receiver, bridge, and docking evidence</h2>
+          <div class="evidence-grid" id="evidence-grid"></div>
+        </div>
+      </article>
+      <article class="panel">
+        <div class="table-card">
+          <div class="eyebrow">PX4 Parameterization</div>
+          <h2>Precision Landing Parameters</h2>
+          <div id="parameter-table"></div>
+        </div>
+      </article>
+    </section>
+  </div>
+
+  <script>
+    window.SHOWCASE_DATA = __SHOWCASE_DATA__;
+  </script>
+  <script type="module">
+    import * as THREE from "three";
+    import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+    const data = window.SHOWCASE_DATA;
+    const telemetry = Array.isArray(data.flight_telemetry) ? data.flight_telemetry : [];
+    const missionWaypoints = Array.isArray(data.mission?.waypoints) ? data.mission.waypoints : [];
+    const geofenceRadiusM = Number(data.simulation?.geofence_radius_m || data.mission?.geofence_radius_m || 100);
+    const sceneExtentM = Number(data.simulation?.scene_extent_m || 200);
+    const dockTarget = data.simulation?.dock_target || { north_m: 0, east_m: 0, down_m: 0 };
+    const dockRecords = Array.isArray(data.dock?.records) ? data.dock.records : [];
+    const precisionSteps = Array.isArray(data.precision_landing?.nominal_steps) ? data.precision_landing.nominal_steps : [];
+
+    const MODE_COLORS = {
+      mission: "#53b7ff",
+      return_to_launch: "#ff9f43",
+      hold: "#7c83fd",
+      land: "#00d4aa",
+      dock_stream: "#00d4aa",
+      dock: "#00d4aa",
+      unknown: "#a1a1aa",
+    };
+
+    let playhead = 0;
+    let isPlaying = false;
+    let playbackSpeed = 1;
+    let cameraMode = "follow";
+    let lastAnimationTs = 0;
+
+    const playToggle = document.getElementById("play-toggle");
+    const timelineSlider = document.getElementById("timeline-slider");
+    const speedButtons = Array.from(document.querySelectorAll("#speed-controls button"));
+    const cameraButtons = Array.from(document.querySelectorAll("#camera-controls button"));
+
+    function statusClass(value) {
+      if (value === true || value === "continue" || value === "consumed" || value === "consumed_from_live_telemetry_projection") {
+        return "good";
+      }
+      if (value === false || value === "abort_launch") {
+        return "bad";
+      }
+      if (typeof value === "string" && (value.includes("return") || value.includes("warn"))) {
+        return "warn";
+      }
+      return "";
+    }
+
+    function setHtml(id, html) {
+      const node = document.getElementById(id);
+      if (node) {
+        node.innerHTML = html;
+      }
+    }
+
+    function metricCard(label, value, extraClass = "") {
+      return `<div class="metric-card"><label>${label}</label><strong class="${extraClass}">${value}</strong></div>`;
+    }
+
+    function renderHero() {
+      const summary = data.summary || {};
+      setHtml(
+        "hero-summary",
+        [
+          ["Telemetry Frames", telemetry.length],
+          ["Dock Proof", summary.dock_proof_status || data.dock?.proof_status || "-", statusClass(summary.dock_proof_status || data.dock?.proof_status)],
+          ["Final Dock Error", `${Number(summary.dock_final_horizontal_distance_m || data.dock?.final_horizontal_distance_m || 0).toFixed(3)} m`, statusClass(data.dock?.proof_status)],
+          ["Weather Pass", `${summary.weather_scenario_passed_count || 0} / ${summary.weather_scenario_total_count || 0}`],
+        ].map(([label, value, extraClass]) => `<div class="chip"><label>${label}</label><strong class="${extraClass || ""}">${value}</strong></div>`).join("")
+      );
+
+      setHtml(
+        "hero-metrics",
+        [
+          metricCard("Waypoints", data.mission?.waypoint_count ?? "-"),
+          metricCard("Geofence Radius", `${Number(data.mission?.geofence_radius_m || 0).toFixed(0)} m`),
+          metricCard("Landing Target RX", data.landing_target?.receiver_count ?? "-"),
+          metricCard("RTL Precision Mode", data.summary?.precision_profile_rtl_pld_md ?? "-"),
+        ].join("")
+      );
+    }
+
+    function renderMissionLifecycle() {
+      const lifecycle = Array.isArray(data.mission?.lifecycle) ? data.mission.lifecycle : [];
+      setHtml(
+        "mission-lifecycle",
+        lifecycle.map((stage) => `
+          <div class="lifecycle-card">
+            <label>${stage.label}</label>
+            <div class="mode ${statusClass(stage.mode)}">${stage.mode || "-"}</div>
+            <div class="meta">
+              armed: ${stage.armed}<br>
+              in air: ${stage.in_air}<br>
+              battery: ${stage.battery_percent == null ? "-" : `${Number(stage.battery_percent).toFixed(0)}%`}<br>
+              altitude: ${stage.alt_m == null ? "-" : `${Number(stage.alt_m).toFixed(2)} m`}<br>
+              mission: ${stage.mission_current == null ? "-" : stage.mission_current}/${stage.mission_total == null ? "-" : stage.mission_total}
+            </div>
+          </div>
+        `).join("")
+      );
+    }
+
+    function renderPrecisionScenarios() {
+      const scenarios = Array.isArray(data.precision_landing?.scenarios) ? data.precision_landing.scenarios : [];
+      setHtml(
+        "precision-scenarios",
+        scenarios.map((scenario) => `
+          <div class="scenario-chip">
+            <label>${scenario.name}</label>
+            <strong class="${statusClass(scenario.passed)}">${scenario.passed ? "pass" : "fail"}</strong>
+            <div class="muted" style="margin-top:10px; line-height:1.5;">
+              phase: ${scenario.final_phase || "-"}<br>
+              touchdown error: ${scenario.touchdown_error_m == null ? "-" : `${Number(scenario.touchdown_error_m).toFixed(3)} m`}
+            </div>
+          </div>
+        `).join("")
+      );
+    }
+
+    function renderWeatherTable() {
+      const limit = Number(data.weather?.wind_limit_mps || 0);
+      const rows = (Array.isArray(data.weather?.results) ? data.weather.results : []).map((item) => {
+        const effectiveWind = Number(item.effective_wind_mps || 0);
+        const pct = limit > 0 ? Math.min(100, (effectiveWind / limit) * 100) : 0;
+        return `
+          <tr>
+            <td>${item.name}</td>
+            <td>
+              <div class="wind-meter">
+                <strong>${effectiveWind.toFixed(1)} m/s</strong>
+                <div class="meter-track"><div class="meter-fill" style="width:${pct}%;"></div></div>
+              </div>
+            </td>
+            <td class="${statusClass(item.launch_allowed)}">${item.launch_allowed ? "yes" : "no"}</td>
+            <td class="${statusClass(item.mission_continue_allowed)}">${item.mission_continue_allowed ? "yes" : "no"}</td>
+            <td class="${statusClass(item.dock_allowed)}">${item.dock_allowed ? "yes" : "no"}</td>
+            <td class="${statusClass(item.safety_action)}">${item.safety_action || "-"}</td>
+          </tr>
+        `;
+      }).join("");
+      setHtml(
+        "weather-table",
+        `
+          <table>
+            <thead>
+              <tr>
+                <th>Scenario</th>
+                <th>Effective Wind</th>
+                <th>Launch</th>
+                <th>Mission</th>
+                <th>Dock</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        `
+      );
+    }
+
+    function renderEvidenceGrid() {
+      const summary = data.summary || {};
+      const evidence = [
+        ["Post-RTL Mode", data.mission?.post_rtl_mode || "-"],
+        ["Landing Target RX", data.landing_target?.receiver_count || 0],
+        ["Bridge Host to PX4", data.landing_target?.bridge_host_to_px4_count || 0],
+        ["Dock Stream Frames", data.dock?.telemetry_frame_count || telemetry.length],
+        ["Live Dock Records", dockRecords.length],
+        ["Final Dock Error", `${Number(data.dock?.final_horizontal_distance_m || 0).toFixed(3)} m`],
+        ["Landing Target Proof", data.landing_target?.proof_status || "-"],
+        ["Dock Proof", data.dock?.proof_status || summary.dock_proof_status || "-"],
+      ];
+      setHtml(
+        "evidence-grid",
+        evidence.map(([label, value]) => `
+          <div class="evidence-card">
+            <label>${label}</label>
+            <strong class="${statusClass(value)}">${value}</strong>
+          </div>
+        `).join("")
+      );
+    }
+
+    function renderParameterTable() {
+      const rows = (Array.isArray(data.precision_landing?.parameters) ? data.precision_landing.parameters : []).map((item) => `
+        <tr>
+          <td>${item.name}</td>
+          <td>${item.applied_value}</td>
+          <td>${item.rationale || ""}</td>
+        </tr>
+      `).join("");
+      setHtml(
+        "parameter-table",
+        `
+          <table>
+            <thead>
+              <tr>
+                <th>Parameter</th>
+                <th>Applied Value</th>
+                <th>Rationale</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        `
+      );
+      document.getElementById("bundle-name").textContent = data.bundle_name || "latest_live_px4_replay_bundle";
+    }
+
+    function bezierPath(points) {
+      if (!points.length) {
+        return "";
+      }
+      if (points.length === 1) {
+        return `M ${points[0].x} ${points[0].y}`;
+      }
+      let path = `M ${points[0].x} ${points[0].y}`;
+      for (let i = 0; i < points.length - 1; i += 1) {
+        const current = points[i];
+        const next = points[i + 1];
+        const previous = points[i - 1] || current;
+        const after = points[i + 2] || next;
+        const control1X = current.x + (next.x - previous.x) / 6;
+        const control1Y = current.y + (next.y - previous.y) / 6;
+        const control2X = next.x - (after.x - current.x) / 6;
+        const control2Y = next.y - (after.y - current.y) / 6;
+        path += ` C ${control1X} ${control1Y}, ${control2X} ${control2Y}, ${next.x} ${next.y}`;
+      }
+      return path;
+    }
+
+    function areaPath(linePath, baselineY, lastPoint, firstPoint) {
+      if (!linePath || !lastPoint || !firstPoint) {
+        return "";
+      }
+      return `${linePath} L ${lastPoint.x} ${baselineY} L ${firstPoint.x} ${baselineY} Z`;
+    }
+
+    function valueBounds(values, fallbackMin = 0, fallbackMax = 1) {
+      const numeric = values.filter((value) => Number.isFinite(value));
+      if (!numeric.length) {
+        return { min: fallbackMin, max: fallbackMax };
+      }
+      const min = Math.min(...numeric);
+      const max = Math.max(...numeric);
+      return { min, max: min === max ? min + 1 : max };
+    }
+
+    function renderTelemetryChart() {
+      const svg = document.getElementById("flight-chart");
+      if (!telemetry.length) {
+        svg.innerHTML = "";
+        return;
+      }
+      const width = 640;
+      const height = 300;
+      const padding = { top: 26, right: 70, bottom: 42, left: 60 };
+      const altitudeValues = telemetry.map((frame) => Number(frame.altitude_agl_m || 0));
+      const errorValues = telemetry.map((frame) => Number(frame.horizontal_distance_to_dock_m || 0));
+      const altitudeBounds = valueBounds(altitudeValues, 0, 1);
+      const errorBounds = valueBounds(errorValues, 0, 1);
+      const usableWidth = width - padding.left - padding.right;
+      const usableHeight = height - padding.top - padding.bottom;
+      const xFor = (index) => padding.left + (telemetry.length === 1 ? usableWidth / 2 : (index / (telemetry.length - 1)) * usableWidth);
+      const yForAltitude = (value) => padding.top + usableHeight - ((value - altitudeBounds.min) / (altitudeBounds.max - altitudeBounds.min)) * usableHeight;
+      const yForError = (value) => padding.top + usableHeight - ((value - errorBounds.min) / (errorBounds.max - errorBounds.min)) * usableHeight;
+      const altitudePoints = telemetry.map((frame, index) => ({ x: xFor(index), y: yForAltitude(Number(frame.altitude_agl_m || 0)) }));
+      const errorPoints = telemetry.map((frame, index) => ({ x: xFor(index), y: yForError(Number(frame.horizontal_distance_to_dock_m || 0)) }));
+      const altitudePath = bezierPath(altitudePoints);
+      const errorPath = bezierPath(errorPoints);
+      const altitudeArea = areaPath(altitudePath, padding.top + usableHeight, altitudePoints.at(-1), altitudePoints[0]);
+      const errorArea = areaPath(errorPath, padding.top + usableHeight, errorPoints.at(-1), errorPoints[0]);
+      const horizontalGrid = Array.from({ length: 4 }, (_, index) => {
+        const y = padding.top + (usableHeight / 3) * index;
+        return `<line x1="${padding.left}" y1="${y}" x2="${width - padding.right}" y2="${y}" stroke="rgba(255,255,255,0.08)" stroke-width="1" />`;
+      }).join("");
+      svg.innerHTML = `
+        <defs>
+          <linearGradient id="flightAltitudeFill" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stop-color="rgba(83,183,255,0.42)" />
+            <stop offset="100%" stop-color="rgba(83,183,255,0.02)" />
+          </linearGradient>
+          <linearGradient id="flightErrorFill" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stop-color="rgba(0,212,170,0.32)" />
+            <stop offset="100%" stop-color="rgba(0,212,170,0.02)" />
+          </linearGradient>
+        </defs>
+        <rect x="0" y="0" width="${width}" height="${height}" rx="18" fill="rgba(8,10,16,0.96)" />
+        ${horizontalGrid}
+        <line x1="${padding.left}" y1="${padding.top + usableHeight}" x2="${width - padding.right}" y2="${padding.top + usableHeight}" stroke="rgba(255,255,255,0.16)" stroke-width="1.2" />
+        <line x1="${padding.left}" y1="${padding.top}" x2="${padding.left}" y2="${padding.top + usableHeight}" stroke="rgba(255,255,255,0.16)" stroke-width="1.2" />
+        <path d="${altitudeArea}" fill="url(#flightAltitudeFill)" />
+        <path d="${errorArea}" fill="url(#flightErrorFill)" />
+        <path d="${altitudePath}" fill="none" stroke="#53b7ff" stroke-width="3.4" stroke-linecap="round" />
+        <path d="${errorPath}" fill="none" stroke="#00d4aa" stroke-width="3.2" stroke-linecap="round" />
+        <text x="${padding.left}" y="16" fill="#53b7ff" font-size="12" font-weight="600">Altitude AGL (m)</text>
+        <text x="${width - padding.right - 110}" y="16" fill="#00d4aa" font-size="12" font-weight="600">Dock error (m)</text>
+        <text x="${padding.left}" y="${height - 14}" fill="rgba(232,232,237,0.68)" font-size="12">Flight timeline</text>
+        <text x="12" y="${padding.top + 10}" fill="rgba(232,232,237,0.68)" font-size="12">m</text>
+      `;
+    }
+
+    function renderPrecisionChart() {
+      const svg = document.getElementById("precision-chart");
+      if (!precisionSteps.length) {
+        svg.innerHTML = "";
+        return;
+      }
+      const width = 640;
+      const height = 300;
+      const padding = { top: 26, right: 70, bottom: 42, left: 60 };
+      const timeBounds = valueBounds(precisionSteps.map((step) => Number(step.t_s || 0)), 0, 1);
+      const altitudeBounds = valueBounds(precisionSteps.map((step) => Number(step.altitude_m || 0)), 0, 1);
+      const errorBounds = valueBounds(precisionSteps.map((step) => Number(step.horizontal_error_m || 0)), 0, 1);
+      const usableWidth = width - padding.left - padding.right;
+      const usableHeight = height - padding.top - padding.bottom;
+      const xFor = (value) => padding.left + ((value - timeBounds.min) / (timeBounds.max - timeBounds.min)) * usableWidth;
+      const yForAltitude = (value) => padding.top + usableHeight - ((value - altitudeBounds.min) / (altitudeBounds.max - altitudeBounds.min)) * usableHeight;
+      const yForError = (value) => padding.top + usableHeight - ((value - errorBounds.min) / (errorBounds.max - errorBounds.min)) * usableHeight;
+      const altitudePoints = precisionSteps.map((step) => ({ x: xFor(Number(step.t_s || 0)), y: yForAltitude(Number(step.altitude_m || 0)) }));
+      const errorPoints = precisionSteps.map((step) => ({ x: xFor(Number(step.t_s || 0)), y: yForError(Number(step.horizontal_error_m || 0)) }));
+      const altitudePath = bezierPath(altitudePoints);
+      const errorPath = bezierPath(errorPoints);
+      const altitudeArea = areaPath(altitudePath, padding.top + usableHeight, altitudePoints.at(-1), altitudePoints[0]);
+      const errorArea = areaPath(errorPath, padding.top + usableHeight, errorPoints.at(-1), errorPoints[0]);
+      svg.innerHTML = `
+        <defs>
+          <linearGradient id="precisionAltitudeFill" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stop-color="rgba(99,102,241,0.42)" />
+            <stop offset="100%" stop-color="rgba(99,102,241,0.02)" />
+          </linearGradient>
+          <linearGradient id="precisionErrorFill" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stop-color="rgba(255,159,67,0.34)" />
+            <stop offset="100%" stop-color="rgba(255,159,67,0.02)" />
+          </linearGradient>
+        </defs>
+        <rect x="0" y="0" width="${width}" height="${height}" rx="18" fill="rgba(8,10,16,0.96)" />
+        <line x1="${padding.left}" y1="${padding.top + usableHeight}" x2="${width - padding.right}" y2="${padding.top + usableHeight}" stroke="rgba(255,255,255,0.16)" stroke-width="1.2" />
+        <line x1="${padding.left}" y1="${padding.top}" x2="${padding.left}" y2="${padding.top + usableHeight}" stroke="rgba(255,255,255,0.16)" stroke-width="1.2" />
+        <path d="${altitudeArea}" fill="url(#precisionAltitudeFill)" />
+        <path d="${errorArea}" fill="url(#precisionErrorFill)" />
+        <path d="${altitudePath}" fill="none" stroke="#6366f1" stroke-width="3.4" stroke-linecap="round" />
+        <path d="${errorPath}" fill="none" stroke="#ff9f43" stroke-width="3.2" stroke-linecap="round" />
+        <text x="${padding.left}" y="16" fill="#6366f1" font-size="12" font-weight="600">Altitude (m)</text>
+        <text x="${width - padding.right - 138}" y="16" fill="#ff9f43" font-size="12" font-weight="600">Horizontal error (m)</text>
+        <text x="${width - padding.right - 32}" y="${height - 14}" fill="rgba(232,232,237,0.68)" font-size="12">s</text>
+      `;
+    }
+
+    function degToRad(value) { return (Number(value || 0) * Math.PI) / 180; }
+    function frameToVector(frame) { return new THREE.Vector3(Number(frame.east_m || 0), Math.max(0, Number(frame.altitude_agl_m || 0)), Number(frame.north_m || 0)); }
+    function lerp(a, b, alpha) { return a + (b - a) * alpha; }
+    function lerpAngle(a, b, alpha) { const delta = ((b - a + 540) % 360) - 180; return a + delta * alpha; }
+
+    function interpolateFrame(indexFloat) {
+      if (!telemetry.length) {
+        return { north_m: 0, east_m: 0, down_m: 0, altitude_agl_m: 0, yaw_deg: 0, roll_deg: 0, pitch_deg: 0, mode: "hold", battery_percent: 0, horizontal_distance_to_dock_m: 0, speed_mps: 0, in_air: false };
+      }
+      const lowerIndex = Math.max(0, Math.min(telemetry.length - 1, Math.floor(indexFloat)));
+      const upperIndex = Math.max(lowerIndex, Math.min(telemetry.length - 1, Math.ceil(indexFloat)));
+      const alpha = Math.max(0, Math.min(1, indexFloat - lowerIndex));
+      const a = telemetry[lowerIndex];
+      const b = telemetry[upperIndex];
+      return {
+        index: lowerIndex,
+        north_m: lerp(Number(a.north_m || 0), Number(b.north_m || 0), alpha),
+        east_m: lerp(Number(a.east_m || 0), Number(b.east_m || 0), alpha),
+        down_m: lerp(Number(a.down_m || 0), Number(b.down_m || 0), alpha),
+        altitude_agl_m: lerp(Number(a.altitude_agl_m || 0), Number(b.altitude_agl_m || 0), alpha),
+        yaw_deg: lerpAngle(Number(a.yaw_deg || 0), Number(b.yaw_deg || 0), alpha),
+        roll_deg: lerp(Number(a.roll_deg || 0), Number(b.roll_deg || 0), alpha),
+        pitch_deg: lerp(Number(a.pitch_deg || 0), Number(b.pitch_deg || 0), alpha),
+        battery_percent: lerp(Number(a.battery_percent || 0), Number(b.battery_percent || 0), alpha),
+        horizontal_distance_to_dock_m: lerp(Number(a.horizontal_distance_to_dock_m || 0), Number(b.horizontal_distance_to_dock_m || 0), alpha),
+        speed_mps: lerp(Number(a.speed_mps || 0), Number(b.speed_mps || 0), alpha),
+        mode: alpha < 0.5 ? a.mode : b.mode,
+        in_air: alpha < 0.5 ? a.in_air : b.in_air,
+      };
+    }
+
+    function buildWaypointMarkers(scene) {
+      const group = new THREE.Group();
+      missionWaypoints.forEach((waypoint, index) => {
+        const marker = new THREE.Mesh(new THREE.CylinderGeometry(0.48, 0.48, 1.6, 24), new THREE.MeshStandardMaterial({ color: 0x6366f1, emissive: 0x2b317e, emissiveIntensity: 0.9, metalness: 0.18, roughness: 0.34 }));
+        marker.castShadow = true;
+        marker.receiveShadow = true;
+        marker.position.set(Number(waypoint.east_m || 0), 0.8, Number(waypoint.north_m || 0));
+        group.add(marker);
+        const halo = new THREE.Mesh(new THREE.RingGeometry(0.7, 1.0, 32), new THREE.MeshBasicMaterial({ color: 0x8b5cf6, transparent: true, opacity: 0.45, side: THREE.DoubleSide }));
+        halo.rotation.x = -Math.PI / 2;
+        halo.position.set(marker.position.x, 0.03, marker.position.z);
+        group.add(halo);
+      });
+      scene.add(group);
+    }
+
+    function buildDockPad(scene) {
+      const dockGroup = new THREE.Group();
+      const pad = new THREE.Mesh(new THREE.CylinderGeometry(2.1, 2.1, 0.16, 48), new THREE.MeshStandardMaterial({ color: 0x0fd3aa, emissive: 0x065e54, emissiveIntensity: 0.7, metalness: 0.12, roughness: 0.36 }));
+      pad.receiveShadow = true;
+      pad.position.set(Number(dockTarget.east_m || 0), 0.08, Number(dockTarget.north_m || 0));
+      dockGroup.add(pad);
+      const ring = new THREE.Mesh(new THREE.RingGeometry(2.35, 2.8, 48), new THREE.MeshBasicMaterial({ color: 0x00d4aa, transparent: true, opacity: 0.4, side: THREE.DoubleSide }));
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.set(pad.position.x, 0.09, pad.position.z);
+      dockGroup.add(ring);
+      const crossMaterial = new THREE.MeshStandardMaterial({ color: 0xe8e8ed, emissive: 0x1a1a28, emissiveIntensity: 0.6 });
+      const crossA = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.06, 0.26), crossMaterial);
+      const crossB = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.06, 2.0), crossMaterial);
+      crossA.position.set(pad.position.x, 0.18, pad.position.z);
+      crossB.position.set(pad.position.x, 0.18, pad.position.z);
+      dockGroup.add(crossA, crossB);
+      scene.add(dockGroup);
+    }
+
+    function buildModeTrails(scene) {
+      if (!telemetry.length) { return; }
+      const segments = [];
+      let activeMode = telemetry[0].mode;
+      let activePoints = [frameToVector(telemetry[0])];
+      for (let index = 1; index < telemetry.length; index += 1) {
+        const frame = telemetry[index];
+        const point = frameToVector(frame);
+        if (frame.mode !== activeMode && activePoints.length > 1) {
+          segments.push({ mode: activeMode, points: activePoints.slice() });
+          activeMode = frame.mode;
+          activePoints = [frameToVector(telemetry[index - 1]), point];
+        } else {
+          activePoints.push(point);
+        }
+      }
+      if (activePoints.length > 1) { segments.push({ mode: activeMode, points: activePoints }); }
+      segments.forEach((segment) => {
+        const geometry = new THREE.BufferGeometry().setFromPoints(segment.points);
+        const material = new THREE.LineBasicMaterial({ color: MODE_COLORS[segment.mode] || MODE_COLORS.unknown, linewidth: 2 });
+        scene.add(new THREE.Line(geometry, material));
+      });
+    }
+
+    function createDroneMesh() {
+      const yawGroup = new THREE.Group();
+      const pitchGroup = new THREE.Group();
+      const rollGroup = new THREE.Group();
+      const drone = new THREE.Group();
+      const rotors = [];
+      const body = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.36, 1.05), new THREE.MeshStandardMaterial({ color: 0x202637, metalness: 0.45, roughness: 0.32, emissive: 0x080d18, emissiveIntensity: 1.0 }));
+      body.castShadow = true;
+      drone.add(body);
+      const nose = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.12, 0.42), new THREE.MeshStandardMaterial({ color: 0x00d4aa, emissive: 0x03695c, emissiveIntensity: 0.8 }));
+      nose.position.set(0, 0.05, 0.72);
+      drone.add(nose);
+      const armMaterial = new THREE.MeshStandardMaterial({ color: 0x5f6b85, metalness: 0.5, roughness: 0.28 });
+      const rotorMaterial = new THREE.MeshStandardMaterial({ color: 0x0a0a0f, emissive: 0x1f2937, emissiveIntensity: 0.45, metalness: 0.12, roughness: 0.52 });
+      [[0.9,0.0,0.9],[-0.9,0.0,0.9],[0.9,0.0,-0.9],[-0.9,0.0,-0.9]].forEach(([x, y, z], index) => {
+        const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 1.48, 16), armMaterial);
+        arm.rotation.z = Math.PI / 2;
+        arm.rotation.y = index < 2 ? Math.PI / 4 : -Math.PI / 4;
+        arm.position.set(x * 0.45, y + 0.03, z * 0.45);
+        arm.castShadow = true;
+        drone.add(arm);
+        const rotor = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.34, 0.04, 32), rotorMaterial);
+        rotor.position.set(x, 0.12, z);
+        rotor.castShadow = true;
+        drone.add(rotor);
+        rotors.push(rotor);
+      });
+      pitchGroup.add(rollGroup);
+      rollGroup.add(drone);
+      yawGroup.add(pitchGroup);
+      return { root: yawGroup, yawGroup, pitchGroup, rollGroup, rotors };
+    }
+
+    const sceneContainer = document.getElementById("flight-scene");
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color("#0a0a1a");
+    scene.fog = new THREE.FogExp2("#0a0a1a", 0.011);
+    const camera = new THREE.PerspectiveCamera(44, 1, 0.1, 600);
+    camera.position.set(18, 16, 24);
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    sceneContainer.appendChild(renderer.domElement);
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.minDistance = 6;
+    controls.maxDistance = 220;
+    controls.target.set(0, 3, 0);
+    scene.add(new THREE.AmbientLight(0x8aa0c9, 0.85));
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 1.25);
+    directionalLight.position.set(26, 42, 18);
+    directionalLight.castShadow = true;
+    directionalLight.shadow.mapSize.set(2048, 2048);
+    directionalLight.shadow.camera.left = -90;
+    directionalLight.shadow.camera.right = 90;
+    directionalLight.shadow.camera.top = 90;
+    directionalLight.shadow.camera.bottom = -90;
+    directionalLight.shadow.camera.near = 1;
+    directionalLight.shadow.camera.far = 160;
+    scene.add(directionalLight);
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(sceneExtentM, sceneExtentM), new THREE.MeshStandardMaterial({ color: 0x10131a, roughness: 0.96, metalness: 0.08 }));
+    ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = true;
+    scene.add(ground);
+    const gridHelper = new THREE.GridHelper(sceneExtentM, sceneExtentM / 10, 0x243041, 0x1c2432);
+    gridHelper.position.y = 0.02;
+    scene.add(gridHelper);
+    const geofenceRing = new THREE.Mesh(new THREE.RingGeometry(geofenceRadiusM - 0.7, geofenceRadiusM, 128), new THREE.MeshBasicMaterial({ color: 0x00d4aa, transparent: true, opacity: 0.22, side: THREE.DoubleSide }));
+    geofenceRing.rotation.x = -Math.PI / 2;
+    geofenceRing.position.y = 0.04;
+    scene.add(geofenceRing);
+    buildWaypointMarkers(scene);
+    buildDockPad(scene);
+    buildModeTrails(scene);
+    const droneMesh = createDroneMesh();
+    scene.add(droneMesh.root);
+    const altitudeLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]), new THREE.LineDashedMaterial({ color: 0x9ae6d3, linewidth: 1, dashSize: 0.45, gapSize: 0.25, transparent: true, opacity: 0.8 }));
+    altitudeLine.computeLineDistances();
+    scene.add(altitudeLine);
+
+    function resizeRenderer() { const width = sceneContainer.clientWidth; const height = sceneContainer.clientHeight; renderer.setSize(width, height, false); camera.aspect = width / Math.max(height, 1); camera.updateProjectionMatrix(); }
+    function setActiveButton(buttons, predicate) { buttons.forEach((button) => button.classList.toggle("active", predicate(button))); }
+    function setPlaybackSpeed(speed) { playbackSpeed = speed; setActiveButton(speedButtons, (button) => Number(button.dataset.speed) === speed); }
+    function setCameraMode(mode) { cameraMode = mode; controls.enabled = mode === "free"; setActiveButton(cameraButtons, (button) => button.dataset.camera === mode); }
+    speedButtons.forEach((button) => button.addEventListener("click", () => setPlaybackSpeed(Number(button.dataset.speed || 1))));
+    cameraButtons.forEach((button) => button.addEventListener("click", () => setCameraMode(button.dataset.camera || "follow")));
+    playToggle.addEventListener("click", () => { if (!telemetry.length) { return; } isPlaying = !isPlaying; playToggle.textContent = isPlaying ? "Pause" : "Play"; if (isPlaying && playhead >= telemetry.length - 1) { playhead = 0; } });
+    timelineSlider.max = String(Math.max(telemetry.length - 1, 0));
+    timelineSlider.addEventListener("input", (event) => { playhead = Number(event.target.value || 0); isPlaying = false; playToggle.textContent = "Play"; });
+    setPlaybackSpeed(1);
+    setCameraMode("follow");
+
+    function updateHud(frame) {
+      setHtml("hud-grid", [["Altitude", `${Number(frame.altitude_agl_m || 0).toFixed(2)} m`], ["Speed", `${Number(frame.speed_mps || 0).toFixed(2)} m/s`], ["Mode", frame.mode || "-", statusClass(frame.mode)], ["Battery", `${Number(frame.battery_percent || 0).toFixed(0)}%`], ["Dock Error", `${Number(frame.horizontal_distance_to_dock_m || 0).toFixed(3)} m`]].map(([label, value, extraClass]) => `<div class="hud-card"><label>${label}</label><strong class="${extraClass || ""}">${value}</strong></div>`).join(""));
+    }
+    function updateAltitudeLine(position) { altitudeLine.geometry.setFromPoints([position, new THREE.Vector3(position.x, 0, position.z)]); altitudeLine.computeLineDistances(); }
+    function updateCamera(frame, position) {
+      const yawRad = degToRad(frame.yaw_deg || 0);
+      const followOffset = new THREE.Vector3(-10, 7, -15).applyAxisAngle(new THREE.Vector3(0, 1, 0), yawRad);
+      if (cameraMode === "follow") { camera.position.lerp(position.clone().add(followOffset), 0.08); controls.target.lerp(position, 0.1); }
+      else if (cameraMode === "top") { camera.position.lerp(position.clone().add(new THREE.Vector3(0.1, 42, 0.1)), 0.08); controls.target.lerp(position, 0.1); }
+      else if (cameraMode === "side") { camera.position.lerp(position.clone().add(new THREE.Vector3(28, 12, 0)), 0.08); controls.target.lerp(position, 0.1); }
+      controls.update();
+    }
+    function updateScene(frame, deltaSeconds) {
+      const position = frameToVector(frame);
+      droneMesh.root.position.copy(position);
+      droneMesh.yawGroup.rotation.y = -degToRad(frame.yaw_deg || 0);
+      droneMesh.pitchGroup.rotation.x = degToRad(frame.pitch_deg || 0);
+      droneMesh.rollGroup.rotation.z = -degToRad(frame.roll_deg || 0);
+      const rotorSpeed = (frame.in_air ? 18 : 4) * deltaSeconds * Math.max(1, playbackSpeed);
+      droneMesh.rotors.forEach((rotor, index) => { rotor.rotation.y += rotorSpeed * (index % 2 === 0 ? 1 : -1); });
+      updateAltitudeLine(position);
+      updateHud(frame);
+      updateCamera(frame, position);
+    }
+    function animate(timestamp) {
+      const deltaSeconds = lastAnimationTs ? (timestamp - lastAnimationTs) / 1000 : 0.016;
+      lastAnimationTs = timestamp;
+      if (isPlaying && telemetry.length > 1) {
+        playhead += deltaSeconds * playbackSpeed * 1.1;
+        if (playhead >= telemetry.length - 1) { playhead = telemetry.length - 1; isPlaying = false; playToggle.textContent = "Play"; }
+      }
+      timelineSlider.value = String(Math.round(playhead));
+      updateScene(interpolateFrame(playhead), deltaSeconds);
+      renderer.render(scene, camera);
+      requestAnimationFrame(animate);
+    }
+
+    renderHero();
+    renderMissionLifecycle();
+    renderTelemetryChart();
+    renderPrecisionChart();
+    renderPrecisionScenarios();
+    renderWeatherTable();
+    renderEvidenceGrid();
+    renderParameterTable();
+    resizeRenderer();
+    updateScene(interpolateFrame(playhead), 0.016);
+    window.addEventListener("resize", resizeRenderer);
+    requestAnimationFrame(animate);
+  </script>
+</body>
+</html>

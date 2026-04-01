@@ -1,0 +1,2392 @@
+{
+  "bundle_name": "latest_live_px4_replay_bundle",
+  "sources": {
+    "mission_validation": "D:\\downloads\\SeniorProject\\Skylink2\\artifacts\\live_px4\\latest_mission_validation.json",
+    "execution_validation": "D:\\downloads\\SeniorProject\\Skylink2\\artifacts\\live_px4\\latest_execution_validation.json",
+    "precision_profile": "D:\\downloads\\SeniorProject\\Skylink2\\artifacts\\live_px4\\latest_precision_landing_profile.json",
+    "landing_target_consumption": "D:\\downloads\\SeniorProject\\Skylink2\\artifacts\\live_px4\\latest_landing_target_consumption.json",
+    "dock_approach_validation": "D:\\downloads\\SeniorProject\\Skylink2\\artifacts\\live_px4\\latest_dock_approach_validation.json",
+    "precision_landing_manifest": "D:\\downloads\\SeniorProject\\Skylink2\\artifacts\\precision_landing\\latest\\manifest.json",
+    "weather_scenario_manifest": "D:\\downloads\\SeniorProject\\Skylink2\\artifacts\\weather_scenarios\\latest\\manifest.json",
+    "dock_approach_timeline": "D:\\downloads\\SeniorProject\\Skylink2\\artifacts\\replay_bundle\\latest\\dock_approach_timeline.csv"
+  },
+  "artifacts": {
+    "mission_validation": {
+      "system_address": "udpin://0.0.0.0:14540",
+      "connect_timeout_s": 15.0,
+      "geofence": {
+        "center": {
+          "lat": 47.3979709,
+          "lon": 8.5461638,
+          "alt_m": 0.0
+        },
+        "radius_m": 100.0
+      },
+      "mission": {
+        "mission_id": "live-sitl-smoke",
+        "waypoint_count": 6,
+        "cruise_speed_mps": 5.0,
+        "area_m2": 399.99931726839714,
+        "north_span_m": 19.9999999998922,
+        "east_span_m": 19.99998293174467,
+        "waypoints_local": [
+          {
+            "index": 0,
+            "north_m": 0.0,
+            "east_m": 0.0,
+            "altitude_m": 10.0
+          },
+          {
+            "index": 1,
+            "north_m": 0.0,
+            "east_m": 19.9999999999432,
+            "altitude_m": 10.0
+          },
+          {
+            "index": 2,
+            "north_m": 9.9999999999461,
+            "east_m": 19.99998293174467,
+            "altitude_m": 10.0
+          },
+          {
+            "index": 3,
+            "north_m": 9.9999999999461,
+            "east_m": 0.0,
+            "altitude_m": 10.0
+          },
+          {
+            "index": 4,
+            "north_m": 19.9999999998922,
+            "east_m": 0.0,
+            "altitude_m": 10.0
+          },
+          {
+            "index": 5,
+            "north_m": 19.9999999998922,
+            "east_m": 19.99996586353381,
+            "altitude_m": 10.0
+          }
+        ]
+      },
+      "before_upload": {
+        "connected": true,
+        "armed": false,
+        "in_air": false,
+        "mode": "hold",
+        "battery_percent": 100.0,
+        "position": {
+          "lat": 47.3979709,
+          "lon": 8.5461638,
+          "alt_m": -0.017000000923871994
+        },
+        "mission_progress": {
+          "current": 0,
+          "total": 0
+        }
+      },
+      "before_upload_local_pose": {
+        "north_m": -0.02283077873289585,
+        "east_m": -0.039676010608673096,
+        "down_m": -0.04761335253715515,
+        "yaw_deg": 97.1838607788086
+      },
+      "after_upload": {
+        "connected": true,
+        "armed": false,
+        "in_air": false,
+        "mode": "hold",
+        "battery_percent": 100.0,
+        "position": {
+          "lat": 47.3979709,
+          "lon": 8.5461633,
+          "alt_m": 0.036000002175569534
+        },
+        "mission_progress": {
+          "current": 0,
+          "total": 0
+        }
+      },
+      "after_upload_local_pose": {
+        "north_m": -0.001851381384767592,
+        "east_m": -0.02024540677666664,
+        "down_m": 0.04514594376087189,
+        "yaw_deg": 97.24092102050781
+      }
+    },
+    "execution_validation": {
+      "system_address": "udpin://0.0.0.0:14540",
+      "connect_timeout_s": 15.0,
+      "mission_id": "live-execution-smoke",
+      "waypoint_count": 6,
+      "initial_snapshot": {
+        "connected": true,
+        "armed": false,
+        "in_air": false,
+        "mode": "hold",
+        "battery_percent": 100.0,
+        "position": {
+          "lat": 47.3979712,
+          "lon": 8.5461636,
+          "alt_m": 0.004000000189989805
+        },
+        "mission_progress": {
+          "current": 0,
+          "total": 0
+        }
+      },
+      "mission_phase_snapshots": [
+        {
+          "tick": 0,
+          "snapshot": {
+            "connected": true,
+            "armed": true,
+            "in_air": true,
+            "mode": "mission",
+            "battery_percent": 98.0,
+            "position": {
+              "lat": 47.397970799999996,
+              "lon": 8.5461636,
+              "alt_m": 0.0
+            },
+            "mission_progress": {
+              "current": 0,
+              "total": 0
+            }
+          }
+        }
+      ],
+      "after_rtl_snapshot": {
+        "connected": true,
+        "armed": true,
+        "in_air": true,
+        "mode": "return_to_launch",
+        "battery_percent": 82.0,
+        "position": {
+          "lat": 47.3979709,
+          "lon": 8.5461638,
+          "alt_m": 6.5460004806518555
+        },
+        "mission_progress": {
+          "current": 0,
+          "total": 0
+        }
+      }
+    },
+    "precision_profile": {
+      "system_address": "udpin://0.0.0.0:14540",
+      "connect_timeout_s": 30.0,
+      "profile": [
+        {
+          "name": "RTL_PLD_MD",
+          "param_type": "int",
+          "desired_value": 2,
+          "applied_value": 2,
+          "rationale": "Enable required precision landing during RTL recovery."
+        },
+        {
+          "name": "LTEST_MODE",
+          "param_type": "int",
+          "desired_value": 1,
+          "applied_value": 1,
+          "rationale": "Dock target is stationary relative to the home frame."
+        },
+        {
+          "name": "PLD_HACC_RAD",
+          "param_type": "float",
+          "desired_value": 0.4,
+          "applied_value": 0.4000000059604645,
+          "rationale": "Begin descent once horizontal landing error is inside the landing accuracy target."
+        },
+        {
+          "name": "PLD_BTOUT",
+          "param_type": "float",
+          "desired_value": 2.0,
+          "applied_value": 2.0,
+          "rationale": "Abort landing-target tracking when the target is lost beyond the configured reacquire timeout."
+        },
+        {
+          "name": "PLD_FAPPR_ALT",
+          "param_type": "float",
+          "desired_value": 1.2,
+          "applied_value": 1.2000000476837158,
+          "rationale": "Enter final approach near the range-assisted flare altitude."
+        },
+        {
+          "name": "PLD_MAX_SRCH",
+          "param_type": "int",
+          "desired_value": 3,
+          "applied_value": 3,
+          "rationale": "Allow bounded retries before falling back from required search behavior."
+        }
+      ]
+    },
+    "landing_target_consumption": {
+      "endpoint": "gcs",
+      "connection_string": "udpout:172.23.68.199:14550",
+      "sent_count": 50,
+      "duration_s": 5.0,
+      "rate_hz": 10.0,
+      "first_sample": {
+        "time_usec": 1775039927129675,
+        "x_m": 1.25,
+        "y_m": -0.75,
+        "z_m": 0.0,
+        "target_num": 0,
+        "frame": 1,
+        "angle_x_rad": 0.0,
+        "angle_y_rad": 0.0,
+        "distance_m": 0.0,
+        "size_x_rad": 0.0,
+        "size_y_rad": 0.0,
+        "q": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "target_type": 2,
+        "position_valid": 1
+      },
+      "last_sample": {
+        "time_usec": 1775039932029675,
+        "x_m": 1.25,
+        "y_m": -0.75,
+        "z_m": 0.0,
+        "target_num": 0,
+        "frame": 1,
+        "angle_x_rad": 0.0,
+        "angle_y_rad": 0.0,
+        "distance_m": 0.0,
+        "size_x_rad": 0.0,
+        "size_y_rad": 0.0,
+        "q": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "target_type": 2,
+        "position_valid": 1
+      },
+      "proof_status": "consumed",
+      "bridge_host_to_px4_count": 54,
+      "observer_connection_string": "udpin:0.0.0.0:14550",
+      "observer_heartbeat": {
+        "mavpackettype": "HEARTBEAT",
+        "type": 2,
+        "autopilot": 12,
+        "base_mode": 29,
+        "custom_mode": 50593792,
+        "system_status": 3,
+        "mavlink_version": 3
+      },
+      "observer_set_message_interval_ack": {
+        "command": 511,
+        "result": 0
+      },
+      "observer_outbound_landing_target": {
+        "count": 50,
+        "first_message": {
+          "mavpackettype": "LANDING_TARGET",
+          "time_usec": 1702204000,
+          "target_num": 0,
+          "frame": 1,
+          "angle_x": 0.0,
+          "angle_y": 0.0,
+          "distance": 0.0,
+          "size_x": 0.0,
+          "size_y": 0.0,
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0,
+          "q": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "type": 0,
+          "position_valid": 0
+        },
+        "first_nonzero_message": {},
+        "position_valid_count": 0
+      },
+      "receiver_observation": {
+        "count": 50,
+        "first_match": {
+          "position_valid": 1,
+          "frame": 1,
+          "x": 1.25,
+          "y": -0.75,
+          "z": 0.0
+        }
+      },
+      "sitl_log_path": "D:\\downloads\\SeniorProject\\Skylink2\\artifacts\\sitl_logs\\landing_target_consumption_20260401_133803.log",
+      "bridge_log_path": "D:\\downloads\\SeniorProject\\Skylink2\\artifacts\\sitl_logs\\landing_target_consumption_20260401_133803_bridge.log",
+      "ulog_summary": {
+        "ulog_path": "D:\\downloads\\SeniorProject\\Skylink2\\vendor\\PX4-Autopilot\\build\\px4_sitl_default\\rootfs\\log\\2026-04-01\\10_38_40.ulg",
+        "landing_target_pose_samples": 0,
+        "irlock_report_samples": 0,
+        "landing_target_pose_preview": {},
+        "irlock_report_preview": {}
+      }
+    },
+    "dock_approach_validation": {
+      "system_address": "udpin://0.0.0.0:14540",
+      "connect_timeout_s": 15.0,
+      "mission_id": "live-dock-approach-validation",
+      "waypoint_count": 6,
+      "dock_target": {
+        "north_m": 0.0,
+        "east_m": 0.0,
+        "down_m": 0.0
+      },
+      "landing_target_connection": {
+        "endpoint": "gcs",
+        "connection_string": "udpout:172.23.68.199:14550",
+        "stream_rate_hz": 5.0,
+        "stream_duration_s": 12.0
+      },
+      "evidence_paths": {
+        "sitl_log_path": "D:\\downloads\\SeniorProject\\Skylink2\\artifacts\\sitl_logs\\live_probe_20260401_180254.log",
+        "bridge_log_path": "D:\\downloads\\SeniorProject\\Skylink2\\artifacts\\sitl_logs\\live_probe_20260401_180254_bridge.log"
+      },
+      "initial_snapshot": {
+        "connected": true,
+        "armed": false,
+        "in_air": false,
+        "mode": "hold",
+        "battery_percent": 100.0,
+        "position": {
+          "lat": 47.3979712,
+          "lon": 8.5461639,
+          "alt_m": 0.036000002175569534
+        },
+        "mission_progress": {
+          "current": 0,
+          "total": 0
+        }
+      },
+      "initial_local_pose": {
+        "north_m": 0.042671605944633484,
+        "east_m": -0.040188681334257126,
+        "down_m": 0.015720754861831665,
+        "yaw_deg": 96.94303131103516,
+        "roll_deg": 0.0014328517718240619,
+        "pitch_deg": 0.007803082000464201
+      },
+      "mission_entry_snapshot": {
+        "connected": true,
+        "armed": true,
+        "in_air": true,
+        "mode": "mission",
+        "battery_percent": 98.0,
+        "position": {
+          "lat": 47.3979709,
+          "lon": 8.5461634,
+          "alt_m": 0.0
+        },
+        "mission_progress": {
+          "current": 0,
+          "total": 0
+        }
+      },
+      "mission_entry_observations": [
+        {
+          "t_s": 1628470.703,
+          "snapshot": {
+            "connected": true,
+            "armed": true,
+            "in_air": true,
+            "mode": "mission",
+            "battery_percent": 98.0,
+            "position": {
+              "lat": 47.3979709,
+              "lon": 8.5461634,
+              "alt_m": 0.0
+            },
+            "mission_progress": {
+              "current": 0,
+              "total": 0
+            }
+          },
+          "local_pose": {
+            "north_m": 0.06236880272626877,
+            "east_m": -0.0006789497565478086,
+            "down_m": -7.633537769317627,
+            "yaw_deg": 96.97296142578125,
+            "roll_deg": 0.0007549367728643119,
+            "pitch_deg": 0.0856940820813179
+          },
+          "attitude_euler": {
+            "roll_deg": 0.0007549367728643119,
+            "pitch_deg": 0.0856940820813179,
+            "yaw_deg": 96.97296142578125
+          }
+        }
+      ],
+      "departure_observations": [
+        {
+          "t_s": 1628476.796,
+          "local_pose": {
+            "north_m": 0.062197666615247726,
+            "east_m": -0.0007186682778410614,
+            "down_m": -7.686935901641846,
+            "yaw_deg": 96.97378540039062,
+            "roll_deg": -0.004639653954654932,
+            "pitch_deg": 0.081667460501194
+          },
+          "attitude_euler": {
+            "roll_deg": -0.004639653954654932,
+            "pitch_deg": 0.081667460501194,
+            "yaw_deg": 96.97378540039062
+          },
+          "horizontal_distance_to_dock_m": 0.06220181843382938,
+          "snapshot": {
+            "connected": true,
+            "armed": true,
+            "in_air": true,
+            "mode": "mission",
+            "battery_percent": 89.0,
+            "position": {
+              "lat": 47.3979711,
+              "lon": 8.5461638,
+              "alt_m": 7.771000385284424
+            },
+            "mission_progress": {
+              "current": 0,
+              "total": 0
+            }
+          }
+        },
+        {
+          "t_s": 1628482.671,
+          "local_pose": {
+            "north_m": 0.006261887960135937,
+            "east_m": 16.63193702697754,
+            "down_m": -9.925361633300781,
+            "yaw_deg": 88.9623031616211,
+            "roll_deg": -0.4243653118610382,
+            "pitch_deg": 4.369444370269775
+          },
+          "attitude_euler": {
+            "roll_deg": -0.4243653118610382,
+            "pitch_deg": 4.369444370269775,
+            "yaw_deg": 88.9623031616211
+          },
+          "horizontal_distance_to_dock_m": 16.631938205771068,
+          "snapshot": {
+            "connected": true,
+            "armed": true,
+            "in_air": true,
+            "mode": "mission",
+            "battery_percent": 79.0,
+            "position": {
+              "lat": 47.3979706,
+              "lon": 8.5463848,
+              "alt_m": 9.945000648498535
+            },
+            "mission_progress": {
+              "current": 3,
+              "total": 6
+            }
+          }
+        }
+      ],
+      "rtl_approach_window": {
+        "activation_radius_m": 12.0,
+        "entry_local_pose": {
+          "north_m": 0.2363000363111496,
+          "east_m": 0.3743252754211426,
+          "down_m": -28.510488510131836,
+          "yaw_deg": -136.17210388183594,
+          "roll_deg": -0.7749179005622864,
+          "pitch_deg": 2.2753427028656006
+        },
+        "observations": [
+          {
+            "t_s": 1628489.281,
+            "local_pose": {
+              "north_m": 9.112720489501953,
+              "east_m": 19.21013832092285,
+              "down_m": -9.998807907104492,
+              "yaw_deg": -29.615631103515625,
+              "roll_deg": -10.229693412780762,
+              "pitch_deg": -1.1262900829315186
+            },
+            "attitude_euler": {
+              "roll_deg": -10.229693412780762,
+              "pitch_deg": -1.1262900829315186,
+              "yaw_deg": -29.615631103515625
+            },
+            "horizontal_distance_to_dock_m": 21.261963433059925,
+            "altitude_agl_m": 9.998807907104492,
+            "snapshot": {
+              "connected": true,
+              "armed": true,
+              "in_air": true,
+              "mode": "return_to_launch",
+              "battery_percent": 69.0,
+              "position": {
+                "lat": 47.3980525,
+                "lon": 8.546418599999999,
+                "alt_m": 10.018000602722168
+              },
+              "mission_progress": {
+                "current": 0,
+                "total": 0
+              }
+            }
+          },
+          {
+            "t_s": 1628495.39,
+            "local_pose": {
+              "north_m": 9.201103210449219,
+              "east_m": 18.516433715820312,
+              "down_m": -25.199602127075195,
+              "yaw_deg": -29.231414794921875,
+              "roll_deg": -0.907031774520874,
+              "pitch_deg": -0.5163177251815796
+            },
+            "attitude_euler": {
+              "roll_deg": -0.907031774520874,
+              "pitch_deg": -0.5163177251815796,
+              "yaw_deg": -29.231414794921875
+            },
+            "horizontal_distance_to_dock_m": 20.67652334996641,
+            "altitude_agl_m": 25.199602127075195,
+            "snapshot": {
+              "connected": true,
+              "armed": true,
+              "in_air": true,
+              "mode": "return_to_launch",
+              "battery_percent": 59.0,
+              "position": {
+                "lat": 47.3980533,
+                "lon": 8.54641,
+                "alt_m": 25.269001007080078
+              },
+              "mission_progress": {
+                "current": 0,
+                "total": 0
+              }
+            }
+          },
+          {
+            "t_s": 1628502.203,
+            "local_pose": {
+              "north_m": 6.1118035316467285,
+              "east_m": 13.384174346923828,
+              "down_m": -29.73636245727539,
+              "yaw_deg": -92.3757095336914,
+              "roll_deg": 0.4935270845890045,
+              "pitch_deg": -3.3138484954833984
+            },
+            "attitude_euler": {
+              "roll_deg": 0.4935270845890045,
+              "pitch_deg": -3.3138484954833984,
+              "yaw_deg": -92.3757095336914
+            },
+            "horizontal_distance_to_dock_m": 14.713608169252819,
+            "altitude_agl_m": 29.73636245727539,
+            "snapshot": {
+              "connected": true,
+              "armed": true,
+              "in_air": true,
+              "mode": "return_to_launch",
+              "battery_percent": 50.0,
+              "position": {
+                "lat": 47.3980253,
+                "lon": 8.546341199999999,
+                "alt_m": 29.757001876831055
+              },
+              "mission_progress": {
+                "current": 3,
+                "total": 6
+              }
+            }
+          },
+          {
+            "t_s": 1628509.546,
+            "local_pose": {
+              "north_m": 0.2363000363111496,
+              "east_m": 0.3743252754211426,
+              "down_m": -28.510488510131836,
+              "yaw_deg": -136.17210388183594,
+              "roll_deg": -0.7749179005622864,
+              "pitch_deg": 2.2753427028656006
+            },
+            "attitude_euler": {
+              "roll_deg": -0.7749179005622864,
+              "pitch_deg": 2.2753427028656006,
+              "yaw_deg": -136.17210388183594
+            },
+            "horizontal_distance_to_dock_m": 0.442670440598607,
+            "altitude_agl_m": 28.510488510131836,
+            "snapshot": {
+              "connected": true,
+              "armed": true,
+              "in_air": true,
+              "mode": "return_to_launch",
+              "battery_percent": 50.0,
+              "position": {
+                "lat": 47.397972599999996,
+                "lon": 8.546168699999999,
+                "alt_m": 28.500001907348633
+              },
+              "mission_progress": {
+                "current": 0,
+                "total": 0
+              }
+            }
+          }
+        ]
+      },
+      "live_stream": {
+        "record_count": 6,
+        "first_record": {
+          "index": 0,
+          "snapshot": {
+            "connected": true,
+            "armed": true,
+            "in_air": true,
+            "mode": "return_to_launch",
+            "battery_percent": 50.0,
+            "position": {
+              "lat": 47.3979724,
+              "lon": 8.5461674,
+              "alt_m": 21.128000259399414
+            },
+            "mission_progress": {
+              "current": 0,
+              "total": 0
+            }
+          },
+          "vehicle_local_pose": {
+            "north_m": 0.2078625112771988,
+            "east_m": 0.26489540934562683,
+            "down_m": -21.131664276123047,
+            "yaw_deg": 97.94495391845703,
+            "roll_deg": 0.3249017000198364,
+            "pitch_deg": 0.28373199701309204
+          },
+          "attitude_euler": {
+            "roll_deg": 0.3249017000198364,
+            "pitch_deg": 0.28373199701309204,
+            "yaw_deg": 97.94495391845703
+          },
+          "horizontal_distance_to_dock_m": 0.3367141242758474,
+          "altitude_agl_m": 21.131664276123047,
+          "projected_frame": {
+            "vehicle_pose": {
+              "north_m": 0.2078625112771988,
+              "east_m": 0.26489540934562683,
+              "down_m": -21.131664276123047,
+              "yaw_deg": 97.94495391845703,
+              "roll_deg": 0.3249017000198364,
+              "pitch_deg": 0.28373199701309204
+            },
+            "dock_target": {
+              "north_m": 0.0,
+              "east_m": 0.0,
+              "down_m": 0.0
+            },
+            "observation": {
+              "acquired": true,
+              "quality": 0.95,
+              "forward_angle_rad": -0.011055075602035868,
+              "right_angle_rad": 0.011474294763411597,
+              "range_m": 21.131664276123047
+            },
+            "relative_target": {
+              "forward_error_m": -0.23362166358050093,
+              "right_error_m": 0.24248158650241888,
+              "down_error_m": 21.131664276123047,
+              "horizontal_error_m": 0.3367141242758474
+            },
+            "target_north_m": 0.0,
+            "target_east_m": 0.0,
+            "target_down_m": 0.0
+          },
+          "sample": {
+            "time_usec": 1775055877193317,
+            "x_m": 0.0,
+            "y_m": 0.0,
+            "z_m": 0.0,
+            "target_num": 0,
+            "frame": 1,
+            "angle_x_rad": 0.0,
+            "angle_y_rad": 0.0,
+            "distance_m": 0.0,
+            "size_x_rad": 0.0,
+            "size_y_rad": 0.0,
+            "q": [
+              1.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "target_type": 2,
+            "position_valid": 1
+          }
+        },
+        "last_record": {
+          "index": 5,
+          "snapshot": {
+            "connected": true,
+            "armed": false,
+            "in_air": false,
+            "mode": "mission",
+            "battery_percent": 100.0,
+            "position": {
+              "lat": 47.3979712,
+              "lon": 8.5461638,
+              "alt_m": -0.013000000268220901
+            },
+            "mission_progress": {
+              "current": 0,
+              "total": 0
+            }
+          },
+          "vehicle_local_pose": {
+            "north_m": 0.07527589797973633,
+            "east_m": -0.0055842529982328415,
+            "down_m": 0.03443603217601776,
+            "yaw_deg": 97.79243469238281,
+            "roll_deg": -0.13670773804187775,
+            "pitch_deg": -0.23833714425563812
+          },
+          "attitude_euler": {
+            "roll_deg": -0.13670773804187775,
+            "pitch_deg": -0.23833714425563812,
+            "yaw_deg": 97.79243469238281
+          },
+          "horizontal_distance_to_dock_m": 0.07548274437382324,
+          "altitude_agl_m": 0.0,
+          "projected_frame": {
+            "vehicle_pose": {
+              "north_m": 0.07527589797973633,
+              "east_m": -0.0055842529982328415,
+              "down_m": 0.03443603217601776,
+              "yaw_deg": 97.79243469238281,
+              "roll_deg": -0.13670773804187775,
+              "pitch_deg": -0.23833714425563812
+            },
+            "dock_target": {
+              "north_m": 0.0,
+              "east_m": 0.0,
+              "down_m": 0.0
+            },
+            "observation": {
+              "acquired": true,
+              "quality": 0.95,
+              "forward_angle_rad": 1.004777247221755,
+              "right_angle_rad": 1.4361578625216205,
+              "range_m": 0.01
+            },
+            "relative_target": {
+              "forward_error_m": 0.01573895068192976,
+              "right_error_m": 0.0738236420778312,
+              "down_error_m": 0.01,
+              "horizontal_error_m": 0.07548274437382325
+            },
+            "target_north_m": -1.3877787807814457e-17,
+            "target_east_m": -1.734723475976807e-18,
+            "target_down_m": 0.04443603217601776
+          },
+          "sample": {
+            "time_usec": 1775055907260360,
+            "x_m": -1.3877787807814457e-17,
+            "y_m": -1.734723475976807e-18,
+            "z_m": 0.04443603217601776,
+            "target_num": 0,
+            "frame": 1,
+            "angle_x_rad": 0.0,
+            "angle_y_rad": 0.0,
+            "distance_m": 0.0,
+            "size_x_rad": 0.0,
+            "size_y_rad": 0.0,
+            "q": [
+              1.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "target_type": 2,
+            "position_valid": 1
+          }
+        },
+        "records": [
+          {
+            "index": 0,
+            "snapshot": {
+              "connected": true,
+              "armed": true,
+              "in_air": true,
+              "mode": "return_to_launch",
+              "battery_percent": 50.0,
+              "position": {
+                "lat": 47.3979724,
+                "lon": 8.5461674,
+                "alt_m": 21.128000259399414
+              },
+              "mission_progress": {
+                "current": 0,
+                "total": 0
+              }
+            },
+            "vehicle_local_pose": {
+              "north_m": 0.2078625112771988,
+              "east_m": 0.26489540934562683,
+              "down_m": -21.131664276123047,
+              "yaw_deg": 97.94495391845703,
+              "roll_deg": 0.3249017000198364,
+              "pitch_deg": 0.28373199701309204
+            },
+            "attitude_euler": {
+              "roll_deg": 0.3249017000198364,
+              "pitch_deg": 0.28373199701309204,
+              "yaw_deg": 97.94495391845703
+            },
+            "horizontal_distance_to_dock_m": 0.3367141242758474,
+            "altitude_agl_m": 21.131664276123047,
+            "projected_frame": {
+              "vehicle_pose": {
+                "north_m": 0.2078625112771988,
+                "east_m": 0.26489540934562683,
+                "down_m": -21.131664276123047,
+                "yaw_deg": 97.94495391845703,
+                "roll_deg": 0.3249017000198364,
+                "pitch_deg": 0.28373199701309204
+              },
+              "dock_target": {
+                "north_m": 0.0,
+                "east_m": 0.0,
+                "down_m": 0.0
+              },
+              "observation": {
+                "acquired": true,
+                "quality": 0.95,
+                "forward_angle_rad": -0.011055075602035868,
+                "right_angle_rad": 0.011474294763411597,
+                "range_m": 21.131664276123047
+              },
+              "relative_target": {
+                "forward_error_m": -0.23362166358050093,
+                "right_error_m": 0.24248158650241888,
+                "down_error_m": 21.131664276123047,
+                "horizontal_error_m": 0.3367141242758474
+              },
+              "target_north_m": 0.0,
+              "target_east_m": 0.0,
+              "target_down_m": 0.0
+            },
+            "sample": {
+              "time_usec": 1775055877193317,
+              "x_m": 0.0,
+              "y_m": 0.0,
+              "z_m": 0.0,
+              "target_num": 0,
+              "frame": 1,
+              "angle_x_rad": 0.0,
+              "angle_y_rad": 0.0,
+              "distance_m": 0.0,
+              "size_x_rad": 0.0,
+              "size_y_rad": 0.0,
+              "q": [
+                1.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "target_type": 2,
+              "position_valid": 1
+            }
+          },
+          {
+            "index": 1,
+            "snapshot": {
+              "connected": true,
+              "armed": true,
+              "in_air": true,
+              "mode": "return_to_launch",
+              "battery_percent": 50.0,
+              "position": {
+                "lat": 47.3979709,
+                "lon": 8.5461635,
+                "alt_m": 9.552000045776367
+              },
+              "mission_progress": {
+                "current": 0,
+                "total": 0
+              }
+            },
+            "vehicle_local_pose": {
+              "north_m": 0.039670731872320175,
+              "east_m": -0.023383190855383873,
+              "down_m": -9.57760238647461,
+              "yaw_deg": 96.99635314941406,
+              "roll_deg": -0.2946353554725647,
+              "pitch_deg": -0.41498759388923645
+            },
+            "attitude_euler": {
+              "roll_deg": -0.2946353554725647,
+              "pitch_deg": -0.41498759388923645,
+              "yaw_deg": 96.99635314941406
+            },
+            "horizontal_distance_to_dock_m": 0.04604932770263674,
+            "altitude_agl_m": 9.57760238647461,
+            "projected_frame": {
+              "vehicle_pose": {
+                "north_m": 0.039670731872320175,
+                "east_m": -0.023383190855383873,
+                "down_m": -9.57760238647461,
+                "yaw_deg": 96.99635314941406,
+                "roll_deg": -0.2946353554725647,
+                "pitch_deg": -0.41498759388923645
+              },
+              "dock_target": {
+                "north_m": 0.0,
+                "east_m": 0.0,
+                "down_m": 0.0
+              },
+              "observation": {
+                "acquired": true,
+                "quality": 0.95,
+                "forward_angle_rad": 0.0029277825504041327,
+                "right_angle_rad": 0.0038137880913960073,
+                "range_m": 9.57760238647461
+              },
+              "relative_target": {
+                "forward_error_m": 0.02804121726414488,
+                "right_error_m": 0.036527123021254375,
+                "down_error_m": 9.57760238647461,
+                "horizontal_error_m": 0.04604932770263675
+              },
+              "target_north_m": 0.0,
+              "target_east_m": 0.0,
+              "target_down_m": 0.0
+            },
+            "sample": {
+              "time_usec": 1775055882552076,
+              "x_m": 0.0,
+              "y_m": 0.0,
+              "z_m": 0.0,
+              "target_num": 0,
+              "frame": 1,
+              "angle_x_rad": 0.0,
+              "angle_y_rad": 0.0,
+              "distance_m": 0.0,
+              "size_x_rad": 0.0,
+              "size_y_rad": 0.0,
+              "q": [
+                1.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "target_type": 2,
+              "position_valid": 1
+            }
+          },
+          {
+            "index": 2,
+            "snapshot": {
+              "connected": true,
+              "armed": true,
+              "in_air": true,
+              "mode": "return_to_launch",
+              "battery_percent": 50.0,
+              "position": {
+                "lat": 47.397971,
+                "lon": 8.5461637,
+                "alt_m": 4.544000148773193
+              },
+              "mission_progress": {
+                "current": 0,
+                "total": 0
+              }
+            },
+            "vehicle_local_pose": {
+              "north_m": 0.049321286380290985,
+              "east_m": -0.013157800771296024,
+              "down_m": -4.538161754608154,
+              "yaw_deg": 96.98733520507812,
+              "roll_deg": -0.1114211231470108,
+              "pitch_deg": -0.2211856245994568
+            },
+            "attitude_euler": {
+              "roll_deg": -0.1114211231470108,
+              "pitch_deg": -0.2211856245994568,
+              "yaw_deg": 96.98733520507812
+            },
+            "horizontal_distance_to_dock_m": 0.05104622426138681,
+            "altitude_agl_m": 4.538161754608154,
+            "projected_frame": {
+              "vehicle_pose": {
+                "north_m": 0.049321286380290985,
+                "east_m": -0.013157800771296024,
+                "down_m": -4.538161754608154,
+                "yaw_deg": 96.98733520507812,
+                "roll_deg": -0.1114211231470108,
+                "pitch_deg": -0.2211856245994568
+              },
+              "dock_target": {
+                "north_m": 0.0,
+                "east_m": 0.0,
+                "down_m": 0.0
+              },
+              "observation": {
+                "acquired": true,
+                "quality": 0.95,
+                "forward_angle_rad": 0.004199916049739494,
+                "right_angle_rad": 0.010434316504728583,
+                "range_m": 4.538161754608154
+              },
+              "relative_target": {
+                "forward_error_m": 0.019060010458005795,
+                "right_error_m": 0.04735433467682241,
+                "down_error_m": 4.538161754608154,
+                "horizontal_error_m": 0.05104622426138681
+              },
+              "target_north_m": 0.0,
+              "target_east_m": -3.469446951953614e-18,
+              "target_down_m": 0.0
+            },
+            "sample": {
+              "time_usec": 1775055888557018,
+              "x_m": 0.0,
+              "y_m": -3.469446951953614e-18,
+              "z_m": 0.0,
+              "target_num": 0,
+              "frame": 1,
+              "angle_x_rad": 0.0,
+              "angle_y_rad": 0.0,
+              "distance_m": 0.0,
+              "size_x_rad": 0.0,
+              "size_y_rad": 0.0,
+              "q": [
+                1.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "target_type": 2,
+              "position_valid": 1
+            }
+          },
+          {
+            "index": 3,
+            "snapshot": {
+              "connected": true,
+              "armed": true,
+              "in_air": false,
+              "mode": "return_to_launch",
+              "battery_percent": 50.0,
+              "position": {
+                "lat": 47.3979709,
+                "lon": 8.5461637,
+                "alt_m": 0.14800000190734863
+              },
+              "mission_progress": {
+                "current": 0,
+                "total": 0
+              }
+            },
+            "vehicle_local_pose": {
+              "north_m": 0.03973282873630524,
+              "east_m": -0.013591373339295387,
+              "down_m": -0.14915509521961212,
+              "yaw_deg": 96.96528625488281,
+              "roll_deg": -0.0797705352306366,
+              "pitch_deg": -0.22128121554851532
+            },
+            "attitude_euler": {
+              "roll_deg": -0.0797705352306366,
+              "pitch_deg": -0.22128121554851532,
+              "yaw_deg": 96.96528625488281
+            },
+            "horizontal_distance_to_dock_m": 0.04199313168408225,
+            "altitude_agl_m": 0.14915509521961212,
+            "projected_frame": {
+              "vehicle_pose": {
+                "north_m": 0.03973282873630524,
+                "east_m": -0.013591373339295387,
+                "down_m": -0.14915509521961212,
+                "yaw_deg": 96.96528625488281,
+                "roll_deg": -0.0797705352306366,
+                "pitch_deg": -0.22128121554851532
+              },
+              "dock_target": {
+                "north_m": 0.0,
+                "east_m": 0.0,
+                "down_m": 0.0
+              },
+              "observation": {
+                "acquired": true,
+                "quality": 0.95,
+                "forward_angle_rad": 0.12214294855461828,
+                "right_angle_rad": 0.24814770298816913,
+                "range_m": 0.14915509521961212
+              },
+              "relative_target": {
+                "forward_error_m": 0.018309385775031974,
+                "right_error_m": 0.03779139453867414,
+                "down_error_m": 0.14915509521961212,
+                "horizontal_error_m": 0.04199313168408225
+              },
+              "target_north_m": 0.0,
+              "target_east_m": 0.0,
+              "target_down_m": 0.0
+            },
+            "sample": {
+              "time_usec": 1775055894561075,
+              "x_m": 0.0,
+              "y_m": 0.0,
+              "z_m": 0.0,
+              "target_num": 0,
+              "frame": 1,
+              "angle_x_rad": 0.0,
+              "angle_y_rad": 0.0,
+              "distance_m": 0.0,
+              "size_x_rad": 0.0,
+              "size_y_rad": 0.0,
+              "q": [
+                1.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "target_type": 2,
+              "position_valid": 1
+            }
+          },
+          {
+            "index": 4,
+            "snapshot": {
+              "connected": true,
+              "armed": false,
+              "in_air": false,
+              "mode": "mission",
+              "battery_percent": 98.0,
+              "position": {
+                "lat": 47.397970699999995,
+                "lon": 8.5461636,
+                "alt_m": -0.013000000268220901
+              },
+              "mission_progress": {
+                "current": 0,
+                "total": 0
+              }
+            },
+            "vehicle_local_pose": {
+              "north_m": 0.01412470918148756,
+              "east_m": -0.01874275878071785,
+              "down_m": 0.033998534083366394,
+              "yaw_deg": 97.37540435791016,
+              "roll_deg": -0.10012519359588623,
+              "pitch_deg": -0.21902121603488922
+            },
+            "attitude_euler": {
+              "roll_deg": -0.10012519359588623,
+              "pitch_deg": -0.21902121603488922,
+              "yaw_deg": 97.37540435791016
+            },
+            "horizontal_distance_to_dock_m": 0.023469094915947973,
+            "altitude_agl_m": 0.0,
+            "projected_frame": {
+              "vehicle_pose": {
+                "north_m": 0.01412470918148756,
+                "east_m": -0.01874275878071785,
+                "down_m": 0.033998534083366394,
+                "yaw_deg": 97.37540435791016,
+                "roll_deg": -0.10012519359588623,
+                "pitch_deg": -0.21902121603488922
+              },
+              "dock_target": {
+                "north_m": 0.0,
+                "east_m": 0.0,
+                "down_m": 0.0
+              },
+              "observation": {
+                "acquired": true,
+                "quality": 0.95,
+                "forward_angle_rad": 1.1150395268404487,
+                "right_angle_rad": 0.8594156653818238,
+                "range_m": 0.01
+              },
+              "relative_target": {
+                "forward_error_m": 0.020400875232319475,
+                "right_error_m": 0.011601840626775946,
+                "down_error_m": 0.01,
+                "horizontal_error_m": 0.023469094915947973
+              },
+              "target_north_m": 3.469446951953614e-18,
+              "target_east_m": 3.469446951953614e-18,
+              "target_down_m": 0.043998534083366396
+            },
+            "sample": {
+              "time_usec": 1775055900885883,
+              "x_m": 3.469446951953614e-18,
+              "y_m": 3.469446951953614e-18,
+              "z_m": 0.043998534083366396,
+              "target_num": 0,
+              "frame": 1,
+              "angle_x_rad": 0.0,
+              "angle_y_rad": 0.0,
+              "distance_m": 0.0,
+              "size_x_rad": 0.0,
+              "size_y_rad": 0.0,
+              "q": [
+                1.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "target_type": 2,
+              "position_valid": 1
+            }
+          },
+          {
+            "index": 5,
+            "snapshot": {
+              "connected": true,
+              "armed": false,
+              "in_air": false,
+              "mode": "mission",
+              "battery_percent": 100.0,
+              "position": {
+                "lat": 47.3979712,
+                "lon": 8.5461638,
+                "alt_m": -0.013000000268220901
+              },
+              "mission_progress": {
+                "current": 0,
+                "total": 0
+              }
+            },
+            "vehicle_local_pose": {
+              "north_m": 0.07527589797973633,
+              "east_m": -0.0055842529982328415,
+              "down_m": 0.03443603217601776,
+              "yaw_deg": 97.79243469238281,
+              "roll_deg": -0.13670773804187775,
+              "pitch_deg": -0.23833714425563812
+            },
+            "attitude_euler": {
+              "roll_deg": -0.13670773804187775,
+              "pitch_deg": -0.23833714425563812,
+              "yaw_deg": 97.79243469238281
+            },
+            "horizontal_distance_to_dock_m": 0.07548274437382324,
+            "altitude_agl_m": 0.0,
+            "projected_frame": {
+              "vehicle_pose": {
+                "north_m": 0.07527589797973633,
+                "east_m": -0.0055842529982328415,
+                "down_m": 0.03443603217601776,
+                "yaw_deg": 97.79243469238281,
+                "roll_deg": -0.13670773804187775,
+                "pitch_deg": -0.23833714425563812
+              },
+              "dock_target": {
+                "north_m": 0.0,
+                "east_m": 0.0,
+                "down_m": 0.0
+              },
+              "observation": {
+                "acquired": true,
+                "quality": 0.95,
+                "forward_angle_rad": 1.004777247221755,
+                "right_angle_rad": 1.4361578625216205,
+                "range_m": 0.01
+              },
+              "relative_target": {
+                "forward_error_m": 0.01573895068192976,
+                "right_error_m": 0.0738236420778312,
+                "down_error_m": 0.01,
+                "horizontal_error_m": 0.07548274437382325
+              },
+              "target_north_m": -1.3877787807814457e-17,
+              "target_east_m": -1.734723475976807e-18,
+              "target_down_m": 0.04443603217601776
+            },
+            "sample": {
+              "time_usec": 1775055907260360,
+              "x_m": -1.3877787807814457e-17,
+              "y_m": -1.734723475976807e-18,
+              "z_m": 0.04443603217601776,
+              "target_num": 0,
+              "frame": 1,
+              "angle_x_rad": 0.0,
+              "angle_y_rad": 0.0,
+              "distance_m": 0.0,
+              "size_x_rad": 0.0,
+              "size_y_rad": 0.0,
+              "q": [
+                1.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "target_type": 2,
+              "position_valid": 1
+            }
+          }
+        ]
+      },
+      "after_stream_snapshot": {
+        "connected": true,
+        "armed": false,
+        "in_air": false,
+        "mode": "mission",
+        "battery_percent": 100.0,
+        "position": {
+          "lat": 47.3979709,
+          "lon": 8.5461633,
+          "alt_m": -0.04200000315904617
+        },
+        "mission_progress": {
+          "current": 0,
+          "total": 0
+        }
+      },
+      "after_stream_local_pose": {
+        "north_m": 0.05248219519853592,
+        "east_m": 0.010177540592849255,
+        "down_m": 0.06414470076560974,
+        "yaw_deg": 98.46854400634766,
+        "roll_deg": -0.12526731193065643,
+        "pitch_deg": -0.23780804872512817
+      },
+      "receiver_observation": {
+        "count": 6,
+        "first_match": {
+          "position_valid": 1,
+          "frame": 1,
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        }
+      },
+      "bridge_summary": {
+        "gcs_host_to_px4_count": 6,
+        "gcs_px4_to_host_count": 35027
+      },
+      "proof_status": "consumed_from_live_telemetry_projection"
+    },
+    "precision_landing_manifest": {
+      "scenario_count": 3,
+      "passed_count": 2,
+      "results": [
+        {
+          "name": "nominal_precision_touchdown",
+          "passed": true,
+          "final_phase": "touchdown",
+          "touchdown_error_m": 5.29211614123329e-07,
+          "total_time_s": 17.5,
+          "details": [
+            "touchdown_within_target"
+          ]
+        },
+        {
+          "name": "short_target_loss_reacquire",
+          "passed": true,
+          "final_phase": "touchdown",
+          "touchdown_error_m": 1.2779199974824905e-05,
+          "total_time_s": 15.0,
+          "details": [
+            "touchdown_within_target"
+          ]
+        },
+        {
+          "name": "sustained_target_loss_abort",
+          "passed": false,
+          "final_phase": "abort",
+          "touchdown_error_m": null,
+          "total_time_s": 3.0,
+          "details": [
+            "target_lost_timeout"
+          ]
+        }
+      ],
+      "steps": {
+        "nominal_precision_touchdown": [
+          {
+            "t_s": 0.0,
+            "phase": "align",
+            "altitude_m": 8.0,
+            "forward_error_m": 1.8,
+            "right_error_m": -1.1,
+            "horizontal_error_m": 2.1095023109728985,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -0.8532818336519591,
+            "command_right_velocity_mps": 0.521450009453975,
+            "command_descent_rate_mps": 0.0
+          },
+          {
+            "t_s": 0.5,
+            "phase": "align",
+            "altitude_m": 8.0,
+            "forward_error_m": 1.3733590831740206,
+            "right_error_m": -0.8392749952730125,
+            "horizontal_error_m": 1.6095023109728988,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -0.853281833651959,
+            "command_right_velocity_mps": 0.5214500094539749,
+            "command_descent_rate_mps": 0.0
+          },
+          {
+            "t_s": 1.0,
+            "phase": "align",
+            "altitude_m": 8.0,
+            "forward_error_m": 0.9467181663480411,
+            "right_error_m": -0.5785499905460251,
+            "horizontal_error_m": 1.1095023109728988,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -0.7573745330784328,
+            "command_right_velocity_mps": 0.46283999243682017,
+            "command_descent_rate_mps": 0.0
+          },
+          {
+            "t_s": 1.5,
+            "phase": "align",
+            "altitude_m": 8.0,
+            "forward_error_m": 0.5680308998088246,
+            "right_error_m": -0.347129994327615,
+            "horizontal_error_m": 0.6657013865837391,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -0.4544247198470597,
+            "command_right_velocity_mps": 0.27770399546209196,
+            "command_descent_rate_mps": 0.0
+          },
+          {
+            "t_s": 2.0,
+            "phase": "descend",
+            "altitude_m": 8.0,
+            "forward_error_m": 0.34081853988529476,
+            "right_error_m": -0.208277996596569,
+            "horizontal_error_m": 0.3994208319502435,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -0.2726548319082358,
+            "command_right_velocity_mps": 0.16662239727725522,
+            "command_descent_rate_mps": 0.6
+          },
+          {
+            "t_s": 2.5,
+            "phase": "descend",
+            "altitude_m": 7.7,
+            "forward_error_m": 0.20449112393117685,
+            "right_error_m": -0.1249667979579414,
+            "horizontal_error_m": 0.2396524991701461,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -0.1635928991449415,
+            "command_right_velocity_mps": 0.09997343836635313,
+            "command_descent_rate_mps": 0.6
+          },
+          {
+            "t_s": 3.0,
+            "phase": "descend",
+            "altitude_m": 7.4,
+            "forward_error_m": 0.12269467435870611,
+            "right_error_m": -0.07498007877476484,
+            "horizontal_error_m": 0.14379149950208767,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -0.0981557394869649,
+            "command_right_velocity_mps": 0.05998406301981187,
+            "command_descent_rate_mps": 0.6
+          },
+          {
+            "t_s": 3.5,
+            "phase": "descend",
+            "altitude_m": 7.1000000000000005,
+            "forward_error_m": 0.07361680461522366,
+            "right_error_m": -0.0449880472648589,
+            "horizontal_error_m": 0.08627489970125259,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -0.05889344369217892,
+            "command_right_velocity_mps": 0.03599043781188711,
+            "command_descent_rate_mps": 0.6
+          },
+          {
+            "t_s": 4.0,
+            "phase": "descend",
+            "altitude_m": 6.800000000000001,
+            "forward_error_m": 0.0441700827691342,
+            "right_error_m": -0.026992828358915345,
+            "horizontal_error_m": 0.05176493982075156,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -0.03533606621530736,
+            "command_right_velocity_mps": 0.021594262687132274,
+            "command_descent_rate_mps": 0.6
+          },
+          {
+            "t_s": 4.5,
+            "phase": "descend",
+            "altitude_m": 6.500000000000001,
+            "forward_error_m": 0.02650204966148052,
+            "right_error_m": -0.01619569701534921,
+            "horizontal_error_m": 0.031058963892450938,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -0.02120163972918442,
+            "command_right_velocity_mps": 0.012956557612279368,
+            "command_descent_rate_mps": 0.6
+          },
+          {
+            "t_s": 5.0,
+            "phase": "descend",
+            "altitude_m": 6.200000000000001,
+            "forward_error_m": 0.015901229796888308,
+            "right_error_m": -0.009717418209209527,
+            "horizontal_error_m": 0.01863537833547056,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -0.012720983837510648,
+            "command_right_velocity_mps": 0.007773934567367621,
+            "command_descent_rate_mps": 0.6
+          },
+          {
+            "t_s": 5.5,
+            "phase": "descend",
+            "altitude_m": 5.900000000000001,
+            "forward_error_m": 0.009540737878132984,
+            "right_error_m": -0.005830450925525716,
+            "horizontal_error_m": 0.011181227001282334,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -0.007632590302506387,
+            "command_right_velocity_mps": 0.004664360740420572,
+            "command_descent_rate_mps": 0.6
+          },
+          {
+            "t_s": 6.0,
+            "phase": "descend",
+            "altitude_m": 5.600000000000001,
+            "forward_error_m": 0.0057244427268797905,
+            "right_error_m": -0.00349827055531543,
+            "horizontal_error_m": 0.006708736200769401,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -0.004579554181503832,
+            "command_right_velocity_mps": 0.0027986164442523435,
+            "command_descent_rate_mps": 0.6
+          },
+          {
+            "t_s": 6.5,
+            "phase": "descend",
+            "altitude_m": 5.300000000000002,
+            "forward_error_m": 0.0034346656361278743,
+            "right_error_m": -0.002098962333189258,
+            "horizontal_error_m": 0.004025241720461641,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -0.0027477325089022998,
+            "command_right_velocity_mps": 0.0016791698665514065,
+            "command_descent_rate_mps": 0.6
+          },
+          {
+            "t_s": 7.0,
+            "phase": "descend",
+            "altitude_m": 5.000000000000002,
+            "forward_error_m": 0.0020607993816767244,
+            "right_error_m": -0.0012593773999135549,
+            "horizontal_error_m": 0.002415145032276984,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -0.0016486395053413796,
+            "command_right_velocity_mps": 0.0010075019199308438,
+            "command_descent_rate_mps": 0.6
+          },
+          {
+            "t_s": 7.5,
+            "phase": "descend",
+            "altitude_m": 4.700000000000002,
+            "forward_error_m": 0.0012364796290060347,
+            "right_error_m": -0.000755626439948133,
+            "horizontal_error_m": 0.0014490870193661907,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -0.0009891837032048277,
+            "command_right_velocity_mps": 0.0006045011519585065,
+            "command_descent_rate_mps": 0.6
+          },
+          {
+            "t_s": 8.0,
+            "phase": "descend",
+            "altitude_m": 4.400000000000002,
+            "forward_error_m": 0.0007418877774036209,
+            "right_error_m": -0.00045337586396887973,
+            "horizontal_error_m": 0.0008694522116197144,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -0.0005935102219228967,
+            "command_right_velocity_mps": 0.00036270069117510384,
+            "command_descent_rate_mps": 0.6
+          },
+          {
+            "t_s": 8.5,
+            "phase": "descend",
+            "altitude_m": 4.100000000000002,
+            "forward_error_m": 0.0004451326664421725,
+            "right_error_m": -0.00027202551838132784,
+            "horizontal_error_m": 0.0005216713269718287,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -0.000356106133153738,
+            "command_right_velocity_mps": 0.0002176204147050623,
+            "command_descent_rate_mps": 0.6
+          },
+          {
+            "t_s": 9.0,
+            "phase": "descend",
+            "altitude_m": 3.8000000000000025,
+            "forward_error_m": 0.0002670795998653035,
+            "right_error_m": -0.0001632153110287967,
+            "horizontal_error_m": 0.0003130027961830972,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -0.00021366367989224277,
+            "command_right_velocity_mps": 0.00013057224882303737,
+            "command_descent_rate_mps": 0.6
+          },
+          {
+            "t_s": 9.5,
+            "phase": "descend",
+            "altitude_m": 3.5000000000000027,
+            "forward_error_m": 0.00016024775991918213,
+            "right_error_m": -9.7929186617278e-05,
+            "horizontal_error_m": 0.0001878016777098583,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -0.0001281982079353457,
+            "command_right_velocity_mps": 7.83433492938224e-05,
+            "command_descent_rate_mps": 0.6
+          },
+          {
+            "t_s": 10.0,
+            "phase": "descend",
+            "altitude_m": 3.200000000000003,
+            "forward_error_m": 9.614865595150928e-05,
+            "right_error_m": -5.8757511970366804e-05,
+            "horizontal_error_m": 0.000112681006625915,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -7.691892476120744e-05,
+            "command_right_velocity_mps": 4.700600957629344e-05,
+            "command_descent_rate_mps": 0.6
+          },
+          {
+            "t_s": 10.5,
+            "phase": "descend",
+            "altitude_m": 2.900000000000003,
+            "forward_error_m": 5.7689193570905564e-05,
+            "right_error_m": -3.525450718222008e-05,
+            "horizontal_error_m": 6.7608603975549e-05,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -4.615135485672446e-05,
+            "command_right_velocity_mps": 2.820360574577607e-05,
+            "command_descent_rate_mps": 0.6
+          },
+          {
+            "t_s": 11.0,
+            "phase": "descend",
+            "altitude_m": 2.600000000000003,
+            "forward_error_m": 3.461351614254333e-05,
+            "right_error_m": -2.1152704309332047e-05,
+            "horizontal_error_m": 4.056516238532939e-05,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -2.7690812914034665e-05,
+            "command_right_velocity_mps": 1.6922163447465636e-05,
+            "command_descent_rate_mps": 0.6
+          },
+          {
+            "t_s": 11.5,
+            "phase": "descend",
+            "altitude_m": 2.3000000000000034,
+            "forward_error_m": 2.0768109685526e-05,
+            "right_error_m": -1.2691622585599229e-05,
+            "horizontal_error_m": 2.4339097431197637e-05,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -1.66144877484208e-05,
+            "command_right_velocity_mps": 1.0153298068479386e-05,
+            "command_descent_rate_mps": 0.6
+          },
+          {
+            "t_s": 12.0,
+            "phase": "descend",
+            "altitude_m": 2.0000000000000036,
+            "forward_error_m": 1.24608658113156e-05,
+            "right_error_m": -7.614973551359536e-06,
+            "horizontal_error_m": 1.460345845871858e-05,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -9.96869264905248e-06,
+            "command_right_velocity_mps": 6.09197884108763e-06,
+            "command_descent_rate_mps": 0.6
+          },
+          {
+            "t_s": 12.5,
+            "phase": "descend",
+            "altitude_m": 1.7000000000000035,
+            "forward_error_m": 7.476519486789359e-06,
+            "right_error_m": -4.568984130815721e-06,
+            "horizontal_error_m": 8.762075075231147e-06,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -5.981215589431489e-06,
+            "command_right_velocity_mps": 3.655187304652577e-06,
+            "command_descent_rate_mps": 0.6
+          },
+          {
+            "t_s": 13.0,
+            "phase": "descend",
+            "altitude_m": 1.4000000000000035,
+            "forward_error_m": 4.485911692073615e-06,
+            "right_error_m": -2.7413904784894327e-06,
+            "horizontal_error_m": 5.257245045138688e-06,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -3.5887293536588922e-06,
+            "command_right_velocity_mps": 2.193112382791546e-06,
+            "command_descent_rate_mps": 0.6
+          },
+          {
+            "t_s": 13.5,
+            "phase": "flare",
+            "altitude_m": 1.1000000000000034,
+            "forward_error_m": 2.6915470152441686e-06,
+            "right_error_m": -1.6448342870936597e-06,
+            "horizontal_error_m": 3.1543470270832126e-06,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -1.0766188060976676e-06,
+            "command_right_velocity_mps": 6.579337148374638e-07,
+            "command_descent_rate_mps": 0.25
+          },
+          {
+            "t_s": 14.0,
+            "phase": "flare",
+            "altitude_m": 0.9750000000000034,
+            "forward_error_m": 2.1532376121953347e-06,
+            "right_error_m": -1.3158674296749278e-06,
+            "horizontal_error_m": 2.5234776216665697e-06,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -8.61295044878134e-07,
+            "command_right_velocity_mps": 5.26346971869971e-07,
+            "command_descent_rate_mps": 0.25
+          },
+          {
+            "t_s": 14.5,
+            "phase": "flare",
+            "altitude_m": 0.8500000000000034,
+            "forward_error_m": 1.7225900897562676e-06,
+            "right_error_m": -1.0526939437399424e-06,
+            "horizontal_error_m": 2.018782097333256e-06,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -6.890360359025071e-07,
+            "command_right_velocity_mps": 4.21077577495977e-07,
+            "command_descent_rate_mps": 0.25
+          },
+          {
+            "t_s": 15.0,
+            "phase": "flare",
+            "altitude_m": 0.7250000000000034,
+            "forward_error_m": 1.3780720718050142e-06,
+            "right_error_m": -8.42155154991954e-07,
+            "horizontal_error_m": 1.6150256778666048e-06,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -5.512288287220057e-07,
+            "command_right_velocity_mps": 3.368620619967816e-07,
+            "command_descent_rate_mps": 0.25
+          },
+          {
+            "t_s": 15.5,
+            "phase": "flare",
+            "altitude_m": 0.6000000000000034,
+            "forward_error_m": 1.1024576574440113e-06,
+            "right_error_m": -6.737241239935631e-07,
+            "horizontal_error_m": 1.2920205422932837e-06,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -4.4098306297760457e-07,
+            "command_right_velocity_mps": 2.6948964959742527e-07,
+            "command_descent_rate_mps": 0.25
+          },
+          {
+            "t_s": 16.0,
+            "phase": "flare",
+            "altitude_m": 0.4750000000000034,
+            "forward_error_m": 8.81966125955209e-07,
+            "right_error_m": -5.389792991948505e-07,
+            "horizontal_error_m": 1.033616433834627e-06,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -3.5278645038208366e-07,
+            "command_right_velocity_mps": 2.1559171967794024e-07,
+            "command_descent_rate_mps": 0.25
+          },
+          {
+            "t_s": 16.5,
+            "phase": "flare",
+            "altitude_m": 0.3500000000000034,
+            "forward_error_m": 7.055729007641672e-07,
+            "right_error_m": -4.311834393558804e-07,
+            "horizontal_error_m": 8.268931470677015e-07,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -2.822291603056669e-07,
+            "command_right_velocity_mps": 1.7247337574235216e-07,
+            "command_descent_rate_mps": 0.25
+          },
+          {
+            "t_s": 17.0,
+            "phase": "flare",
+            "altitude_m": 0.22500000000000342,
+            "forward_error_m": 5.644583206113338e-07,
+            "right_error_m": -3.4494675148470433e-07,
+            "horizontal_error_m": 6.615145176541613e-07,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -2.2578332824453354e-07,
+            "command_right_velocity_mps": 1.379787005938817e-07,
+            "command_descent_rate_mps": 0.25
+          },
+          {
+            "t_s": 17.5,
+            "phase": "touchdown",
+            "altitude_m": 0.10000000000000342,
+            "forward_error_m": 4.5156665648906704e-07,
+            "right_error_m": -2.759574011877635e-07,
+            "horizontal_error_m": 5.29211614123329e-07,
+            "target_acquired": true,
+            "command_forward_velocity_mps": 0.0,
+            "command_right_velocity_mps": 0.0,
+            "command_descent_rate_mps": 0.0
+          }
+        ],
+        "short_target_loss_reacquire": [
+          {
+            "t_s": 0.0,
+            "phase": "align",
+            "altitude_m": 6.0,
+            "forward_error_m": 1.2,
+            "right_error_m": 0.9,
+            "horizontal_error_m": 1.5,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -0.7999999999999999,
+            "command_right_velocity_mps": -0.6,
+            "command_descent_rate_mps": 0.0
+          },
+          {
+            "t_s": 0.5,
+            "phase": "align",
+            "altitude_m": 6.0,
+            "forward_error_m": 0.8,
+            "right_error_m": 0.6000000000000001,
+            "horizontal_error_m": 1.0,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -0.6400000000000001,
+            "command_right_velocity_mps": -0.4800000000000001,
+            "command_descent_rate_mps": 0.0
+          },
+          {
+            "t_s": 1.0,
+            "phase": "align",
+            "altitude_m": 6.0,
+            "forward_error_m": 0.48,
+            "right_error_m": 0.36000000000000004,
+            "horizontal_error_m": 0.6,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -0.384,
+            "command_right_velocity_mps": -0.2880000000000001,
+            "command_descent_rate_mps": 0.0
+          },
+          {
+            "t_s": 1.5,
+            "phase": "descend",
+            "altitude_m": 6.0,
+            "forward_error_m": 0.288,
+            "right_error_m": 0.216,
+            "horizontal_error_m": 0.36,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -0.23039999999999997,
+            "command_right_velocity_mps": -0.17279999999999998,
+            "command_descent_rate_mps": 0.6
+          },
+          {
+            "t_s": 2.0,
+            "phase": "descend",
+            "altitude_m": 5.7,
+            "forward_error_m": 0.1728,
+            "right_error_m": 0.1296,
+            "horizontal_error_m": 0.216,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -0.13824,
+            "command_right_velocity_mps": -0.10368000000000001,
+            "command_descent_rate_mps": 0.6
+          },
+          {
+            "t_s": 2.5,
+            "phase": "descend",
+            "altitude_m": 5.4,
+            "forward_error_m": 0.10368000000000001,
+            "right_error_m": 0.07776,
+            "horizontal_error_m": 0.1296,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -0.082944,
+            "command_right_velocity_mps": -0.062208000000000006,
+            "command_descent_rate_mps": 0.6
+          },
+          {
+            "t_s": 3.0,
+            "phase": "descend",
+            "altitude_m": 5.1000000000000005,
+            "forward_error_m": 0.062208000000000006,
+            "right_error_m": 0.04665599999999999,
+            "horizontal_error_m": 0.07776,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -0.049766400000000016,
+            "command_right_velocity_mps": -0.03732479999999999,
+            "command_descent_rate_mps": 0.6
+          },
+          {
+            "t_s": 3.5,
+            "phase": "descend",
+            "altitude_m": 4.800000000000001,
+            "forward_error_m": 0.0373248,
+            "right_error_m": 0.027993599999999993,
+            "horizontal_error_m": 0.046655999999999996,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -0.02985984,
+            "command_right_velocity_mps": -0.022394879999999995,
+            "command_descent_rate_mps": 0.6
+          },
+          {
+            "t_s": 4.0,
+            "phase": "search",
+            "altitude_m": 4.500000000000001,
+            "forward_error_m": 0.02239488,
+            "right_error_m": 0.016796159999999997,
+            "horizontal_error_m": 0.027993599999999997,
+            "target_acquired": false,
+            "command_forward_velocity_mps": 0.0,
+            "command_right_velocity_mps": 0.0,
+            "command_descent_rate_mps": 0.0
+          },
+          {
+            "t_s": 4.5,
+            "phase": "search",
+            "altitude_m": 4.500000000000001,
+            "forward_error_m": 0.02239488,
+            "right_error_m": 0.016796159999999997,
+            "horizontal_error_m": 0.027993599999999997,
+            "target_acquired": false,
+            "command_forward_velocity_mps": 0.0,
+            "command_right_velocity_mps": 0.0,
+            "command_descent_rate_mps": 0.0
+          },
+          {
+            "t_s": 5.0,
+            "phase": "search",
+            "altitude_m": 4.500000000000001,
+            "forward_error_m": 0.02239488,
+            "right_error_m": 0.016796159999999997,
+            "horizontal_error_m": 0.027993599999999997,
+            "target_acquired": false,
+            "command_forward_velocity_mps": 0.0,
+            "command_right_velocity_mps": 0.0,
+            "command_descent_rate_mps": 0.0
+          },
+          {
+            "t_s": 5.5,
+            "phase": "descend",
+            "altitude_m": 4.500000000000001,
+            "forward_error_m": 0.02239488,
+            "right_error_m": 0.016796159999999997,
+            "horizontal_error_m": 0.027993599999999997,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -0.017915904000000003,
+            "command_right_velocity_mps": -0.013436927999999999,
+            "command_descent_rate_mps": 0.6
+          },
+          {
+            "t_s": 6.0,
+            "phase": "descend",
+            "altitude_m": 4.200000000000001,
+            "forward_error_m": 0.013436927999999997,
+            "right_error_m": 0.010077695999999997,
+            "horizontal_error_m": 0.016796159999999997,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -0.010749542399999997,
+            "command_right_velocity_mps": -0.008062156799999998,
+            "command_descent_rate_mps": 0.6
+          },
+          {
+            "t_s": 6.5,
+            "phase": "descend",
+            "altitude_m": 3.9000000000000012,
+            "forward_error_m": 0.008062156799999998,
+            "right_error_m": 0.006046617599999998,
+            "horizontal_error_m": 0.010077695999999997,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -0.006449725439999998,
+            "command_right_velocity_mps": -0.004837294079999999,
+            "command_descent_rate_mps": 0.6
+          },
+          {
+            "t_s": 7.0,
+            "phase": "descend",
+            "altitude_m": 3.6000000000000014,
+            "forward_error_m": 0.004837294079999999,
+            "right_error_m": 0.003627970559999999,
+            "horizontal_error_m": 0.006046617599999998,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -0.0038698352639999992,
+            "command_right_velocity_mps": -0.002902376447999999,
+            "command_descent_rate_mps": 0.6
+          },
+          {
+            "t_s": 7.5,
+            "phase": "descend",
+            "altitude_m": 3.3000000000000016,
+            "forward_error_m": 0.002902376447999999,
+            "right_error_m": 0.0021767823359999995,
+            "horizontal_error_m": 0.003627970559999999,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -0.0023219011583999996,
+            "command_right_velocity_mps": -0.0017414258688000003,
+            "command_descent_rate_mps": 0.6
+          },
+          {
+            "t_s": 8.0,
+            "phase": "descend",
+            "altitude_m": 3.0000000000000018,
+            "forward_error_m": 0.0017414258687999992,
+            "right_error_m": 0.0013060694015999993,
+            "horizontal_error_m": 0.002176782335999999,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -0.0013931406950399995,
+            "command_right_velocity_mps": -0.0010448555212799996,
+            "command_descent_rate_mps": 0.6
+          },
+          {
+            "t_s": 8.5,
+            "phase": "descend",
+            "altitude_m": 2.700000000000002,
+            "forward_error_m": 0.0010448555212799996,
+            "right_error_m": 0.0007836416409599996,
+            "horizontal_error_m": 0.0013060694015999993,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -0.0008358844170239997,
+            "command_right_velocity_mps": -0.0006269133127679998,
+            "command_descent_rate_mps": 0.6
+          },
+          {
+            "t_s": 9.0,
+            "phase": "descend",
+            "altitude_m": 2.400000000000002,
+            "forward_error_m": 0.0006269133127679996,
+            "right_error_m": 0.0004701849845759997,
+            "horizontal_error_m": 0.0007836416409599996,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -0.0005015306502143998,
+            "command_right_velocity_mps": -0.0003761479876607998,
+            "command_descent_rate_mps": 0.6
+          },
+          {
+            "t_s": 9.5,
+            "phase": "descend",
+            "altitude_m": 2.1000000000000023,
+            "forward_error_m": 0.00037614798766079973,
+            "right_error_m": 0.0002821109907455998,
+            "horizontal_error_m": 0.0004701849845759997,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -0.0003009183901286398,
+            "command_right_velocity_mps": -0.00022568879259647978,
+            "command_descent_rate_mps": 0.6
+          },
+          {
+            "t_s": 10.0,
+            "phase": "descend",
+            "altitude_m": 1.8000000000000023,
+            "forward_error_m": 0.00022568879259647983,
+            "right_error_m": 0.00016926659444735988,
+            "horizontal_error_m": 0.0002821109907455998,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -0.0001805510340771839,
+            "command_right_velocity_mps": -0.00013541327555788792,
+            "command_descent_rate_mps": 0.6
+          },
+          {
+            "t_s": 10.5,
+            "phase": "descend",
+            "altitude_m": 1.5000000000000022,
+            "forward_error_m": 0.0001354132755578879,
+            "right_error_m": 0.00010155995666841592,
+            "horizontal_error_m": 0.00016926659444735988,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -0.00010833062044631032,
+            "command_right_velocity_mps": -8.124796533473275e-05,
+            "command_descent_rate_mps": 0.6
+          },
+          {
+            "t_s": 11.0,
+            "phase": "descend",
+            "altitude_m": 1.2000000000000022,
+            "forward_error_m": 8.124796533473273e-05,
+            "right_error_m": 6.0935974001049545e-05,
+            "horizontal_error_m": 0.00010155995666841591,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -6.499837226778618e-05,
+            "command_right_velocity_mps": -4.8748779200839636e-05,
+            "command_descent_rate_mps": 0.6
+          },
+          {
+            "t_s": 11.5,
+            "phase": "flare",
+            "altitude_m": 0.9000000000000021,
+            "forward_error_m": 4.8748779200839636e-05,
+            "right_error_m": 3.656158440062973e-05,
+            "horizontal_error_m": 6.0935974001049545e-05,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -1.949951168033586e-05,
+            "command_right_velocity_mps": -1.4624633760251887e-05,
+            "command_descent_rate_mps": 0.25
+          },
+          {
+            "t_s": 12.0,
+            "phase": "flare",
+            "altitude_m": 0.7750000000000021,
+            "forward_error_m": 3.8999023360671704e-05,
+            "right_error_m": 2.9249267520503783e-05,
+            "horizontal_error_m": 4.8748779200839636e-05,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -1.559960934426868e-05,
+            "command_right_velocity_mps": -1.1699707008201513e-05,
+            "command_descent_rate_mps": 0.25
+          },
+          {
+            "t_s": 12.5,
+            "phase": "flare",
+            "altitude_m": 0.6500000000000021,
+            "forward_error_m": 3.119921868853736e-05,
+            "right_error_m": 2.3399414016403027e-05,
+            "horizontal_error_m": 3.8999023360671704e-05,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -1.2479687475414944e-05,
+            "command_right_velocity_mps": -9.35976560656121e-06,
+            "command_descent_rate_mps": 0.25
+          },
+          {
+            "t_s": 13.0,
+            "phase": "flare",
+            "altitude_m": 0.5250000000000021,
+            "forward_error_m": 2.495937495082989e-05,
+            "right_error_m": 1.871953121312242e-05,
+            "horizontal_error_m": 3.119921868853736e-05,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -9.983749980331955e-06,
+            "command_right_velocity_mps": -7.487812485248968e-06,
+            "command_descent_rate_mps": 0.25
+          },
+          {
+            "t_s": 13.5,
+            "phase": "flare",
+            "altitude_m": 0.40000000000000213,
+            "forward_error_m": 1.996749996066391e-05,
+            "right_error_m": 1.4975624970497937e-05,
+            "horizontal_error_m": 2.4959374950829892e-05,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -7.986999984265563e-06,
+            "command_right_velocity_mps": -5.990249988199175e-06,
+            "command_descent_rate_mps": 0.25
+          },
+          {
+            "t_s": 14.0,
+            "phase": "flare",
+            "altitude_m": 0.27500000000000213,
+            "forward_error_m": 1.5973999968531127e-05,
+            "right_error_m": 1.198049997639835e-05,
+            "horizontal_error_m": 1.996749996066391e-05,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -6.3895999874124515e-06,
+            "command_right_velocity_mps": -4.7921999905593405e-06,
+            "command_descent_rate_mps": 0.25
+          },
+          {
+            "t_s": 14.5,
+            "phase": "flare",
+            "altitude_m": 0.15000000000000213,
+            "forward_error_m": 1.2779199974824901e-05,
+            "right_error_m": 9.58439998111868e-06,
+            "horizontal_error_m": 1.597399996853113e-05,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -5.111679989929961e-06,
+            "command_right_velocity_mps": -3.833759992447471e-06,
+            "command_descent_rate_mps": 0.25
+          },
+          {
+            "t_s": 15.0,
+            "phase": "touchdown",
+            "altitude_m": 0.02500000000000213,
+            "forward_error_m": 1.0223359979859921e-05,
+            "right_error_m": 7.667519984894945e-06,
+            "horizontal_error_m": 1.2779199974824905e-05,
+            "target_acquired": true,
+            "command_forward_velocity_mps": 0.0,
+            "command_right_velocity_mps": 0.0,
+            "command_descent_rate_mps": 0.0
+          }
+        ],
+        "sustained_target_loss_abort": [
+          {
+            "t_s": 0.0,
+            "phase": "align",
+            "altitude_m": 5.0,
+            "forward_error_m": 1.0,
+            "right_error_m": -0.8,
+            "horizontal_error_m": 1.2806248474865698,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -0.7808688094430304,
+            "command_right_velocity_mps": 0.6246950475544244,
+            "command_descent_rate_mps": 0.0
+          },
+          {
+            "t_s": 0.5,
+            "phase": "align",
+            "altitude_m": 5.0,
+            "forward_error_m": 0.6095655952784849,
+            "right_error_m": -0.48765247622278785,
+            "horizontal_error_m": 0.7806248474865698,
+            "target_acquired": true,
+            "command_forward_velocity_mps": -0.4876524762227879,
+            "command_right_velocity_mps": 0.3901219809782303,
+            "command_descent_rate_mps": 0.0
+          },
+          {
+            "t_s": 1.0,
+            "phase": "search",
+            "altitude_m": 5.0,
+            "forward_error_m": 0.36573935716709094,
+            "right_error_m": -0.29259148573367266,
+            "horizontal_error_m": 0.46837490849194185,
+            "target_acquired": false,
+            "command_forward_velocity_mps": 0.0,
+            "command_right_velocity_mps": 0.0,
+            "command_descent_rate_mps": 0.0
+          },
+          {
+            "t_s": 1.5,
+            "phase": "search",
+            "altitude_m": 5.0,
+            "forward_error_m": 0.36573935716709094,
+            "right_error_m": -0.29259148573367266,
+            "horizontal_error_m": 0.46837490849194185,
+            "target_acquired": false,
+            "command_forward_velocity_mps": 0.0,
+            "command_right_velocity_mps": 0.0,
+            "command_descent_rate_mps": 0.0
+          },
+          {
+            "t_s": 2.0,
+            "phase": "search",
+            "altitude_m": 5.0,
+            "forward_error_m": 0.36573935716709094,
+            "right_error_m": -0.29259148573367266,
+            "horizontal_error_m": 0.46837490849194185,
+            "target_acquired": false,
+            "command_forward_velocity_mps": 0.0,
+            "command_right_velocity_mps": 0.0,
+            "command_descent_rate_mps": 0.0
+          },
+          {
+            "t_s": 2.5,
+            "phase": "search",
+            "altitude_m": 5.0,
+            "forward_error_m": 0.36573935716709094,
+            "right_error_m": -0.29259148573367266,
+            "horizontal_error_m": 0.46837490849194185,
+            "target_acquired": false,
+            "command_forward_velocity_mps": 0.0,
+            "command_right_velocity_mps": 0.0,
+            "command_descent_rate_mps": 0.0
+          },
+          {
+            "t_s": 3.0,
+            "phase": "abort",
+            "altitude_m": 5.0,
+            "forward_error_m": 0.36573935716709094,
+            "right_error_m": -0.29259148573367266,
+            "horizontal_error_m": 0.46837490849194185,
+            "target_acquired": false,
+            "command_forward_velocity_mps": 0.0,
+            "command_right_velocity_mps": 0.0,
+            "command_descent_rate_mps": 0.0
+          }
+        ]
+      }
+    },
+    "weather_scenario_manifest": {
+      "scenario_count": 4,
+      "passed_count": 4,
+      "results": [
+        {
+          "name": "nominal_weather_ready",
+          "passed": true,
+          "launch_allowed": true,
+          "mission_continue_allowed": true,
+          "dock_allowed": true,
+          "safety_action": "continue",
+          "final_mode": "hold",
+          "effective_wind_mps": 4.5,
+          "reasons": [],
+          "details": [
+            "Effective wind 4.5 m/s is within configured limit 7.0 m/s."
+          ]
+        },
+        {
+          "name": "gust_abort_launch",
+          "passed": true,
+          "launch_allowed": false,
+          "mission_continue_allowed": false,
+          "dock_allowed": false,
+          "safety_action": "abort_launch",
+          "final_mode": "hold",
+          "effective_wind_mps": 8.2,
+          "reasons": [
+            "wind_limit_exceeded"
+          ],
+          "details": [
+            "Wind 8.2 m/s exceeds 7.0 m/s."
+          ]
+        },
+        {
+          "name": "inflight_wind_excursion_rtl",
+          "passed": true,
+          "launch_allowed": false,
+          "mission_continue_allowed": false,
+          "dock_allowed": false,
+          "safety_action": "return_to_launch",
+          "final_mode": "return_to_launch",
+          "effective_wind_mps": 8.0,
+          "reasons": [
+            "wind_limit_exceeded"
+          ],
+          "details": [
+            "Wind 8.0 m/s exceeds 7.0 m/s."
+          ]
+        },
+        {
+          "name": "nominal_dock_weather_ready",
+          "passed": true,
+          "launch_allowed": true,
+          "mission_continue_allowed": true,
+          "dock_allowed": true,
+          "safety_action": "continue",
+          "final_mode": "return_to_launch",
+          "effective_wind_mps": 5.0,
+          "reasons": [],
+          "details": [
+            "Effective wind 5.0 m/s is within configured limit 7.0 m/s."
+          ]
+        }
+      ]
+    }
+  },
+  "summary": {
+    "mission_waypoint_count": 6,
+    "execution_after_rtl_mode": "return_to_launch",
+    "dock_proof_status": "consumed_from_live_telemetry_projection",
+    "dock_stream_record_count": 6,
+    "dock_receiver_count": 6,
+    "dock_final_horizontal_distance_m": 0.07548274437382324,
+    "dock_final_in_air": false,
+    "precision_profile_rtl_pld_md": 2,
+    "landing_target_consumption_count": 50,
+    "precision_scenario_passed_count": 2,
+    "precision_scenario_total_count": 3,
+    "weather_scenario_passed_count": 4,
+    "weather_scenario_total_count": 4
+  }
+}

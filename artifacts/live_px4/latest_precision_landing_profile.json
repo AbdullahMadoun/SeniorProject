@@ -1,0 +1,48 @@
+{
+  "system_address": "udpin://0.0.0.0:14540",
+  "connect_timeout_s": 30.0,
+  "profile": [
+    {
+      "name": "RTL_PLD_MD",
+      "param_type": "int",
+      "desired_value": 2,
+      "applied_value": 2,
+      "rationale": "Enable required precision landing during RTL recovery."
+    },
+    {
+      "name": "LTEST_MODE",
+      "param_type": "int",
+      "desired_value": 1,
+      "applied_value": 1,
+      "rationale": "Dock target is stationary relative to the home frame."
+    },
+    {
+      "name": "PLD_HACC_RAD",
+      "param_type": "float",
+      "desired_value": 0.4,
+      "applied_value": 0.4000000059604645,
+      "rationale": "Begin descent once horizontal landing error is inside the landing accuracy target."
+    },
+    {
+      "name": "PLD_BTOUT",
+      "param_type": "float",
+      "desired_value": 2.0,
+      "applied_value": 2.0,
+      "rationale": "Abort landing-target tracking when the target is lost beyond the configured reacquire timeout."
+    },
+    {
+      "name": "PLD_FAPPR_ALT",
+      "param_type": "float",
+      "desired_value": 1.2,
+      "applied_value": 1.2000000476837158,
+      "rationale": "Enter final approach near the range-assisted flare altitude."
+    },
+    {
+      "name": "PLD_MAX_SRCH",
+      "param_type": "int",
+      "desired_value": 3,
+      "applied_value": 3,
+      "rationale": "Allow bounded retries before falling back from required search behavior."
+    }
+  ]
+}

@@ -1,0 +1,59 @@
+{
+  "system_address": "udpin://0.0.0.0:14540",
+  "connect_timeout_s": 15.0,
+  "mission_id": "live-execution-smoke",
+  "waypoint_count": 6,
+  "initial_snapshot": {
+    "connected": true,
+    "armed": false,
+    "in_air": false,
+    "mode": "hold",
+    "battery_percent": 100.0,
+    "position": {
+      "lat": 47.3979712,
+      "lon": 8.5461636,
+      "alt_m": 0.004000000189989805
+    },
+    "mission_progress": {
+      "current": 0,
+      "total": 0
+    }
+  },
+  "mission_phase_snapshots": [
+    {
+      "tick": 0,
+      "snapshot": {
+        "connected": true,
+        "armed": true,
+        "in_air": true,
+        "mode": "mission",
+        "battery_percent": 98.0,
+        "position": {
+          "lat": 47.397970799999996,
+          "lon": 8.5461636,
+          "alt_m": 0.0
+        },
+        "mission_progress": {
+          "current": 0,
+          "total": 0
+        }
+      }
+    }
+  ],
+  "after_rtl_snapshot": {
+    "connected": true,
+    "armed": true,
+    "in_air": true,
+    "mode": "return_to_launch",
+    "battery_percent": 82.0,
+    "position": {
+      "lat": 47.3979709,
+      "lon": 8.5461638,
+      "alt_m": 6.5460004806518555
+    },
+    "mission_progress": {
+      "current": 0,
+      "total": 0
+    }
+  }
+}
