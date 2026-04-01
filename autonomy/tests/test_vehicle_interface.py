@@ -106,6 +106,67 @@ class VehicleInterfaceTests(unittest.TestCase):
 
         asyncio.run(_run())
 
+    def test_mavsdk_gateway_returns_empty_snapshot_when_telemetry_is_unavailable(self) -> None:
+        async def _never_stream():
+            await asyncio.sleep(60.0)
+            if False:
+                yield None
+
+        class FakeTelemetry:
+            def position(self):
+                return _never_stream()
+
+            def battery(self):
+                return _never_stream()
+
+            def armed(self):
+                return _never_stream()
+
+            def in_air(self):
+                return _never_stream()
+
+            def flight_mode(self):
+                return _never_stream()
+
+            def position_velocity_ned(self):
+                return _never_stream()
+
+            def attitude_euler(self):
+                return _never_stream()
+
+            def gps_info(self):
+                return _never_stream()
+
+        class FakeMission:
+            def mission_progress(self):
+                return _never_stream()
+
+        class FakeDrone:
+            telemetry = FakeTelemetry()
+            mission = FakeMission()
+
+        async def _run() -> None:
+            gateway = MavsdkVehicleGateway(self.baseline)
+            gateway._drone = FakeDrone()
+            async def _always_default(stream, default, transform=lambda item: item, timeout_s: float = 3.0):
+                return default
+            gateway._read_once_or_default = _always_default  # type: ignore[method-assign]
+            snapshot = await gateway.get_snapshot()
+            local_pose = await gateway.get_local_pose()
+            gps_info = await gateway.get_gps_info()
+            self.assertTrue(snapshot.connected)
+            self.assertIsNone(snapshot.position)
+            self.assertIsNone(snapshot.battery_percent)
+            self.assertEqual(snapshot.mode, VehicleMode.HOLD)
+            self.assertFalse(snapshot.armed)
+            self.assertFalse(snapshot.in_air)
+            self.assertIsNone(local_pose)
+            self.assertEqual(gps_info, {})
+            with self.assertRaises(RuntimeError):
+                await gateway.wait_for_live_position(timeout_s=0.2, poll_interval_s=0.05)
+
+        asyncio.run(_run())
+
 
 if __name__ == "__main__":
     unittest.main()

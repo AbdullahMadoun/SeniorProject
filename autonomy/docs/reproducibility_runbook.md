@@ -66,6 +66,18 @@ Build the rendered showcase:
 D:\downloads\SeniorProject\Skylink2\autonomy\.venv\Scripts\python D:\downloads\SeniorProject\Skylink2\autonomy\scripts\build_showcase.py
 ```
 
+Run the interactive mission API:
+
+```powershell
+python D:\downloads\SeniorProject\Skylink2\autonomy\scripts\mission_api.py
+```
+
+Planner URL:
+
+```text
+http://127.0.0.1:8625/planner/index.html
+```
+
 Serve the rendered showcase locally:
 
 ```powershell
@@ -314,6 +326,24 @@ Current caveats:
 - the evidence path still depends on temporary receiver instrumentation in [mavlink_receiver.cpp](/D:/downloads/SeniorProject/Skylink2/vendor/PX4-Autopilot/src/modules/mavlink/mavlink_receiver.cpp)
 - the dock target is currently the configured home-origin dock, not a live marker detector output
 
+### One-Command Interactive Mission Execution
+
+This path is used by the planner UI and can also be run directly:
+
+```powershell
+python D:\downloads\SeniorProject\Skylink2\autonomy\scripts\run_live_interactive_mission.py --mission-spec D:\downloads\SeniorProject\Skylink2\artifacts\planner\job_cache\<job-id>\mission_request.json
+```
+
+This command launches PX4 SITL plus the WSL MAVLink bridge, then:
+- uploads planner-defined waypoints
+- validates preflight weather against the baseline
+- injects a time-varying live weather profile during flight
+- proves weather-triggered RTL
+- waits for dock-safe weather recovery
+- runs projected `LANDING_TARGET` streaming for the dock approach
+- rebuilds the replay bundle
+- rebuilds the showcase output
+
 ## Artifacts And Evidence
 
 ### Scenario Evidence
@@ -341,6 +371,7 @@ Current caveats:
 - Output target: [latest_snapshot.json](/D:/downloads/SeniorProject/Skylink2/artifacts/live_px4/latest_snapshot.json)
 - Mission/geofence validation target: [latest_mission_validation.json](/D:/downloads/SeniorProject/Skylink2/artifacts/live_px4/latest_mission_validation.json)
 - Mission execution validation target: [latest_execution_validation.json](/D:/downloads/SeniorProject/Skylink2/artifacts/live_px4/latest_execution_validation.json)
+- Live weather validation target: [latest_live_weather_validation.json](/D:/downloads/SeniorProject/Skylink2/artifacts/live_px4/latest_live_weather_validation.json)
 - Precision landing profile target: [latest_precision_landing_profile.json](/D:/downloads/SeniorProject/Skylink2/artifacts/live_px4/latest_precision_landing_profile.json)
 - LANDING_TARGET stream target: [latest_landing_target_stream.json](/D:/downloads/SeniorProject/Skylink2/artifacts/live_px4/latest_landing_target_stream.json)
 - LANDING_TARGET consumption proof target: [latest_landing_target_consumption.json](/D:/downloads/SeniorProject/Skylink2/artifacts/live_px4/latest_landing_target_consumption.json)
@@ -369,6 +400,19 @@ Current caveats:
 - Files:
   - [index.html](/D:/downloads/SeniorProject/Skylink2/artifacts/showcase/latest/index.html)
   - [showcase_data.json](/D:/downloads/SeniorProject/Skylink2/artifacts/showcase/latest/showcase_data.json)
+
+### Planner Artifact
+
+- Planner page: [index.html](/D:/downloads/SeniorProject/Skylink2/artifacts/planner/index.html)
+
+### Mega-Dashboard Artifact
+
+- Dashboard page: [index.html](/D:/downloads/SeniorProject/Skylink2/artifacts/dashboard/index.html)
+- Dashboard data: [dashboard_data.json](/D:/downloads/SeniorProject/Skylink2/artifacts/dashboard/dashboard_data.json)
+
+### Optional Media Bindings
+
+- Drop zone: [README.md](/D:/downloads/SeniorProject/Skylink2/artifacts/media/latest/README.md)
 
 ### Weather Scenario Evidence
 
@@ -427,6 +471,8 @@ python D:\downloads\SeniorProject\Skylink2\autonomy\scripts\build_latest_replay_
 python D:\downloads\SeniorProject\Skylink2\autonomy\scripts\run_weather_gate_scenarios.py
 python D:\downloads\SeniorProject\Skylink2\autonomy\scripts\build_showcase.py
 python D:\downloads\SeniorProject\Skylink2\autonomy\scripts\check_runtime_readiness.py
+python D:\downloads\SeniorProject\Skylink2\autonomy\scripts\build_dashboard.py
+python D:\downloads\SeniorProject\Skylink2\autonomy\scripts\mission_api.py
 D:\downloads\SeniorProject\Skylink2\autonomy\scripts\run_live_px4_probe.ps1
 D:\downloads\SeniorProject\Skylink2\autonomy\scripts\run_live_px4_mission_validation.ps1
 D:\downloads\SeniorProject\Skylink2\autonomy\scripts\run_live_px4_execution_validation.ps1
@@ -435,6 +481,62 @@ D:\downloads\SeniorProject\Skylink2\autonomy\scripts\run_live_px4_landing_target
 D:\downloads\SeniorProject\Skylink2\autonomy\scripts\run_live_px4_landing_target_consumption.ps1
 D:\downloads\SeniorProject\Skylink2\autonomy\scripts\run_live_px4_dock_approach_validation.ps1
 ```
+
+## Reproducing The Live Mega-Dashboard
+
+### 1. Start The API And Unified Dashboard
+
+```powershell
+python D:\downloads\SeniorProject\Skylink2\autonomy\scripts\mission_api.py
+```
+
+Open:
+
+- `http://127.0.0.1:8625/`
+
+The root route redirects to the live Mega-Dashboard at:
+
+- `/dashboard/index.html`
+
+### 2. Planner / Dashboard Payload Contract
+
+`POST /api/mission/execute` accepts:
+
+- waypoint list
+- cruise speed
+- `environment.wind_speed_mps`
+- `environment.wind_direction_deg`
+- `environment.gust_multiplier`
+- `battery.initial_battery_percent`
+- `battery.rtl_battery_threshold_percent`
+
+These values are translated into the live PX4 SITL override plan before launch.
+
+### 3. SSE Streams
+
+- `/api/system/logs`
+  - raw runner, PX4, bridge, and validator log stream for the terminal HUD
+- `/api/telemetry/live`
+  - live `gps_info`, `local_pose`, `attitude_euler`, and battery data for the Leaflet map and Three.js scene
+
+Implementation note:
+
+- the API now preserves telemetry even when upstream runner lines are label-prefixed
+- log and telemetry buffers are bounded in memory so long live runs do not retain unbounded event history
+
+### 4. HTTP Smoke Test Reference
+
+The latest verified API smoke result is stored at:
+
+- [mission_api_http_smoke_result.json](/D:/downloads/SeniorProject/Skylink2/artifacts/sitl_logs/mission_api_http_smoke_result.json)
+
+It proves:
+
+- `/api/mission/validate` accepts live environment and battery overrides
+- `/api/mission/execute` launches a real PX4 SITL validation run
+- `/api/system/logs` emits metadata immediately
+- `/api/telemetry/live` emits real telemetry frames before job completion
+- the live run finishes successfully and rebuilds replay/showcase/dashboard artifacts
 
 ## Refreshing Judge-Facing 3D Showcase Inputs
 

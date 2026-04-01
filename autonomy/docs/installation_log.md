@@ -327,3 +327,70 @@ Observed result:
   - non-zero `roll_deg` and `pitch_deg`
   - actual waypoint marker coordinates
 - [dock_approach_timeline.csv](/D:/downloads/SeniorProject/Skylink2/artifacts/replay_bundle/latest/dock_approach_timeline.csv) rebuilt with attitude columns
+
+### Interactive Mission Planner And Hardware Authenticity HUD
+
+Executed on Windows host:
+
+```powershell
+python D:\downloads\SeniorProject\Skylink2\autonomy\scripts\mission_api.py
+python D:\downloads\SeniorProject\Skylink2\autonomy\scripts\build_latest_replay_bundle.py
+python D:\downloads\SeniorProject\Skylink2\autonomy\scripts\build_showcase.py
+python -m unittest discover -s D:\downloads\SeniorProject\Skylink2\autonomy\tests -p "test_*.py"
+```
+
+Observed result:
+- new API server added at [mission_api.py](/D:/downloads/SeniorProject/Skylink2/autonomy/scripts/mission_api.py)
+- planner artifact added at [index.html](/D:/downloads/SeniorProject/Skylink2/artifacts/planner/index.html)
+- planner exposes:
+  - `GET /api/constraints`
+  - `POST /api/mission/validate`
+  - `POST /api/mission/execute`
+  - `GET /api/system/logs` as SSE
+- live execution runner added at [run_live_interactive_mission.py](/D:/downloads/SeniorProject/Skylink2/autonomy/scripts/run_live_interactive_mission.py)
+- live validator added at [execute_interactive_mission.py](/D:/downloads/SeniorProject/Skylink2/autonomy/scripts/execute_interactive_mission.py)
+- replay bundle schema now includes:
+  - optional bound media entries
+  - live weather validation evidence
+- showcase template now renders:
+  - live weather injection chart
+  - bound media cards when recordings are present
+- current rebuild status:
+  - replay bundle written to [latest](/D:/downloads/SeniorProject/Skylink2/artifacts/replay_bundle/latest)
+  - showcase written to [latest](/D:/downloads/SeniorProject/Skylink2/artifacts/showcase/latest)
+  - full suite: `Ran 57 tests ... OK`
+
+### Mega-Dashboard Live API Proof And Runtime Hardening
+
+Executed on Windows host:
+
+```powershell
+python D:\downloads\SeniorProject\Skylink2\autonomy\scripts\mission_api.py
+python -m unittest discover -s D:\downloads\SeniorProject\Skylink2\autonomy\tests -p "test_*.py"
+```
+
+And a live HTTP smoke against:
+
+- `POST /api/mission/validate`
+- `POST /api/mission/execute`
+- `GET /api/system/logs`
+- `GET /api/telemetry/live`
+- `GET /api/system/job/{job_id}`
+
+Observed result:
+
+- new unified dashboard artifact exists at [index.html](/D:/downloads/SeniorProject/Skylink2/artifacts/dashboard/index.html)
+- dashboard payload exists at [dashboard_data.json](/D:/downloads/SeniorProject/Skylink2/artifacts/dashboard/dashboard_data.json)
+- API now exposes:
+  - `GET /api/telemetry/live` as SSE for live 2D/3D synchronization
+- first telemetry SSE failure was traced to validator frames being wrapped as `[VALIDATOR] __TELEMETRY__...`
+- [mission_api.py](/D:/downloads/SeniorProject/Skylink2/autonomy/scripts/mission_api.py) was hardened to detect telemetry prefixes even when runner labels are present
+- [run_live_interactive_mission.py](/D:/downloads/SeniorProject/Skylink2/autonomy/scripts/run_live_interactive_mission.py) now forwards raw telemetry lines without adding a label prefix
+- mission job event buffers in [mission_api.py](/D:/downloads/SeniorProject/Skylink2/autonomy/scripts/mission_api.py) now roll forward with bounded in-memory retention instead of growing without limit
+- live API smoke proof written to [mission_api_http_smoke_result.json](/D:/downloads/SeniorProject/Skylink2/artifacts/sitl_logs/mission_api_http_smoke_result.json)
+- verified smoke result:
+  - validation accepted real environment and battery overrides
+  - metadata SSE arrived immediately from `/api/system/logs`
+  - live telemetry SSE arrived during flight from `/api/telemetry/live`
+  - live run completed successfully with `status = completed`, `exit_code = 0`, `telemetry_event_count = 10`
+- full suite: `Ran 68 tests ... OK`

@@ -292,10 +292,24 @@
     }
     .scenario-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .evidence-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .media-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
     .scenario-chip, .evidence-card {
       padding: 16px;
       border-radius: 18px;
       background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+    .media-card {
+      padding: 16px;
+      border-radius: 18px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+    .media-card video {
+      width: 100%;
+      border-radius: 14px;
+      margin-top: 12px;
+      background: #050508;
       border: 1px solid rgba(255,255,255,0.06);
     }
     table {
@@ -343,14 +357,14 @@
       .hud { flex-direction: column; align-items: stretch; }
       .hud-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .lifecycle-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .scenario-grid, .evidence-grid, .hero-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .scenario-grid, .evidence-grid, .hero-summary, .media-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
     @media (max-width: 720px) {
       .page { width: min(100% - 16px, 1480px); margin: 12px auto 28px; }
       .panel-inner, .chart-card, .table-card { padding: 18px; }
       .scene-shell { margin: 16px 16px 0; height: 460px; }
       .controls-bar { padding: 16px; }
-      .hero-summary, .hud-grid, .lifecycle-grid, .scenario-grid, .evidence-grid { grid-template-columns: 1fr; }
+      .hero-summary, .hud-grid, .lifecycle-grid, .scenario-grid, .evidence-grid, .media-grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -459,6 +473,27 @@
 
     <section class="grid-2">
       <article class="panel">
+        <div class="chart-card">
+          <div class="eyebrow">Live Weather Injection</div>
+          <h2>Injected wind profile and RTL trigger</h2>
+          <p>Time-varying weather used during the live mission execution path. The plotted line is the effective wind parsed by the rule engine before it triggered return-to-launch and later allowed dock recovery.</p>
+          <div class="chart-wrap">
+            <svg id="live-weather-chart" viewBox="0 0 640 300" aria-label="Live weather injection chart"></svg>
+          </div>
+        </div>
+      </article>
+      <article class="panel">
+        <div class="table-card">
+          <div class="eyebrow">Bound Media</div>
+          <h2>Gazebo or QGC recordings</h2>
+          <p>Optional recorded media bound into the replay bundle so the telemetry proof and screen/video evidence stay in the same artifact chain.</p>
+          <div class="media-grid" id="media-gallery"></div>
+        </div>
+      </article>
+    </section>
+
+    <section class="grid-2">
+      <article class="panel">
         <div class="table-card">
           <div class="eyebrow">PX4 Proof Chain</div>
           <h2>Receiver, bridge, and docking evidence</h2>
@@ -490,6 +525,8 @@
     const dockTarget = data.simulation?.dock_target || { north_m: 0, east_m: 0, down_m: 0 };
     const dockRecords = Array.isArray(data.dock?.records) ? data.dock.records : [];
     const precisionSteps = Array.isArray(data.precision_landing?.nominal_steps) ? data.precision_landing.nominal_steps : [];
+    const liveWeatherObservations = Array.isArray(data.weather?.live_validation?.observations) ? data.weather.live_validation.observations : [];
+    const mediaBindings = Array.isArray(data.media) ? data.media : [];
 
     const MODE_COLORS = {
       mission: "#53b7ff",
@@ -646,6 +683,7 @@
         ["Dock Stream Frames", data.dock?.telemetry_frame_count || telemetry.length],
         ["Live Dock Records", dockRecords.length],
         ["Final Dock Error", `${Number(data.dock?.final_horizontal_distance_m || 0).toFixed(3)} m`],
+        ["Live Weather Proof", data.weather?.live_validation?.proof_status || "-"],
         ["Landing Target Proof", data.landing_target?.proof_status || "-"],
         ["Dock Proof", data.dock?.proof_status || summary.dock_proof_status || "-"],
       ];
@@ -684,6 +722,83 @@
         `
       );
       document.getElementById("bundle-name").textContent = data.bundle_name || "latest_live_px4_replay_bundle";
+    }
+
+    function renderLiveWeatherChart() {
+      const svg = document.getElementById("live-weather-chart");
+      if (!liveWeatherObservations.length) {
+        svg.innerHTML = "";
+        return;
+      }
+      const width = 640;
+      const height = 300;
+      const padding = { top: 26, right: 70, bottom: 42, left: 60 };
+      const limit = Number(data.weather?.wind_limit_mps || 7);
+      const timeBounds = valueBounds(liveWeatherObservations.map((item) => Number(item.elapsed_s || 0)), 0, 1);
+      const windBounds = valueBounds(
+        liveWeatherObservations.map((item) => Number(item.weather?.effective_wind_mps || 0)).concat([limit]),
+        0,
+        limit + 1,
+      );
+      const usableWidth = width - padding.left - padding.right;
+      const usableHeight = height - padding.top - padding.bottom;
+      const xFor = (value) => padding.left + ((value - timeBounds.min) / (timeBounds.max - timeBounds.min)) * usableWidth;
+      const yFor = (value) => padding.top + usableHeight - ((value - windBounds.min) / (windBounds.max - windBounds.min)) * usableHeight;
+      const points = liveWeatherObservations.map((item) => ({
+        x: xFor(Number(item.elapsed_s || 0)),
+        y: yFor(Number(item.weather?.effective_wind_mps || 0)),
+      }));
+      const linePath = bezierPath(points);
+      const fillPath = areaPath(linePath, padding.top + usableHeight, points.at(-1), points[0]);
+      const limitY = yFor(limit);
+      const trigger = data.weather?.live_validation?.triggered_at_s;
+      const triggerX = trigger == null ? null : xFor(Number(trigger));
+      svg.innerHTML = `
+        <defs>
+          <linearGradient id="liveWeatherFill" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stop-color="rgba(0,212,170,0.34)" />
+            <stop offset="100%" stop-color="rgba(0,212,170,0.02)" />
+          </linearGradient>
+        </defs>
+        <rect x="0" y="0" width="${width}" height="${height}" rx="18" fill="rgba(8,10,16,0.96)" />
+        <line x1="${padding.left}" y1="${padding.top + usableHeight}" x2="${width - padding.right}" y2="${padding.top + usableHeight}" stroke="rgba(255,255,255,0.16)" stroke-width="1.2" />
+        <line x1="${padding.left}" y1="${padding.top}" x2="${padding.left}" y2="${padding.top + usableHeight}" stroke="rgba(255,255,255,0.16)" stroke-width="1.2" />
+        <line x1="${padding.left}" y1="${limitY}" x2="${width - padding.right}" y2="${limitY}" stroke="rgba(255,107,107,0.75)" stroke-width="2" stroke-dasharray="6 6" />
+        ${triggerX == null ? "" : `<line x1="${triggerX}" y1="${padding.top}" x2="${triggerX}" y2="${padding.top + usableHeight}" stroke="rgba(255,159,67,0.75)" stroke-width="2" stroke-dasharray="4 6" />`}
+        <path d="${fillPath}" fill="url(#liveWeatherFill)" />
+        <path d="${linePath}" fill="none" stroke="#00d4aa" stroke-width="3.4" stroke-linecap="round" />
+        <text x="${padding.left}" y="16" fill="#00d4aa" font-size="12" font-weight="600">Effective wind (m/s)</text>
+        <text x="${width - padding.right - 102}" y="16" fill="#ff6b6b" font-size="12" font-weight="600">7 m/s limit</text>
+        <text x="${width - padding.right - 32}" y="${height - 14}" fill="rgba(232,232,237,0.68)" font-size="12">s</text>
+      `;
+    }
+
+    function resolveMediaSource(entry) {
+      if (window.location.protocol === "file:") {
+        return entry.showcase_rel_path || entry.web_path || "";
+      }
+      return entry.web_path || entry.showcase_rel_path || "";
+    }
+
+    function renderMediaGallery() {
+      if (!mediaBindings.length) {
+        setHtml(
+          "media-gallery",
+          `<div class="media-card"><label>No bound recordings</label><strong class="muted">Add files under <code>artifacts/media/latest</code> and rebuild the replay bundle.</strong></div>`
+        );
+        return;
+      }
+      setHtml(
+        "media-gallery",
+        mediaBindings.map((entry) => `
+          <div class="media-card">
+            <label>${entry.kind || "video"}</label>
+            <strong>${entry.label || entry.id}</strong>
+            <div class="muted" style="margin-top:8px;">${entry.mime_type || "video/mp4"}</div>
+            <video controls preload="metadata" src="${resolveMediaSource(entry)}"></video>
+          </div>
+        `).join("")
+      );
     }
 
     function bezierPath(points) {
@@ -1052,6 +1167,8 @@
     renderPrecisionChart();
     renderPrecisionScenarios();
     renderWeatherTable();
+    renderLiveWeatherChart();
+    renderMediaGallery();
     renderEvidenceGrid();
     renderParameterTable();
     resizeRenderer();

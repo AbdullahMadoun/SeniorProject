@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from typing import Any
 
 from .config import SystemBaseline
 from .geofence import GeofenceCircle
@@ -240,6 +241,8 @@ class MavsdkVehicleGateway(VehicleGateway):
         self._system_address = system_address
         self._connect_timeout_s = connect_timeout_s
         self._drone = None
+        self._telemetry_lock = asyncio.Lock()
+        self._param_lock = asyncio.Lock()
 
     async def connect(self) -> None:
         if System is None:
@@ -249,7 +252,12 @@ class MavsdkVehicleGateway(VehicleGateway):
             self._drone.connect(system_address=self._system_address),
             timeout=self._connect_timeout_s,
         )
-        await self._first_matching(self._drone.core.connection_state(), lambda state: state.is_connected)
+        await self._first_matching(
+            self._drone.core.connection_state(),
+            lambda state: state.is_connected,
+            timeout_s=self._connect_timeout_s,
+        )
+        await self._configure_telemetry_rates()
 
     async def disconnect(self) -> None:
         drone = self._drone
@@ -269,21 +277,42 @@ class MavsdkVehicleGateway(VehicleGateway):
                 mode=VehicleMode.DISCONNECTED,
             )
 
-        position = await self._read_once(self._drone.telemetry.position())
-        battery = await self._read_once(self._drone.telemetry.battery())
-        armed = await self._read_once(self._drone.telemetry.armed())
-        in_air = await self._read_once(self._drone.telemetry.in_air())
-        flight_mode = await self._read_once(self._drone.telemetry.flight_mode())
-        mission_progress = await self._read_once_or_default(
-            self._drone.mission.mission_progress(),
-            default=MissionProgress(),
-            transform=lambda progress: MissionProgress(
-                current=int(progress.current),
-                total=int(progress.total),
-            ),
-        )
+        async with self._telemetry_lock:
+            position = await self._read_once_or_default(
+                self._drone.telemetry.position(),
+                default=None,
+                timeout_s=3.0,
+            )
+            battery = await self._read_once_or_default(
+                self._drone.telemetry.battery(),
+                default=None,
+                timeout_s=3.0,
+            )
+            armed = await self._read_once_or_default(
+                self._drone.telemetry.armed(),
+                default=False,
+                timeout_s=3.0,
+            )
+            in_air = await self._read_once_or_default(
+                self._drone.telemetry.in_air(),
+                default=False,
+                timeout_s=3.0,
+            )
+            flight_mode = await self._read_once_or_default(
+                self._drone.telemetry.flight_mode(),
+                default=None,
+                timeout_s=3.0,
+            )
+            mission_progress = await self._read_once_or_default(
+                self._drone.mission.mission_progress(),
+                default=MissionProgress(),
+                transform=lambda progress: MissionProgress(
+                    current=int(progress.current),
+                    total=int(progress.total),
+                ),
+            )
 
-        mode_value = str(flight_mode).split(".")[-1].lower()
+        mode_value = str(flight_mode).split(".")[-1].lower() if flight_mode is not None else ""
         mode = VehicleMode.HOLD
         if "mission" in mode_value:
             mode = VehicleMode.MISSION
@@ -297,11 +326,19 @@ class MavsdkVehicleGateway(VehicleGateway):
             armed=bool(armed),
             in_air=bool(in_air),
             mode=mode,
-            battery_percent=self._normalize_battery_percent(float(battery.remaining_percent)),
-            position=Waypoint(
-                lat=float(position.latitude_deg),
-                lon=float(position.longitude_deg),
-                alt_m=float(position.relative_altitude_m),
+            battery_percent=(
+                self._normalize_battery_percent(float(battery.remaining_percent))
+                if battery is not None
+                else None
+            ),
+            position=(
+                Waypoint(
+                    lat=float(position.latitude_deg),
+                    lon=float(position.longitude_deg),
+                    alt_m=float(position.relative_altitude_m),
+                )
+                if position is not None
+                else None
             ),
             mission_progress=mission_progress,
         )
@@ -310,8 +347,19 @@ class MavsdkVehicleGateway(VehicleGateway):
         if self._drone is None:
             return None
 
-        position_velocity_ned = await self._read_once(self._drone.telemetry.position_velocity_ned())
-        attitude_euler = await self._read_once(self._drone.telemetry.attitude_euler())
+        async with self._telemetry_lock:
+            position_velocity_ned = await self._read_once_or_default(
+                self._drone.telemetry.position_velocity_ned(),
+                default=None,
+                timeout_s=3.0,
+            )
+            attitude_euler = await self._read_once_or_default(
+                self._drone.telemetry.attitude_euler(),
+                default=None,
+                timeout_s=3.0,
+            )
+        if position_velocity_ned is None or attitude_euler is None:
+            return None
         return VehicleLocalPose(
             north_m=float(position_velocity_ned.position.north_m),
             east_m=float(position_velocity_ned.position.east_m),
@@ -319,6 +367,55 @@ class MavsdkVehicleGateway(VehicleGateway):
             yaw_deg=float(attitude_euler.yaw_deg),
             roll_deg=float(attitude_euler.roll_deg),
             pitch_deg=float(attitude_euler.pitch_deg),
+        )
+
+    async def get_gps_info(self) -> dict[str, Any]:
+        if self._drone is None:
+            return {}
+        async with self._telemetry_lock:
+            position = await self._read_once_or_default(
+                self._drone.telemetry.position(),
+                default=None,
+                timeout_s=3.0,
+            )
+            gps_info = await self._read_once_or_default(
+                self._drone.telemetry.gps_info(),
+                default=None,
+                timeout_s=3.0,
+            )
+        if position is None:
+            return {}
+        payload: dict[str, Any] = {
+            "lat": float(position.latitude_deg),
+            "lon": float(position.longitude_deg),
+            "relative_altitude_m": float(position.relative_altitude_m),
+            "absolute_altitude_m": float(position.absolute_altitude_m),
+        }
+        if gps_info is not None:
+            payload["num_satellites"] = int(getattr(gps_info, "num_satellites", 0))
+            payload["fix_type"] = str(getattr(gps_info, "fix_type", "")).split(".")[-1].lower()
+        return payload
+
+    async def wait_for_live_position(
+        self,
+        *,
+        timeout_s: float = 45.0,
+        poll_interval_s: float = 0.5,
+    ) -> tuple[VehicleSnapshot, VehicleLocalPose]:
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout_s
+        last_snapshot = await self.get_snapshot()
+        while loop.time() < deadline:
+            last_snapshot = await self.get_snapshot()
+            local_pose = await self.get_local_pose()
+            if last_snapshot.position is not None and local_pose is not None:
+                return last_snapshot, local_pose
+            await asyncio.sleep(poll_interval_s)
+        raise RuntimeError(
+            "Timed out waiting for live PX4 position telemetry. "
+            f"last_mode={last_snapshot.mode.value}, "
+            f"battery={last_snapshot.battery_percent}, "
+            f"has_position={last_snapshot.position is not None}."
         )
 
     async def upload_mission(self, request: MissionPlanRequest) -> None:
@@ -375,10 +472,56 @@ class MavsdkVehicleGateway(VehicleGateway):
     async def land(self) -> None:
         await self._require_drone().action.land()
 
+    async def set_param_float(self, name: str, value: float) -> float:
+        drone = self._require_drone()
+        async with self._param_lock:
+            await drone.param.set_param_float(name, float(value))
+            return float(await drone.param.get_param_float(name))
+
+    async def set_param_int(self, name: str, value: int) -> int:
+        drone = self._require_drone()
+        async with self._param_lock:
+            await drone.param.set_param_int(name, int(value))
+            return int(await drone.param.get_param_int(name))
+
+    async def apply_parameter_overrides(
+        self,
+        *,
+        float_params: dict[str, float] | None = None,
+        int_params: dict[str, int] | None = None,
+    ) -> dict[str, dict[str, Any]]:
+        applied: dict[str, dict[str, Any]] = {}
+        for name, value in (float_params or {}).items():
+            readback = await self.set_param_float(name, float(value))
+            applied[name] = {"param_type": "float", "desired_value": float(value), "applied_value": readback}
+        for name, value in (int_params or {}).items():
+            readback = await self.set_param_int(name, int(value))
+            applied[name] = {"param_type": "int", "desired_value": int(value), "applied_value": readback}
+        return applied
+
     def _require_drone(self):
         if self._drone is None:
             raise RuntimeError("Vehicle is not connected.")
         return self._drone
+
+    async def _configure_telemetry_rates(self) -> None:
+        drone = self._require_drone()
+        telemetry = drone.telemetry
+        rate_requests = (
+            ("set_rate_position", 5.0),
+            ("set_rate_position_velocity_ned", 8.0),
+            ("set_rate_attitude_euler", 10.0),
+            ("set_rate_battery", 2.0),
+            ("set_rate_gps_info", 2.0),
+        )
+        for method_name, rate_hz in rate_requests:
+            method = getattr(telemetry, method_name, None)
+            if method is None:
+                continue
+            try:
+                await method(rate_hz)
+            except Exception:
+                continue
 
     async def _read_once(self, stream):
         async for item in stream:

@@ -1,0 +1,125 @@
+{
+  "mission_id": "dashboard-http-smoke-buffered",
+  "weather_profile": [
+    {
+      "t_s": 0.0,
+      "steady_wind_mps": 3.8,
+      "gust_wind_mps": 5.2
+    },
+    {
+      "t_s": 5.0,
+      "steady_wind_mps": 4.6,
+      "gust_wind_mps": 6.3
+    },
+    {
+      "t_s": 12.0,
+      "steady_wind_mps": 7.8,
+      "gust_wind_mps": 10.8
+    },
+    {
+      "t_s": 36.0,
+      "steady_wind_mps": 4.8,
+      "gust_wind_mps": 6.6
+    }
+  ],
+  "trigger_timeout_s": 45.0,
+  "dock_wait_timeout_s": 30.0,
+  "observations": [
+    {
+      "elapsed_s": 24.234,
+      "weather": {
+        "steady_wind_mps": 7.8,
+        "gust_wind_mps": 10.8,
+        "source": "profile@12.0s",
+        "effective_wind_mps": 10.8
+      },
+      "gate_decision": {
+        "launch_allowed": false,
+        "mission_continue_allowed": false,
+        "dock_allowed": false,
+        "reasons": [
+          "wind_limit_exceeded"
+        ],
+        "details": [
+          "Effective wind 10.8 m/s exceeds configured limit 7.0 m/s."
+        ]
+      },
+      "inflight_decision": {
+        "action": "return_to_launch",
+        "reasons": [
+          "wind_limit_exceeded"
+        ],
+        "details": [
+          "Wind 10.8 m/s exceeds 7.0 m/s."
+        ]
+      },
+      "snapshot_before": {
+        "connected": true,
+        "armed": true,
+        "in_air": true,
+        "mode": "return_to_launch",
+        "battery_percent": 97.0,
+        "position": {
+          "lat": 47.3982002,
+          "lon": 8.5461219,
+          "alt_m": 9.99000072479248
+        },
+        "mission_progress": {
+          "current": 3,
+          "total": 3
+        }
+      },
+      "local_pose_before": {
+        "north_m": 26.9888916015625,
+        "east_m": -5.887368202209473,
+        "down_m": -22.85453987121582,
+        "yaw_deg": -65.0415267944336,
+        "roll_deg": -1.7653484344482422,
+        "pitch_deg": -2.027665138244629
+      },
+      "snapshot_after": {
+        "connected": true,
+        "armed": true,
+        "in_air": true,
+        "mode": "return_to_launch",
+        "battery_percent": 97.0,
+        "position": {
+          "lat": 47.3980198,
+          "lon": 8.5461493,
+          "alt_m": 29.933000564575195
+        },
+        "mission_progress": {
+          "current": 0,
+          "total": 0
+        }
+      },
+      "local_pose_after": {
+        "north_m": 0.2330896109342575,
+        "east_m": -0.07615329325199127,
+        "down_m": -25.73126983642578,
+        "yaw_deg": 96.06283569335938,
+        "roll_deg": 1.6073790788650513,
+        "pitch_deg": 1.890956163406372
+      }
+    }
+  ],
+  "dock_weather_observations": [
+    {
+      "elapsed_s": 48.015,
+      "weather": {
+        "steady_wind_mps": 4.8,
+        "gust_wind_mps": 6.6,
+        "source": "profile@36.0s",
+        "effective_wind_mps": 6.6
+      },
+      "dock_allowed": true,
+      "details": [
+        "Effective wind 6.6 m/s is within configured limit 7.0 m/s."
+      ]
+    }
+  ],
+  "triggered_action": "return_to_launch",
+  "triggered_at_s": 24.234,
+  "dock_recovered_at_s": 48.015,
+  "proof_status": "rtl_triggered_by_live_weather_injection"
+}

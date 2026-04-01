@@ -5,6 +5,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from .media_binding import discover_media_bindings
+
 
 def load_json_if_exists(path: Path) -> dict[str, Any] | None:
     if not path.exists():
@@ -92,6 +94,7 @@ def build_replay_bundle(
     live_px4_dir = repo_root / "artifacts" / "live_px4"
     precision_dir = repo_root / "artifacts" / "precision_landing" / "latest"
     weather_dir = repo_root / "artifacts" / "weather_scenarios" / "latest"
+    media_dir = repo_root / "artifacts" / "media" / "latest"
 
     mission_validation = load_json_if_exists(live_px4_dir / "latest_mission_validation.json")
     execution_validation = load_json_if_exists(live_px4_dir / "latest_execution_validation.json")
@@ -100,8 +103,10 @@ def build_replay_bundle(
         live_px4_dir / "latest_landing_target_consumption.json"
     )
     dock_approach = load_json_if_exists(live_px4_dir / "latest_dock_approach_validation.json")
+    live_weather_validation = load_json_if_exists(live_px4_dir / "latest_live_weather_validation.json")
     precision_summary = load_json_if_exists(precision_dir / "manifest.json")
     weather_summary = load_json_if_exists(weather_dir / "manifest.json")
+    media_bindings = discover_media_bindings(repo_root)
 
     output_dir.mkdir(parents=True, exist_ok=True)
     dock_timeline_path = output_dir / "dock_approach_timeline.csv"
@@ -116,8 +121,10 @@ def build_replay_bundle(
             "precision_profile": str(live_px4_dir / "latest_precision_landing_profile.json"),
             "landing_target_consumption": str(live_px4_dir / "latest_landing_target_consumption.json"),
             "dock_approach_validation": str(live_px4_dir / "latest_dock_approach_validation.json"),
+            "live_weather_validation": str(live_px4_dir / "latest_live_weather_validation.json"),
             "precision_landing_manifest": str(precision_dir / "manifest.json"),
             "weather_scenario_manifest": str(weather_dir / "manifest.json"),
+            "media_manifest": str(media_dir / "manifest.json"),
             "dock_approach_timeline": str(dock_timeline_path),
         },
         "artifacts": {
@@ -126,8 +133,10 @@ def build_replay_bundle(
             "precision_profile": precision_profile,
             "landing_target_consumption": landing_target_consumption,
             "dock_approach_validation": dock_approach,
+            "live_weather_validation": live_weather_validation,
             "precision_landing_manifest": precision_summary,
             "weather_scenario_manifest": weather_summary,
+            "media_bindings": media_bindings,
         },
         "summary": {
             "mission_waypoint_count": _safe_get(mission_validation, "mission", "waypoint_count"),
@@ -143,10 +152,13 @@ def build_replay_bundle(
             "landing_target_consumption_count": _safe_get(
                 landing_target_consumption, "receiver_observation", "count"
             ),
+            "live_weather_proof_status": _safe_get(live_weather_validation, "proof_status"),
+            "live_weather_triggered_action": _safe_get(live_weather_validation, "triggered_action"),
             "precision_scenario_passed_count": _safe_get(precision_summary, "passed_count"),
             "precision_scenario_total_count": _safe_get(precision_summary, "scenario_count"),
             "weather_scenario_passed_count": _safe_get(weather_summary, "passed_count"),
             "weather_scenario_total_count": _safe_get(weather_summary, "scenario_count"),
+            "bound_media_count": len(media_bindings),
         },
     }
     _write_json(output_dir / "manifest.json", manifest)
@@ -161,8 +173,10 @@ def build_replay_bundle(
         f"- precision-landing profile: {'yes' if precision_profile else 'no'}",
         f"- landing-target consumption proof: {'yes' if landing_target_consumption else 'no'}",
         f"- dock-approach validation: {'yes' if dock_approach else 'no'}",
+        f"- live weather validation: {'yes' if live_weather_validation else 'no'}",
         f"- precision-landing simulator manifest: {'yes' if precision_summary else 'no'}",
         f"- weather scenario manifest: {'yes' if weather_summary else 'no'}",
+        f"- bound media files: `{len(media_bindings)}`",
         "",
         "## Key Results",
         "",
@@ -175,8 +189,11 @@ def build_replay_bundle(
         f"- dock final in_air: `{manifest['summary']['dock_final_in_air']}`",
         f"- precision profile `RTL_PLD_MD`: `{manifest['summary']['precision_profile_rtl_pld_md']}`",
         f"- landing-target consumption count: `{manifest['summary']['landing_target_consumption_count']}`",
+        f"- live weather proof status: `{manifest['summary']['live_weather_proof_status']}`",
+        f"- live weather triggered action: `{manifest['summary']['live_weather_triggered_action']}`",
         f"- precision simulator pass count: `{manifest['summary']['precision_scenario_passed_count']}` / `{manifest['summary']['precision_scenario_total_count']}`",
         f"- weather scenario pass count: `{manifest['summary']['weather_scenario_passed_count']}` / `{manifest['summary']['weather_scenario_total_count']}`",
+        f"- bound media count: `{manifest['summary']['bound_media_count']}`",
         "",
         "## Generated Files",
         "",

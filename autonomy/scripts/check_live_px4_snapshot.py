@@ -43,8 +43,7 @@ async def main() -> None:
     )
     try:
         await gateway.connect()
-        snapshot = await gateway.get_snapshot()
-        local_pose = await gateway.get_local_pose()
+        snapshot, local_pose = await gateway.wait_for_live_position(timeout_s=45.0)
 
         OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
         OUTPUT_PATH.write_text(

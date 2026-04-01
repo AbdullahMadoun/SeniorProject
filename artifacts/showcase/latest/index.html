@@ -292,10 +292,24 @@
     }
     .scenario-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .evidence-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .media-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
     .scenario-chip, .evidence-card {
       padding: 16px;
       border-radius: 18px;
       background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+    .media-card {
+      padding: 16px;
+      border-radius: 18px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+    .media-card video {
+      width: 100%;
+      border-radius: 14px;
+      margin-top: 12px;
+      background: #050508;
       border: 1px solid rgba(255,255,255,0.06);
     }
     table {
@@ -343,14 +357,14 @@
       .hud { flex-direction: column; align-items: stretch; }
       .hud-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .lifecycle-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .scenario-grid, .evidence-grid, .hero-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .scenario-grid, .evidence-grid, .hero-summary, .media-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
     @media (max-width: 720px) {
       .page { width: min(100% - 16px, 1480px); margin: 12px auto 28px; }
       .panel-inner, .chart-card, .table-card { padding: 18px; }
       .scene-shell { margin: 16px 16px 0; height: 460px; }
       .controls-bar { padding: 16px; }
-      .hero-summary, .hud-grid, .lifecycle-grid, .scenario-grid, .evidence-grid { grid-template-columns: 1fr; }
+      .hero-summary, .hud-grid, .lifecycle-grid, .scenario-grid, .evidence-grid, .media-grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -459,6 +473,27 @@
 
     <section class="grid-2">
       <article class="panel">
+        <div class="chart-card">
+          <div class="eyebrow">Live Weather Injection</div>
+          <h2>Injected wind profile and RTL trigger</h2>
+          <p>Time-varying weather used during the live mission execution path. The plotted line is the effective wind parsed by the rule engine before it triggered return-to-launch and later allowed dock recovery.</p>
+          <div class="chart-wrap">
+            <svg id="live-weather-chart" viewBox="0 0 640 300" aria-label="Live weather injection chart"></svg>
+          </div>
+        </div>
+      </article>
+      <article class="panel">
+        <div class="table-card">
+          <div class="eyebrow">Bound Media</div>
+          <h2>Gazebo or QGC recordings</h2>
+          <p>Optional recorded media bound into the replay bundle so the telemetry proof and screen/video evidence stay in the same artifact chain.</p>
+          <div class="media-grid" id="media-gallery"></div>
+        </div>
+      </article>
+    </section>
+
+    <section class="grid-2">
+      <article class="panel">
         <div class="table-card">
           <div class="eyebrow">PX4 Proof Chain</div>
           <h2>Receiver, bridge, and docking evidence</h2>
@@ -479,19 +514,22 @@
     window.SHOWCASE_DATA = {
   "bundle_name": "latest_live_px4_replay_bundle",
   "summary": {
-    "mission_waypoint_count": 6,
+    "mission_waypoint_count": 3,
     "execution_after_rtl_mode": "return_to_launch",
     "dock_proof_status": "consumed_from_live_telemetry_projection",
-    "dock_stream_record_count": 6,
-    "dock_receiver_count": 6,
-    "dock_final_horizontal_distance_m": 0.07548274437382324,
+    "dock_stream_record_count": 4,
+    "dock_receiver_count": 4,
+    "dock_final_horizontal_distance_m": 0.08559233175693222,
     "dock_final_in_air": false,
     "precision_profile_rtl_pld_md": 2,
     "landing_target_consumption_count": 50,
+    "live_weather_proof_status": "rtl_triggered_by_live_weather_injection",
+    "live_weather_triggered_action": "return_to_launch",
     "precision_scenario_passed_count": 2,
     "precision_scenario_total_count": 3,
     "weather_scenario_passed_count": 4,
-    "weather_scenario_total_count": 4
+    "weather_scenario_total_count": 4,
+    "bound_media_count": 0
   },
   "simulation": {
     "scene_extent_m": 200.0,
@@ -507,245 +545,155 @@
       "index": 0,
       "source": "mission_entry",
       "source_index": 0,
-      "t_s": 1628470.703,
-      "north_m": 0.06236880272626877,
-      "east_m": -0.0006789497565478086,
-      "down_m": -7.633537769317627,
-      "yaw_deg": 96.97296142578125,
-      "roll_deg": 0.0007549367728643119,
-      "pitch_deg": 0.0856940820813179,
+      "t_s": 1643521.687,
+      "north_m": 0.07496313005685806,
+      "east_m": 0.04446382820606232,
+      "down_m": -6.561620235443115,
+      "yaw_deg": 97.7314224243164,
+      "roll_deg": 1.4846845865249634,
+      "pitch_deg": 1.6495155096054077,
       "mode": "mission",
-      "battery_percent": 98.0,
+      "battery_percent": 100.0,
       "in_air": true,
-      "horizontal_distance_to_dock_m": 0.06237249815648037,
-      "altitude_agl_m": 7.633537769317627,
+      "horizontal_distance_to_dock_m": 0.08715791924237086,
+      "altitude_agl_m": 6.561620235443115,
       "speed_mps": 0.0
     },
     {
       "index": 1,
       "source": "departure",
       "source_index": 0,
-      "t_s": 1628476.796,
-      "north_m": 0.062197666615247726,
-      "east_m": -0.0007186682778410614,
-      "down_m": -7.686935901641846,
-      "yaw_deg": 96.97378540039062,
-      "roll_deg": -0.004639653954654932,
-      "pitch_deg": 0.081667460501194,
+      "t_s": 1643527.796,
+      "north_m": 0.06748872995376587,
+      "east_m": 0.04515557363629341,
+      "down_m": -6.93112325668335,
+      "yaw_deg": 97.7412109375,
+      "roll_deg": 1.4013516902923584,
+      "pitch_deg": 1.7718294858932495,
       "mode": "mission",
-      "battery_percent": 89.0,
+      "battery_percent": 97.0,
       "in_air": true,
-      "horizontal_distance_to_dock_m": 0.06220181843382938,
-      "altitude_agl_m": 7.686935901641846,
-      "speed_mps": 0.008763896493011803
+      "horizontal_distance_to_dock_m": 0.0812019365606206,
+      "altitude_agl_m": 6.93112325668335,
+      "speed_mps": 0.06049750497553921
     },
     {
       "index": 2,
       "source": "departure",
       "source_index": 1,
-      "t_s": 1628482.671,
-      "north_m": 0.006261887960135937,
-      "east_m": 16.63193702697754,
-      "down_m": -9.925361633300781,
-      "yaw_deg": 88.9623031616211,
-      "roll_deg": -0.4243653118610382,
-      "pitch_deg": 4.369444370269775,
+      "t_s": 1643534.89,
+      "north_m": 16.252256393432617,
+      "east_m": 10.916303634643555,
+      "down_m": -10.01971435546875,
+      "yaw_deg": 30.88903045654297,
+      "roll_deg": -8.46548843383789,
+      "pitch_deg": 6.164200305938721,
       "mode": "mission",
-      "battery_percent": 79.0,
+      "battery_percent": 97.0,
       "in_air": true,
-      "horizontal_distance_to_dock_m": 16.631938205771068,
-      "altitude_agl_m": 9.925361633300781,
-      "speed_mps": 2.856629253525321
+      "horizontal_distance_to_dock_m": 19.57808782597533,
+      "altitude_agl_m": 10.01971435546875,
+      "speed_mps": 2.7826344947012847
     },
     {
       "index": 3,
       "source": "rtl_approach",
       "source_index": 0,
-      "t_s": 1628489.281,
-      "north_m": 9.112720489501953,
-      "east_m": 19.21013832092285,
-      "down_m": -9.998807907104492,
-      "yaw_deg": -29.615631103515625,
-      "roll_deg": -10.229693412780762,
-      "pitch_deg": -1.1262900829315186,
+      "t_s": 1643574.75,
+      "north_m": 0.04901133105158806,
+      "east_m": -0.09800328314304352,
+      "down_m": -10.779504776000977,
+      "yaw_deg": 97.85026550292969,
+      "roll_deg": 1.500591516494751,
+      "pitch_deg": 1.590462327003479,
       "mode": "return_to_launch",
-      "battery_percent": 69.0,
+      "battery_percent": 97.0,
       "in_air": true,
-      "horizontal_distance_to_dock_m": 21.261963433059925,
-      "altitude_agl_m": 9.998807907104492,
-      "speed_mps": 1.4318724165535885
+      "horizontal_distance_to_dock_m": 0.1095753351729481,
+      "altitude_agl_m": 10.779504776000977,
+      "speed_mps": 19.60707497088511
     },
     {
       "index": 4,
-      "source": "rtl_approach",
-      "source_index": 1,
-      "t_s": 1628495.39,
-      "north_m": 9.201103210449219,
-      "east_m": 18.516433715820312,
-      "down_m": -25.199602127075195,
-      "yaw_deg": -29.231414794921875,
-      "roll_deg": -0.907031774520874,
-      "pitch_deg": -0.5163177251815796,
+      "source": "dock_stream",
+      "source_index": 0,
+      "t_s": 1775070945.929851,
+      "north_m": 0.08289406448602676,
+      "east_m": -0.1026642695069313,
+      "down_m": -1.1295676231384277,
+      "yaw_deg": 97.82938385009766,
+      "roll_deg": 1.6727241277694702,
+      "pitch_deg": 1.566684365272522,
       "mode": "return_to_launch",
-      "battery_percent": 59.0,
+      "battery_percent": 97.0,
       "in_air": true,
-      "horizontal_distance_to_dock_m": 20.67652334996641,
-      "altitude_agl_m": 25.199602127075195,
-      "speed_mps": 2.4908940317500816
+      "horizontal_distance_to_dock_m": 0.13195218134008013,
+      "altitude_agl_m": 1.1295676231384277,
+      "speed_mps": 9.649997762622322
     },
     {
       "index": 5,
-      "source": "rtl_approach",
-      "source_index": 2,
-      "t_s": 1628502.203,
-      "north_m": 6.1118035316467285,
-      "east_m": 13.384174346923828,
-      "down_m": -29.73636245727539,
-      "yaw_deg": -92.3757095336914,
-      "roll_deg": 0.4935270845890045,
-      "pitch_deg": -3.3138484954833984,
-      "mode": "return_to_launch",
-      "battery_percent": 50.0,
-      "in_air": true,
-      "horizontal_distance_to_dock_m": 14.713608169252819,
-      "altitude_agl_m": 29.73636245727539,
-      "speed_mps": 1.10294873489936
+      "source": "dock_stream",
+      "source_index": 1,
+      "t_s": 1775070950.936278,
+      "north_m": 0.09178827702999115,
+      "east_m": -0.029116341844201088,
+      "down_m": 0.04357188940048218,
+      "yaw_deg": 98.9495849609375,
+      "roll_deg": 0.14390325546264648,
+      "pitch_deg": -0.35565561056137085,
+      "mode": "mission",
+      "battery_percent": 99.0,
+      "in_air": false,
+      "horizontal_distance_to_dock_m": 0.09629563418204781,
+      "altitude_agl_m": 0.0,
+      "speed_mps": 0.23479347019547708
     },
     {
       "index": 6,
-      "source": "rtl_approach",
-      "source_index": 3,
-      "t_s": 1628509.546,
-      "north_m": 0.2363000363111496,
-      "east_m": 0.3743252754211426,
-      "down_m": -28.510488510131836,
-      "yaw_deg": -136.17210388183594,
-      "roll_deg": -0.7749179005622864,
-      "pitch_deg": 2.2753427028656006,
-      "mode": "return_to_launch",
-      "battery_percent": 50.0,
-      "in_air": true,
-      "horizontal_distance_to_dock_m": 0.442670440598607,
-      "altitude_agl_m": 28.510488510131836,
-      "speed_mps": 1.9511933188961625
+      "source": "dock_stream",
+      "source_index": 2,
+      "t_s": 1775070961.09127,
+      "north_m": 0.12709036469459534,
+      "east_m": -0.016405154019594193,
+      "down_m": 0.0995093584060669,
+      "yaw_deg": 99.27112579345703,
+      "roll_deg": 0.15566080808639526,
+      "pitch_deg": -0.33812224864959717,
+      "mode": "mission",
+      "battery_percent": 100.0,
+      "in_air": false,
+      "horizontal_distance_to_dock_m": 0.1281448004275314,
+      "altitude_agl_m": 0.0,
+      "speed_mps": 0.006632783439275582
     },
     {
       "index": 7,
       "source": "dock_stream",
-      "source_index": 0,
-      "t_s": 1775055877.193317,
-      "north_m": 0.2078625112771988,
-      "east_m": 0.26489540934562683,
-      "down_m": -21.131664276123047,
-      "yaw_deg": 97.94495391845703,
-      "roll_deg": 0.3249017000198364,
-      "pitch_deg": 0.28373199701309204,
-      "mode": "return_to_launch",
-      "battery_percent": 50.0,
-      "in_air": true,
-      "horizontal_distance_to_dock_m": 0.3367141242758474,
-      "altitude_agl_m": 21.131664276123047,
-      "speed_mps": 7.3796904179521485
-    },
-    {
-      "index": 8,
-      "source": "dock_stream",
-      "source_index": 1,
-      "t_s": 1775055882.552076,
-      "north_m": 0.039670731872320175,
-      "east_m": -0.023383190855383873,
-      "down_m": -9.57760238647461,
-      "yaw_deg": 96.99635314941406,
-      "roll_deg": -0.2946353554725647,
-      "pitch_deg": -0.41498759388923645,
-      "mode": "return_to_launch",
-      "battery_percent": 50.0,
-      "in_air": true,
-      "horizontal_distance_to_dock_m": 0.04604932770263674,
-      "altitude_agl_m": 9.57760238647461,
-      "speed_mps": 2.1570070687306386
-    },
-    {
-      "index": 9,
-      "source": "dock_stream",
-      "source_index": 2,
-      "t_s": 1775055888.557018,
-      "north_m": 0.049321286380290985,
-      "east_m": -0.013157800771296024,
-      "down_m": -4.538161754608154,
-      "yaw_deg": 96.98733520507812,
-      "roll_deg": -0.1114211231470108,
-      "pitch_deg": -0.2211856245994568,
-      "mode": "return_to_launch",
-      "battery_percent": 50.0,
-      "in_air": true,
-      "horizontal_distance_to_dock_m": 0.05104622426138681,
-      "altitude_agl_m": 4.538161754608154,
-      "speed_mps": 0.8392188128348934
-    },
-    {
-      "index": 10,
-      "source": "dock_stream",
       "source_index": 3,
-      "t_s": 1775055894.561075,
-      "north_m": 0.03973282873630524,
-      "east_m": -0.013591373339295387,
-      "down_m": -0.14915509521961212,
-      "yaw_deg": 96.96528625488281,
-      "roll_deg": -0.0797705352306366,
-      "pitch_deg": -0.22128121554851532,
-      "mode": "return_to_launch",
-      "battery_percent": 50.0,
-      "in_air": false,
-      "horizontal_distance_to_dock_m": 0.04199313168408225,
-      "altitude_agl_m": 0.14915509521961212,
-      "speed_mps": 0.7310085839114132
-    },
-    {
-      "index": 11,
-      "source": "dock_stream",
-      "source_index": 4,
-      "t_s": 1775055900.885883,
-      "north_m": 0.01412470918148756,
-      "east_m": -0.01874275878071785,
-      "down_m": 0.033998534083366394,
-      "yaw_deg": 97.37540435791016,
-      "roll_deg": -0.10012519359588623,
-      "pitch_deg": -0.21902121603488922,
-      "mode": "mission",
-      "battery_percent": 98.0,
-      "in_air": false,
-      "horizontal_distance_to_dock_m": 0.023469094915947973,
-      "altitude_agl_m": 0.0,
-      "speed_mps": 0.029250995031293255
-    },
-    {
-      "index": 12,
-      "source": "dock_stream",
-      "source_index": 5,
-      "t_s": 1775055907.26036,
-      "north_m": 0.07527589797973633,
-      "east_m": -0.0055842529982328415,
-      "down_m": 0.03443603217601776,
-      "yaw_deg": 97.79243469238281,
-      "roll_deg": -0.13670773804187775,
-      "pitch_deg": -0.23833714425563812,
+      "t_s": 1775070966.093307,
+      "north_m": 0.08463161438703537,
+      "east_m": -0.01278816256672144,
+      "down_m": 0.062096670269966125,
+      "yaw_deg": 99.45903015136719,
+      "roll_deg": 0.17430071532726288,
+      "pitch_deg": -0.34397152066230774,
       "mode": "mission",
       "battery_percent": 100.0,
       "in_air": false,
-      "horizontal_distance_to_dock_m": 0.07548274437382324,
+      "horizontal_distance_to_dock_m": 0.08559233175693222,
       "altitude_agl_m": 0.0,
-      "speed_mps": 0.009812949904014377
+      "speed_mps": 0.011336523023786462
     }
   ],
   "mission": {
-    "mission_id": "live-sitl-smoke",
-    "waypoint_count": 6,
+    "mission_id": "dashboard-http-smoke-buffered",
+    "waypoint_count": 3,
     "cruise_speed_mps": 5.0,
     "geofence_radius_m": 100.0,
-    "area_m2": 399.99931726839714,
-    "north_span_m": 19.9999999998922,
-    "east_span_m": 19.99998293174467,
+    "area_m2": null,
+    "north_span_m": null,
+    "east_span_m": null,
     "post_rtl_mode": "return_to_launch",
     "lifecycle": [
       {
@@ -754,7 +702,7 @@
         "armed": false,
         "in_air": false,
         "battery_percent": 100.0,
-        "alt_m": -0.017000000923871994,
+        "alt_m": 0.003000000026077032,
         "mission_current": 0,
         "mission_total": 0
       },
@@ -764,7 +712,7 @@
         "armed": false,
         "in_air": false,
         "battery_percent": 100.0,
-        "alt_m": 0.036000002175569534,
+        "alt_m": 0.05000000074505806,
         "mission_current": 0,
         "mission_total": 0
       },
@@ -774,7 +722,7 @@
         "armed": false,
         "in_air": false,
         "battery_percent": 100.0,
-        "alt_m": 0.004000000189989805,
+        "alt_m": 0.003000000026077032,
         "mission_current": 0,
         "mission_total": 0
       },
@@ -783,7 +731,7 @@
         "mode": "mission",
         "armed": true,
         "in_air": true,
-        "battery_percent": 98.0,
+        "battery_percent": 100.0,
         "alt_m": 0.0,
         "mission_current": 0,
         "mission_total": 0
@@ -793,8 +741,8 @@
         "mode": "return_to_launch",
         "armed": true,
         "in_air": true,
-        "battery_percent": 82.0,
-        "alt_m": 6.5460004806518555,
+        "battery_percent": 97.0,
+        "alt_m": 25.238000869750977,
         "mission_current": 0,
         "mission_total": 0
       },
@@ -803,8 +751,8 @@
         "mode": "return_to_launch",
         "armed": true,
         "in_air": true,
-        "battery_percent": 50.0,
-        "alt_m": 21.128000259399414,
+        "battery_percent": 97.0,
+        "alt_m": 0.6850000619888306,
         "mission_current": 0,
         "mission_total": 0
       },
@@ -814,7 +762,7 @@
         "armed": false,
         "in_air": false,
         "battery_percent": 100.0,
-        "alt_m": -0.013000000268220901,
+        "alt_m": -0.08300000429153442,
         "mission_current": 0,
         "mission_total": 0
       }
@@ -828,32 +776,14 @@
       },
       {
         "index": 1,
-        "north_m": 0.0,
-        "east_m": 19.9999999999432,
+        "north_m": 18.0,
+        "east_m": 12.0,
         "altitude_m": 10.0
       },
       {
         "index": 2,
-        "north_m": 9.9999999999461,
-        "east_m": 19.99998293174467,
-        "altitude_m": 10.0
-      },
-      {
-        "index": 3,
-        "north_m": 9.9999999999461,
-        "east_m": 0.0,
-        "altitude_m": 10.0
-      },
-      {
-        "index": 4,
-        "north_m": 19.9999999998922,
-        "east_m": 0.0,
-        "altitude_m": 10.0
-      },
-      {
-        "index": 5,
-        "north_m": 19.9999999998922,
-        "east_m": 19.99996586353381,
+        "north_m": 28.0,
+        "east_m": -8.0,
         "altitude_m": 10.0
       }
     ]
@@ -873,81 +803,57 @@
   "dock": {
     "proof_status": "consumed_from_live_telemetry_projection",
     "activation_radius_m": 12.0,
-    "final_horizontal_distance_m": 0.07548274437382324,
+    "final_horizontal_distance_m": 0.08559233175693222,
     "final_in_air": false,
-    "telemetry_frame_count": 13,
+    "telemetry_frame_count": 8,
     "records": [
       {
         "index": 0,
         "mode": "return_to_launch",
         "in_air": true,
-        "battery_percent": 50.0,
-        "altitude_agl_m": 21.131664276123047,
-        "horizontal_distance_to_dock_m": 0.3367141242758474,
-        "north_m": 0.2078625112771988,
-        "east_m": 0.26489540934562683,
-        "down_m": -21.131664276123047,
-        "yaw_deg": 97.94495391845703
+        "battery_percent": 97.0,
+        "altitude_agl_m": 1.1295676231384277,
+        "horizontal_distance_to_dock_m": 0.13195218134008013,
+        "north_m": 0.08289406448602676,
+        "east_m": -0.1026642695069313,
+        "down_m": -1.1295676231384277,
+        "yaw_deg": 97.82938385009766
       },
       {
         "index": 1,
-        "mode": "return_to_launch",
-        "in_air": true,
-        "battery_percent": 50.0,
-        "altitude_agl_m": 9.57760238647461,
-        "horizontal_distance_to_dock_m": 0.04604932770263674,
-        "north_m": 0.039670731872320175,
-        "east_m": -0.023383190855383873,
-        "down_m": -9.57760238647461,
-        "yaw_deg": 96.99635314941406
+        "mode": "mission",
+        "in_air": false,
+        "battery_percent": 99.0,
+        "altitude_agl_m": 0.0,
+        "horizontal_distance_to_dock_m": 0.09629563418204781,
+        "north_m": 0.09178827702999115,
+        "east_m": -0.029116341844201088,
+        "down_m": 0.04357188940048218,
+        "yaw_deg": 98.9495849609375
       },
       {
         "index": 2,
-        "mode": "return_to_launch",
-        "in_air": true,
-        "battery_percent": 50.0,
-        "altitude_agl_m": 4.538161754608154,
-        "horizontal_distance_to_dock_m": 0.05104622426138681,
-        "north_m": 0.049321286380290985,
-        "east_m": -0.013157800771296024,
-        "down_m": -4.538161754608154,
-        "yaw_deg": 96.98733520507812
-      },
-      {
-        "index": 3,
-        "mode": "return_to_launch",
-        "in_air": false,
-        "battery_percent": 50.0,
-        "altitude_agl_m": 0.14915509521961212,
-        "horizontal_distance_to_dock_m": 0.04199313168408225,
-        "north_m": 0.03973282873630524,
-        "east_m": -0.013591373339295387,
-        "down_m": -0.14915509521961212,
-        "yaw_deg": 96.96528625488281
-      },
-      {
-        "index": 4,
-        "mode": "mission",
-        "in_air": false,
-        "battery_percent": 98.0,
-        "altitude_agl_m": 0.0,
-        "horizontal_distance_to_dock_m": 0.023469094915947973,
-        "north_m": 0.01412470918148756,
-        "east_m": -0.01874275878071785,
-        "down_m": 0.033998534083366394,
-        "yaw_deg": 97.37540435791016
-      },
-      {
-        "index": 5,
         "mode": "mission",
         "in_air": false,
         "battery_percent": 100.0,
         "altitude_agl_m": 0.0,
-        "horizontal_distance_to_dock_m": 0.07548274437382324,
-        "north_m": 0.07527589797973633,
-        "east_m": -0.0055842529982328415,
-        "down_m": 0.03443603217601776,
-        "yaw_deg": 97.79243469238281
+        "horizontal_distance_to_dock_m": 0.1281448004275314,
+        "north_m": 0.12709036469459534,
+        "east_m": -0.016405154019594193,
+        "down_m": 0.0995093584060669,
+        "yaw_deg": 99.27112579345703
+      },
+      {
+        "index": 3,
+        "mode": "mission",
+        "in_air": false,
+        "battery_percent": 100.0,
+        "altitude_agl_m": 0.0,
+        "horizontal_distance_to_dock_m": 0.08559233175693222,
+        "north_m": 0.08463161438703537,
+        "east_m": -0.01278816256672144,
+        "down_m": 0.062096670269966125,
+        "yaw_deg": 99.45903015136719
       }
     ]
   },
@@ -1232,6 +1138,7 @@
       }
     ]
   },
+  "media": [],
   "weather": {
     "wind_limit_mps": 7.0,
     "results": [
@@ -1275,7 +1182,107 @@
         "safety_action": "continue",
         "final_mode": "return_to_launch"
       }
-    ]
+    ],
+    "live_validation": {
+      "proof_status": "rtl_triggered_by_live_weather_injection",
+      "triggered_action": "return_to_launch",
+      "triggered_at_s": 24.234,
+      "dock_recovered_at_s": 48.015,
+      "observations": [
+        {
+          "elapsed_s": 24.234,
+          "weather": {
+            "steady_wind_mps": 7.8,
+            "gust_wind_mps": 10.8,
+            "source": "profile@12.0s",
+            "effective_wind_mps": 10.8
+          },
+          "gate_decision": {
+            "launch_allowed": false,
+            "mission_continue_allowed": false,
+            "dock_allowed": false,
+            "reasons": [
+              "wind_limit_exceeded"
+            ],
+            "details": [
+              "Effective wind 10.8 m/s exceeds configured limit 7.0 m/s."
+            ]
+          },
+          "inflight_decision": {
+            "action": "return_to_launch",
+            "reasons": [
+              "wind_limit_exceeded"
+            ],
+            "details": [
+              "Wind 10.8 m/s exceeds 7.0 m/s."
+            ]
+          },
+          "snapshot_before": {
+            "connected": true,
+            "armed": true,
+            "in_air": true,
+            "mode": "return_to_launch",
+            "battery_percent": 97.0,
+            "position": {
+              "lat": 47.3982002,
+              "lon": 8.5461219,
+              "alt_m": 9.99000072479248
+            },
+            "mission_progress": {
+              "current": 3,
+              "total": 3
+            }
+          },
+          "local_pose_before": {
+            "north_m": 26.9888916015625,
+            "east_m": -5.887368202209473,
+            "down_m": -22.85453987121582,
+            "yaw_deg": -65.0415267944336,
+            "roll_deg": -1.7653484344482422,
+            "pitch_deg": -2.027665138244629
+          },
+          "snapshot_after": {
+            "connected": true,
+            "armed": true,
+            "in_air": true,
+            "mode": "return_to_launch",
+            "battery_percent": 97.0,
+            "position": {
+              "lat": 47.3980198,
+              "lon": 8.5461493,
+              "alt_m": 29.933000564575195
+            },
+            "mission_progress": {
+              "current": 0,
+              "total": 0
+            }
+          },
+          "local_pose_after": {
+            "north_m": 0.2330896109342575,
+            "east_m": -0.07615329325199127,
+            "down_m": -25.73126983642578,
+            "yaw_deg": 96.06283569335938,
+            "roll_deg": 1.6073790788650513,
+            "pitch_deg": 1.890956163406372
+          }
+        }
+      ],
+      "dock_weather_observations": [
+        {
+          "elapsed_s": 48.015,
+          "weather": {
+            "steady_wind_mps": 4.8,
+            "gust_wind_mps": 6.6,
+            "source": "profile@36.0s",
+            "effective_wind_mps": 6.6
+          },
+          "dock_allowed": true,
+          "details": [
+            "Effective wind 6.6 m/s is within configured limit 7.0 m/s."
+          ]
+        }
+      ]
+    }
   }
 };
   </script>
@@ -1291,6 +1298,8 @@
     const dockTarget = data.simulation?.dock_target || { north_m: 0, east_m: 0, down_m: 0 };
     const dockRecords = Array.isArray(data.dock?.records) ? data.dock.records : [];
     const precisionSteps = Array.isArray(data.precision_landing?.nominal_steps) ? data.precision_landing.nominal_steps : [];
+    const liveWeatherObservations = Array.isArray(data.weather?.live_validation?.observations) ? data.weather.live_validation.observations : [];
+    const mediaBindings = Array.isArray(data.media) ? data.media : [];
 
     const MODE_COLORS = {
       mission: "#53b7ff",
@@ -1447,6 +1456,7 @@
         ["Dock Stream Frames", data.dock?.telemetry_frame_count || telemetry.length],
         ["Live Dock Records", dockRecords.length],
         ["Final Dock Error", `${Number(data.dock?.final_horizontal_distance_m || 0).toFixed(3)} m`],
+        ["Live Weather Proof", data.weather?.live_validation?.proof_status || "-"],
         ["Landing Target Proof", data.landing_target?.proof_status || "-"],
         ["Dock Proof", data.dock?.proof_status || summary.dock_proof_status || "-"],
       ];
@@ -1485,6 +1495,83 @@
         `
       );
       document.getElementById("bundle-name").textContent = data.bundle_name || "latest_live_px4_replay_bundle";
+    }
+
+    function renderLiveWeatherChart() {
+      const svg = document.getElementById("live-weather-chart");
+      if (!liveWeatherObservations.length) {
+        svg.innerHTML = "";
+        return;
+      }
+      const width = 640;
+      const height = 300;
+      const padding = { top: 26, right: 70, bottom: 42, left: 60 };
+      const limit = Number(data.weather?.wind_limit_mps || 7);
+      const timeBounds = valueBounds(liveWeatherObservations.map((item) => Number(item.elapsed_s || 0)), 0, 1);
+      const windBounds = valueBounds(
+        liveWeatherObservations.map((item) => Number(item.weather?.effective_wind_mps || 0)).concat([limit]),
+        0,
+        limit + 1,
+      );
+      const usableWidth = width - padding.left - padding.right;
+      const usableHeight = height - padding.top - padding.bottom;
+      const xFor = (value) => padding.left + ((value - timeBounds.min) / (timeBounds.max - timeBounds.min)) * usableWidth;
+      const yFor = (value) => padding.top + usableHeight - ((value - windBounds.min) / (windBounds.max - windBounds.min)) * usableHeight;
+      const points = liveWeatherObservations.map((item) => ({
+        x: xFor(Number(item.elapsed_s || 0)),
+        y: yFor(Number(item.weather?.effective_wind_mps || 0)),
+      }));
+      const linePath = bezierPath(points);
+      const fillPath = areaPath(linePath, padding.top + usableHeight, points.at(-1), points[0]);
+      const limitY = yFor(limit);
+      const trigger = data.weather?.live_validation?.triggered_at_s;
+      const triggerX = trigger == null ? null : xFor(Number(trigger));
+      svg.innerHTML = `
+        <defs>
+          <linearGradient id="liveWeatherFill" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stop-color="rgba(0,212,170,0.34)" />
+            <stop offset="100%" stop-color="rgba(0,212,170,0.02)" />
+          </linearGradient>
+        </defs>
+        <rect x="0" y="0" width="${width}" height="${height}" rx="18" fill="rgba(8,10,16,0.96)" />
+        <line x1="${padding.left}" y1="${padding.top + usableHeight}" x2="${width - padding.right}" y2="${padding.top + usableHeight}" stroke="rgba(255,255,255,0.16)" stroke-width="1.2" />
+        <line x1="${padding.left}" y1="${padding.top}" x2="${padding.left}" y2="${padding.top + usableHeight}" stroke="rgba(255,255,255,0.16)" stroke-width="1.2" />
+        <line x1="${padding.left}" y1="${limitY}" x2="${width - padding.right}" y2="${limitY}" stroke="rgba(255,107,107,0.75)" stroke-width="2" stroke-dasharray="6 6" />
+        ${triggerX == null ? "" : `<line x1="${triggerX}" y1="${padding.top}" x2="${triggerX}" y2="${padding.top + usableHeight}" stroke="rgba(255,159,67,0.75)" stroke-width="2" stroke-dasharray="4 6" />`}
+        <path d="${fillPath}" fill="url(#liveWeatherFill)" />
+        <path d="${linePath}" fill="none" stroke="#00d4aa" stroke-width="3.4" stroke-linecap="round" />
+        <text x="${padding.left}" y="16" fill="#00d4aa" font-size="12" font-weight="600">Effective wind (m/s)</text>
+        <text x="${width - padding.right - 102}" y="16" fill="#ff6b6b" font-size="12" font-weight="600">7 m/s limit</text>
+        <text x="${width - padding.right - 32}" y="${height - 14}" fill="rgba(232,232,237,0.68)" font-size="12">s</text>
+      `;
+    }
+
+    function resolveMediaSource(entry) {
+      if (window.location.protocol === "file:") {
+        return entry.showcase_rel_path || entry.web_path || "";
+      }
+      return entry.web_path || entry.showcase_rel_path || "";
+    }
+
+    function renderMediaGallery() {
+      if (!mediaBindings.length) {
+        setHtml(
+          "media-gallery",
+          `<div class="media-card"><label>No bound recordings</label><strong class="muted">Add files under <code>artifacts/media/latest</code> and rebuild the replay bundle.</strong></div>`
+        );
+        return;
+      }
+      setHtml(
+        "media-gallery",
+        mediaBindings.map((entry) => `
+          <div class="media-card">
+            <label>${entry.kind || "video"}</label>
+            <strong>${entry.label || entry.id}</strong>
+            <div class="muted" style="margin-top:8px;">${entry.mime_type || "video/mp4"}</div>
+            <video controls preload="metadata" src="${resolveMediaSource(entry)}"></video>
+          </div>
+        `).join("")
+      );
     }
 
     function bezierPath(points) {
@@ -1853,6 +1940,8 @@
     renderPrecisionChart();
     renderPrecisionScenarios();
     renderWeatherTable();
+    renderLiveWeatherChart();
+    renderMediaGallery();
     renderEvidenceGrid();
     renderParameterTable();
     resizeRenderer();

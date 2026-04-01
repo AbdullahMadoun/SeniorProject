@@ -95,6 +95,29 @@ class ShowcaseBuilderTests(unittest.TestCase):
                     "bridge_host_to_px4_count": 54,
                     "receiver_observation": {"count": 50, "first_match": {"x": 1.25, "y": -0.75, "z": 0.0}},
                 },
+                "live_weather_validation": {
+                    "proof_status": "rtl_triggered_by_live_weather_injection",
+                    "triggered_action": "return_to_launch",
+                    "triggered_at_s": 18.0,
+                    "dock_recovered_at_s": 30.0,
+                    "observations": [
+                        {
+                            "elapsed_s": 10.0,
+                            "weather": {"effective_wind_mps": 5.0},
+                        },
+                        {
+                            "elapsed_s": 18.0,
+                            "weather": {"effective_wind_mps": 8.4},
+                        },
+                    ],
+                    "dock_weather_observations": [
+                        {
+                            "elapsed_s": 30.0,
+                            "weather": {"effective_wind_mps": 5.0},
+                            "dock_allowed": True,
+                        }
+                    ],
+                },
                 "dock_approach_validation": {
                     "proof_status": "consumed_from_live_telemetry_projection",
                     "mission_entry_observations": [
@@ -179,6 +202,16 @@ class ShowcaseBuilderTests(unittest.TestCase):
                         {"name": "gust_abort_launch", "passed": True, "effective_wind_mps": 8.2, "launch_allowed": False, "mission_continue_allowed": False, "dock_allowed": False, "safety_action": "abort_launch", "final_mode": "hold"},
                     ]
                 },
+                "media_bindings": [
+                    {
+                        "id": "gazebo_recording",
+                        "label": "Gazebo Flight",
+                        "kind": "video",
+                        "mime_type": "video/mp4",
+                        "showcase_rel_path": "../../media/latest/gazebo.mp4",
+                        "web_path": "/artifacts/media/latest/gazebo.mp4",
+                    }
+                ],
             },
         }
 
@@ -194,6 +227,8 @@ class ShowcaseBuilderTests(unittest.TestCase):
         self.assertIn("roll_deg", showcase_data["flight_telemetry"][0])
         self.assertEqual(len(showcase_data["mission"]["waypoints"]), 6)
         self.assertEqual(showcase_data["weather"]["results"][1]["safety_action"], "abort_launch")
+        self.assertEqual(showcase_data["weather"]["live_validation"]["triggered_action"], "return_to_launch")
+        self.assertEqual(showcase_data["media"][0]["id"], "gazebo_recording")
 
     def test_render_showcase_html_contains_key_sections(self) -> None:
         html = render_showcase_html(build_showcase_data(self._sample_bundle_manifest()))
@@ -202,6 +237,8 @@ class ShowcaseBuilderTests(unittest.TestCase):
         self.assertIn("OrbitControls", html)
         self.assertIn("Mission Lifecycle", html)
         self.assertIn("Weather Gate Evidence", html)
+        self.assertIn("Live Weather Injection", html)
+        self.assertIn("Bound Media", html)
         self.assertIn("Precision Landing Parameters", html)
         self.assertIn("Top-down", html)
         self.assertIn("\"flight_telemetry\"", html)

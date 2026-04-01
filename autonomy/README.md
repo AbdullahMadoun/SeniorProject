@@ -23,9 +23,12 @@ to build a simulation-first backbone that can later connect to PX4 hardware with
 - `docs/reproducibility_runbook.md`
 - `drone_system/config.py`
 - `drone_system/geofence.py`
+- `drone_system/interactive_mission.py`
 - `drone_system/landing_target_projection.py`
 - `drone_system/landing_target_stream.py`
 - `drone_system/landing_target_proof.py`
+- `drone_system/live_px4_runtime.py`
+- `drone_system/media_binding.py`
 - `drone_system/replay_bundle.py`
 - `drone_system/mission_control.py`
 - `drone_system/precision_landing.py`
@@ -39,14 +42,20 @@ to build a simulation-first backbone that can later connect to PX4 hardware with
 - `drone_system/geometry.py`
 - `drone_system/synthetic_telemetry.py`
 - `drone_system/capability_report.py`
+- `drone_system/dashboard_builder.py`
+- `drone_system/dashboard_template.html`
 - `drone_system/visualizer_app.py`
 - `scripts/check_phase0_capability.py`
 - `scripts/check_live_px4_snapshot.py`
 - `scripts/check_runtime_readiness.py`
+- `scripts/build_dashboard.py`
 - `scripts/build_latest_replay_bundle.py`
 - `scripts/build_showcase.py`
+- `scripts/execute_interactive_mission.py`
 - `scripts/generate_synthetic_telemetry.py`
 - `scripts/live_px4_probe.sh`
+- `scripts/mission_api.py`
+- `scripts/run_live_interactive_mission.py`
 - `scripts/run_precision_landing_scenarios.py`
 - `scripts/run_weather_gate_scenarios.py`
 - `scripts/run_live_px4_execution_validation.ps1`
@@ -86,6 +95,30 @@ Implementation progress and milestone evidence are recorded in `docs/milestone_r
 Environment setup and exact reproduction steps are recorded in `docs/reproducibility_runbook.md`.
 
 Date-stamped installation and execution history is recorded in `docs/installation_log.md`.
+
+## Live Operator Surfaces
+
+- `artifacts/planner/index.html`
+  - interactive 2D mission planning
+  - Python-backed constraint validation
+- `artifacts/showcase/latest/index.html`
+  - replay and evidence presentation
+- `artifacts/dashboard/index.html`
+  - unified live Mega-Dashboard
+  - Leaflet 2D GPS map
+  - Three.js live 3D telemetry scene
+  - live environmental overrides
+  - SSE log HUD and live telemetry feed
+
+Run the dashboard/API locally with:
+
+```powershell
+python D:\downloads\SeniorProject\Skylink2\autonomy\scripts\mission_api.py
+```
+
+Then open:
+
+- `http://127.0.0.1:8625/`
 
 That file resolves contradictions between:
 

@@ -21,9 +21,11 @@ class ReplayBundleTests(unittest.TestCase):
             live_px4 = repo_root / "artifacts" / "live_px4"
             precision_dir = repo_root / "artifacts" / "precision_landing" / "latest"
             weather_dir = repo_root / "artifacts" / "weather_scenarios" / "latest"
+            media_dir = repo_root / "artifacts" / "media" / "latest"
             live_px4.mkdir(parents=True, exist_ok=True)
             precision_dir.mkdir(parents=True, exist_ok=True)
             weather_dir.mkdir(parents=True, exist_ok=True)
+            media_dir.mkdir(parents=True, exist_ok=True)
 
             (live_px4 / "latest_mission_validation.json").write_text(
                 json.dumps({"mission": {"waypoint_count": 6}}),
@@ -39,6 +41,15 @@ class ReplayBundleTests(unittest.TestCase):
             )
             (live_px4 / "latest_landing_target_consumption.json").write_text(
                 json.dumps({"receiver_observation": {"count": 50}}),
+                encoding="utf-8",
+            )
+            (live_px4 / "latest_live_weather_validation.json").write_text(
+                json.dumps(
+                    {
+                        "proof_status": "rtl_triggered_by_live_weather_injection",
+                        "triggered_action": "return_to_launch",
+                    }
+                ),
                 encoding="utf-8",
             )
             (live_px4 / "latest_dock_approach_validation.json").write_text(
@@ -80,6 +91,22 @@ class ReplayBundleTests(unittest.TestCase):
                 json.dumps({"passed_count": 4, "scenario_count": 4}),
                 encoding="utf-8",
             )
+            (media_dir / "manifest.json").write_text(
+                json.dumps(
+                    {
+                        "media": [
+                            {
+                                "id": "gazebo_recording",
+                                "label": "Gazebo Flight",
+                                "kind": "video",
+                                "path": "gazebo.mp4",
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (media_dir / "gazebo.mp4").write_bytes(b"fake")
 
             output_dir = repo_root / "artifacts" / "replay_bundle" / "latest"
             manifest = build_replay_bundle(repo_root=repo_root, output_dir=output_dir)
@@ -89,6 +116,9 @@ class ReplayBundleTests(unittest.TestCase):
             self.assertEqual(manifest["summary"]["dock_final_horizontal_distance_m"], 0.385)
             self.assertEqual(manifest["summary"]["precision_profile_rtl_pld_md"], 2)
             self.assertEqual(manifest["summary"]["weather_scenario_passed_count"], 4)
+            self.assertEqual(manifest["summary"]["live_weather_proof_status"], "rtl_triggered_by_live_weather_injection")
+            self.assertEqual(manifest["summary"]["bound_media_count"], 1)
+            self.assertEqual(manifest["artifacts"]["media_bindings"][0]["id"], "gazebo_recording")
             self.assertTrue((output_dir / "manifest.json").exists())
             self.assertTrue((output_dir / "summary.md").exists())
             self.assertTrue((output_dir / "dock_approach_timeline.csv").exists())

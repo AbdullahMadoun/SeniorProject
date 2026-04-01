@@ -202,6 +202,11 @@ def _load_preferred_artifact(replay_bundle_manifest: dict[str, Any], artifact_na
     return artifact if isinstance(artifact, dict) else {}
 
 
+def _load_preferred_value(replay_bundle_manifest: dict[str, Any], artifact_name: str) -> Any:
+    artifact = _safe_get(replay_bundle_manifest, "artifacts", artifact_name)
+    return artifact
+
+
 def _sample_time_seconds(record: dict[str, Any]) -> float | None:
     time_usec = _coerce_float(_safe_get(record, "sample", "time_usec"))
     if time_usec is None:
@@ -381,8 +386,10 @@ def build_showcase_data(replay_bundle_manifest: dict[str, Any]) -> dict[str, Any
     precision_profile = _load_preferred_artifact(replay_bundle_manifest, "precision_profile")
     landing_target = _load_preferred_artifact(replay_bundle_manifest, "landing_target_consumption")
     dock_artifact = _load_preferred_artifact(replay_bundle_manifest, "dock_approach_validation")
+    live_weather_validation = _load_preferred_artifact(replay_bundle_manifest, "live_weather_validation")
     precision_manifest = _load_preferred_artifact(replay_bundle_manifest, "precision_landing_manifest")
     weather_manifest = _load_preferred_artifact(replay_bundle_manifest, "weather_scenario_manifest")
+    media_bindings = _load_preferred_value(replay_bundle_manifest, "media_bindings")
     flight_telemetry = _flight_telemetry(dock_artifact)
     mission_waypoints = _mission_waypoints(mission_validation)
     geofence_radius_m = _coerce_float(_safe_get(mission_validation, "geofence", "radius_m")) or DEFAULT_GEOFENCE_RADIUS_M
@@ -432,9 +439,18 @@ def build_showcase_data(replay_bundle_manifest: dict[str, Any]) -> dict[str, Any
             "scenarios": _precision_scenarios(precision_manifest),
             "nominal_steps": _precision_nominal_steps(precision_manifest),
         },
+        "media": media_bindings if isinstance(media_bindings, list) else [],
         "weather": {
             "wind_limit_mps": 7.0,
             "results": _weather_results(weather_manifest),
+            "live_validation": {
+                "proof_status": live_weather_validation.get("proof_status"),
+                "triggered_action": live_weather_validation.get("triggered_action"),
+                "triggered_at_s": live_weather_validation.get("triggered_at_s"),
+                "dock_recovered_at_s": live_weather_validation.get("dock_recovered_at_s"),
+                "observations": live_weather_validation.get("observations", []),
+                "dock_weather_observations": live_weather_validation.get("dock_weather_observations", []),
+            },
         },
     }
 
