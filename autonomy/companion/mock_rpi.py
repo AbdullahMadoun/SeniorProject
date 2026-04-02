@@ -185,6 +185,50 @@ class MockArucoModule:
             tvecs[index, 0, :] = np.array([0.05, -0.03, max(marker_length, 0.2)], dtype=np.float32)
         return rvecs, tvecs, None
 
+    def generateImageMarker(
+        self,
+        _dictionary: Any,
+        marker_id: int,
+        side_pixels: int,
+        img: np.ndarray | None = None,
+        borderBits: int = 1,
+    ) -> np.ndarray:
+        side = max(16, int(side_pixels))
+        if img is None:
+            img = np.full((side, side), 255, dtype=np.uint8)
+        else:
+            img.fill(255)
+        border = max(1, int((side / 8) * max(1, borderBits)))
+        img[:border, :] = 0
+        img[-border:, :] = 0
+        img[:, :border] = 0
+        img[:, -border:] = 0
+        inner = img[border:-border, border:-border]
+        if inner.size == 0:
+            return img
+        cells = 4
+        cell_h = max(1, inner.shape[0] // cells)
+        cell_w = max(1, inner.shape[1] // cells)
+        encoded = int(marker_id) & 0xFFFF
+        for row in range(cells):
+            for col in range(cells):
+                bit_index = row * cells + col
+                value = 0 if ((encoded >> bit_index) & 1) else 255
+                y0 = row * cell_h
+                x0 = col * cell_w
+                inner[y0 : y0 + cell_h, x0 : x0 + cell_w] = value
+        return img
+
+    def drawMarker(
+        self,
+        dictionary: Any,
+        marker_id: int,
+        side_pixels: int,
+        img: np.ndarray | None = None,
+        borderBits: int = 1,
+    ) -> np.ndarray:
+        return self.generateImageMarker(dictionary, marker_id, side_pixels, img=img, borderBits=borderBits)
+
 
 class MockCV2Module:
     FONT_HERSHEY_SIMPLEX = 0

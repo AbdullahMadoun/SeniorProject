@@ -14,6 +14,16 @@ same Python modules to run:
   - automatic fallback for `RPi.GPIO`, `board`, `busio`, `adafruit_ads1x15`, and `cv2`
 - `run_companion_smoke.py`
   - one-command validation harness that runs the full companion stack in mock mode and writes a reproducible artifact bundle
+- `bootstrap_rpi_companion.sh`
+  - Raspberry Pi bootstrap for apt packages, Python venv, UART/I2C enablement, and import verification
+- `requirements-rpi.txt`
+  - companion-specific Pi dependency set
+- `generate_checkerboard.py`
+  - printable SVG checkerboard target generator for camera calibration
+- `generate_aruco_marker.py`
+  - ArUco marker generator with explicit metadata about whether output came from real OpenCV or the mock fallback
+- `calibrate_camera.py`
+  - template-mode and real-image camera calibration utility
 - `video_logger.py`
   - threaded MAVLink `GLOBAL_POSITION_INT` polling plus camera overlay and CSV logging
 - `aruco_detector.py`
@@ -50,6 +60,9 @@ Expected files:
 
 ```powershell
 python D:\downloads\SeniorProject\Skylink2\autonomy\companion\run_companion_smoke.py
+python D:\downloads\SeniorProject\Skylink2\autonomy\companion\generate_checkerboard.py --output-dir D:\downloads\SeniorProject\Skylink2\autonomy\companion\artifacts\calibration_target
+python D:\downloads\SeniorProject\Skylink2\autonomy\companion\generate_aruco_marker.py --output-dir D:\downloads\SeniorProject\Skylink2\autonomy\companion\artifacts\marker_target
+python D:\downloads\SeniorProject\Skylink2\autonomy\companion\calibrate_camera.py --image-glob "D:\captures\checkerboard\*.png" --output D:\downloads\SeniorProject\Skylink2\autonomy\companion\artifacts\camera_calibration.json --template-only
 python D:\downloads\SeniorProject\Skylink2\autonomy\companion\video_logger.py --mock-mavlink --mock-camera --max-frames 5
 python D:\downloads\SeniorProject\Skylink2\autonomy\companion\aruco_detector.py --mock-mavlink --mock-camera --max-frames 5
 python D:\downloads\SeniorProject\Skylink2\autonomy\companion\gpio_charging.py --cycles 1
@@ -66,5 +79,6 @@ python D:\downloads\SeniorProject\Skylink2\autonomy\companion\yolo_pothole_detec
   - point MAVLink at `/dev/ttyAMA0` or the actual serial device
   - point cameras at the real USB index or GStreamer string
   - replace the placeholder intrinsics in `aruco_detector.py` with real calibration data
+  - run `bootstrap_rpi_companion.sh` first to create the Pi-side environment
 
 Detailed procedures are in [RUNBOOK.md](/D:/downloads/SeniorProject/Skylink2/autonomy/companion/RUNBOOK.md).
