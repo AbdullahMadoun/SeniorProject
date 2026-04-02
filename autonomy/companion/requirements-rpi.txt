@@ -2,4 +2,4 @@ numpy
 pymavlink
 adafruit-blinka
 adafruit-circuitpython-ads1x15
-
+psutil

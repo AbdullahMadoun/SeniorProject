@@ -103,6 +103,14 @@ Mock mode:
 python D:\downloads\SeniorProject\Skylink2\autonomy\companion\video_logger.py --mock-mavlink --mock-camera --max-frames 10
 ```
 
+Core isolation example:
+
+```powershell
+python D:\downloads\SeniorProject\Skylink2\autonomy\companion\video_logger.py --mock-mavlink --mock-camera --cpu-core 1 --max-frames 10
+```
+
+If `psutil` or host CPU affinity support is unavailable, the logger prints an `[AFFINITY] warning ...` line and continues normally without pinning.
+
 Real hardware mode examples:
 
 ```powershell

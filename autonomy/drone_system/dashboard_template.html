@@ -41,14 +41,17 @@
         radial-gradient(circle at top left, rgba(0, 212, 170, 0.18), transparent 28%),
         radial-gradient(circle at 90% 10%, rgba(83, 183, 255, 0.12), transparent 20%),
         linear-gradient(180deg, #04060a, #090a10 55%, #05070b);
+      overflow: hidden;
     }
     .page {
       width: min(1680px, calc(100% - 24px));
       margin: 12px auto;
+      height: calc(100vh - 24px);
       min-height: calc(100vh - 24px);
       display: grid;
       grid-template-columns: 430px minmax(0, 1fr);
       gap: 18px;
+      overflow: hidden;
     }
     .panel {
       background: linear-gradient(180deg, rgba(18, 18, 26, 0.96), rgba(18, 18, 26, 0.72));
@@ -57,9 +60,24 @@
       box-shadow: var(--shadow);
       backdrop-filter: blur(18px);
       overflow: hidden;
+      min-height: 0;
     }
-    .scroll { padding: 22px; display: grid; gap: 16px; overflow: auto; height: 100%; }
-    .right { display: grid; gap: 18px; grid-template-rows: minmax(380px, 0.95fr) minmax(430px, 1.05fr); }
+    .scroll {
+      padding: 22px;
+      display: grid;
+      gap: 16px;
+      overflow-y: auto;
+      overflow-x: hidden;
+      height: 100%;
+      min-height: 0;
+      scrollbar-gutter: stable;
+    }
+    .right {
+      display: grid;
+      gap: 18px;
+      grid-template-rows: minmax(320px, 0.9fr) minmax(420px, 1.1fr);
+      min-height: 0;
+    }
     .eyebrow { color: var(--accent); text-transform: uppercase; letter-spacing: 0.16em; font-size: 0.72rem; font-weight: 700; }
     h1, h2, h3, p { margin: 0; }
     h1 { font-size: clamp(2rem, 4vw, 3.2rem); line-height: 0.94; letter-spacing: -0.04em; }
@@ -75,6 +93,7 @@
       border-radius: 18px;
       border: 1px solid rgba(255, 255, 255, 0.08);
       background: rgba(255, 255, 255, 0.04);
+      min-width: 0;
     }
     .glass {
       background: rgba(9, 12, 18, 0.7);
@@ -90,11 +109,30 @@
       letter-spacing: 0.08em;
       font-size: 0.72rem;
     }
+    .card strong,
+    .item strong,
+    .terminal-meta strong,
+    .media-card strong,
+    .media-card div,
+    .chip strong,
+    .status-flag strong {
+      display: block;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
     .banner.ok { border-color: rgba(0, 212, 170, 0.42); background: rgba(0, 212, 170, 0.1); }
     .banner.bad { border-color: rgba(255, 107, 122, 0.46); background: rgba(255, 107, 122, 0.12); }
     .field input[type=range] { width: 100%; accent-color: var(--accent); }
     .meta { margin-top: 6px; display: flex; justify-content: space-between; gap: 10px; color: var(--muted); font-size: 0.84rem; }
     .actions, .seg { display: flex; gap: 10px; flex-wrap: wrap; }
+    .action-strip {
+      position: sticky;
+      bottom: -2px;
+      z-index: 8;
+      padding: 10px 0 2px;
+      margin-top: -2px;
+      background: linear-gradient(180deg, rgba(18, 18, 26, 0), rgba(18, 18, 26, 0.94) 26%);
+    }
     button {
       appearance: none;
       border: 1px solid rgba(255, 255, 255, 0.1);
@@ -112,15 +150,16 @@
     button.active, button[data-active="true"] { background: linear-gradient(135deg, rgba(83, 183, 255, 0.2), rgba(0, 212, 170, 0.22)); border-color: rgba(83, 183, 255, 0.42); }
     button:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
     .list { display: grid; gap: 10px; max-height: 220px; overflow: auto; }
-    .item { padding: 14px 16px; border-radius: 16px; border: 1px solid rgba(255, 255, 255, 0.08); background: rgba(255, 255, 255, 0.04); }
+    .item { padding: 14px 16px; border-radius: 16px; border: 1px solid rgba(255, 255, 255, 0.08); background: rgba(255, 255, 255, 0.04); min-width: 0; }
     .terminal { border-radius: 20px; overflow: hidden; border: 1px solid rgba(255, 255, 255, 0.08); background: #020307; }
     .terminal-head {
       padding: 12px 16px;
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: minmax(0, 1.6fr) minmax(140px, 0.8fr);
       gap: 10px;
       border-bottom: 1px solid rgba(255, 255, 255, 0.08);
       background: rgba(255, 255, 255, 0.03);
+      align-items: start;
     }
     .terminal-body {
       min-height: 250px;
@@ -152,6 +191,7 @@
       overflow: hidden;
       border: 1px solid rgba(255, 255, 255, 0.06);
       background: #05070b;
+      min-width: 0;
     }
     #map, #scene { position: absolute; inset: 0; }
     .overlay {
@@ -188,14 +228,24 @@
       right: 16px;
       display: flex;
       justify-content: space-between;
+      align-items: flex-start;
       gap: 12px;
       pointer-events: none;
       z-index: 20;
     }
-    .hud-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; max-width: min(920px, 100%); }
+    .hud-grid {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 10px;
+      flex: 1 1 auto;
+      max-width: min(920px, calc(100% - 410px));
+      min-width: 0;
+    }
+    .legend { flex: 0 0 190px; max-width: 190px; min-width: 0; }
     .legend ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; color: var(--muted); }
     .legend li { display: flex; align-items: center; gap: 8px; }
     .sw { width: 12px; height: 12px; border-radius: 999px; display: inline-block; }
+    .media-card { overflow: hidden; }
     .media-card video { width: 100%; display: block; margin-top: 10px; border-radius: 14px; background: #04060a; }
     .scene-shell::after {
       content: "";
@@ -208,37 +258,55 @@
       position: absolute;
       right: 18px;
       bottom: 18px;
-      width: min(34vw, 430px);
-      min-width: 320px;
-      aspect-ratio: 16 / 9;
+      width: min(31vw, 390px);
+      min-width: min(300px, calc(100% - 36px));
+      max-width: calc(100% - 36px);
+      max-height: calc(100% - 36px);
       z-index: 25;
       overflow: hidden;
       border-radius: 22px;
       pointer-events: auto;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
     }
     .fpv-shell.hidden { display: none; }
     .fpv-header {
-      position: absolute;
-      top: 12px;
-      left: 14px;
-      right: 14px;
+      position: relative;
       z-index: 8;
       display: flex;
       justify-content: space-between;
+      align-items: flex-start;
       gap: 10px;
+      padding: 12px 14px 0;
       font-size: 0.76rem;
       text-transform: uppercase;
       letter-spacing: 0.08em;
       color: rgba(232, 232, 237, 0.88);
+      min-width: 0;
     }
+    .fpv-header span { min-width: 0; overflow-wrap: anywhere; word-break: break-word; }
     .fpv-header span:last-child { color: var(--accent); text-align: right; }
+    .fpv-media {
+      position: relative;
+      min-height: 0;
+      margin: 10px 12px 0;
+      border-radius: 18px;
+      overflow: hidden;
+      background: linear-gradient(180deg, #030408, #091019);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
     .fpv-shell img {
+      position: absolute;
+      inset: 0;
       width: 100%;
       height: 100%;
       object-fit: cover;
-      background: linear-gradient(180deg, #030408, #091019);
       display: block;
       filter: saturate(1.05) contrast(1.06);
+      visibility: hidden;
+      color: transparent;
+      font-size: 0;
+      line-height: 0;
     }
     .fpv-placeholder {
       position: absolute;
@@ -255,9 +323,9 @@
     .fpv-ar { position: absolute; inset: 0; z-index: 6; pointer-events: none; }
     .heading-tape {
       position: absolute;
-      top: 46px;
-      left: 18px;
-      right: 18px;
+      top: 12px;
+      left: 12px;
+      right: 12px;
       height: 42px;
       overflow: hidden;
       border-radius: 999px;
@@ -289,7 +357,7 @@
     .heading-mark strong { display: block; margin-top: 6px; font-size: 0.8rem; color: #ffffff; }
     .horizon-frame {
       position: absolute;
-      inset: 96px 18px 52px 18px;
+      inset: 64px 12px 18px 12px;
       border-radius: 20px;
       overflow: hidden;
       border: 1px solid rgba(255, 255, 255, 0.08);
@@ -346,34 +414,23 @@
       background: rgba(0, 212, 170, 0.08);
     }
     .fpv-bottom {
-      position: absolute;
-      left: 14px;
-      right: 14px;
-      bottom: 12px;
-      display: flex;
-      justify-content: space-between;
+      position: relative;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 12px;
+      padding: 12px;
+      background: linear-gradient(180deg, rgba(10, 12, 18, 0.28), rgba(10, 12, 18, 0.72));
       font-size: 0.76rem;
-      color: rgba(232, 232, 237, 0.92);
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-    }
-    .fpv-bottom strong {
-      display: block;
-      margin-top: 4px;
-      font-size: 0.88rem;
-      color: #fff;
-      letter-spacing: 0;
-      text-transform: none;
     }
     .status-flag {
-      display: inline-flex;
-      align-items: center;
+      display: flex;
+      align-items: flex-start;
       gap: 8px;
-      padding: 8px 12px;
-      border-radius: 999px;
+      padding: 10px 12px;
+      border-radius: 16px;
       background: rgba(255, 255, 255, 0.06);
       border: 1px solid rgba(255, 255, 255, 0.08);
+      min-width: 0;
     }
     .status-flag::before {
       content: "";
@@ -386,6 +443,27 @@
     .status-flag.alert::before {
       background: var(--danger);
       box-shadow: 0 0 10px rgba(255, 107, 122, 0.6);
+    }
+    .status-copy {
+      min-width: 0;
+      display: grid;
+      gap: 4px;
+    }
+    .status-copy span {
+      color: rgba(232, 232, 237, 0.92);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+    .status-copy strong {
+      display: block;
+      font-size: 0.88rem;
+      color: #fff;
+      letter-spacing: 0;
+      text-transform: none;
+      overflow-wrap: anywhere;
+      word-break: break-word;
     }
     .chip {
       display: inline-flex;
@@ -401,14 +479,25 @@
       letter-spacing: 0.08em;
     }
     .chip strong { color: var(--text); letter-spacing: 0; text-transform: none; }
-    @media (max-width: 1480px) { .hud-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } .fpv-shell { width: min(38vw, 390px); } }
-    @media (max-width: 1320px) { .page { grid-template-columns: 1fr; } .right { grid-template-rows: 500px 620px; } .fpv-shell { width: min(54vw, 420px); } }
+    @media (max-width: 1480px) {
+      .hud-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); max-width: calc(100% - 360px); }
+      .fpv-shell { width: min(36vw, 370px); }
+    }
+    @media (max-width: 1320px) {
+      body { overflow-y: auto; }
+      .page { grid-template-columns: 1fr; height: auto; min-height: calc(100vh - 24px); }
+      .right { grid-template-rows: 500px 640px; }
+      .hud-grid { max-width: calc(100% - 320px); }
+      .fpv-shell { width: min(54vw, 380px); }
+    }
     @media (max-width: 860px) {
       .page { width: min(100% - 12px, 1680px); margin: 8px auto; }
       .grid2, .grid3, .grid4, .terminal-head, .hud-grid { grid-template-columns: 1fr; }
       .hud-wrap { position: static; padding: 12px; flex-direction: column; pointer-events: auto; }
       .scene-shell { height: auto; min-height: 760px; }
-      .fpv-shell { left: 12px; right: 12px; bottom: 12px; width: auto; min-width: 0; }
+      .legend { max-width: none; }
+      .fpv-shell { left: 12px; right: 12px; bottom: 12px; width: auto; min-width: 0; max-width: none; }
+      .fpv-bottom { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -430,6 +519,13 @@
           <div class="field"><label>Mission Altitude</label><input id="alt" type="range" min="5" max="100" step="1" value="10"><div class="meta"><span>Altitude AGL</span><strong id="alt-v">10 m</strong></div></div>
           <div class="field"><label>Cruise Speed</label><input id="speed" type="range" min="3" max="7" step="0.1" value="5"><div class="meta"><span>Mission Cruise</span><strong id="speed-v">5.0 m/s</strong></div></div>
         </div>
+        <div class="card">
+          <label>Simulation Profile</label>
+          <div class="seg">
+            <button class="weather-mode active" data-weather-mode="proof">Proof RTL</button>
+            <button class="weather-mode" data-weather-mode="full_trip">Full Trip</button>
+          </div>
+        </div>
         <div id="banner" class="banner"><strong id="banner-t">Waiting for mission geometry</strong><div id="banner-d">Add at least two waypoints inside the geofence to unlock execution.</div></div>
         <div class="grid3">
           <div class="card"><label>Geofence</label><strong id="c-geofence">pending</strong></div>
@@ -440,9 +536,21 @@
         <div class="field"><label>Wind Speed</label><input id="wind" type="range" min="0" max="12" step="0.1" value="3.2"><div class="meta"><span>Initial world wind</span><strong id="wind-v">3.2 m/s</strong></div></div>
         <div class="field"><label>Wind Direction</label><input id="dir" type="range" min="0" max="359" step="1" value="45"><div class="meta"><span>0 north, 90 east</span><strong id="dir-v">45 deg</strong></div></div>
         <div class="field"><label>Gust Multiplier</label><input id="gust" type="range" min="1" max="2.5" step="0.01" value="1.31"><div class="meta"><span>Dynamic weather trigger</span><strong id="gust-v">1.31x</strong></div></div>
-        <div class="field"><label>Starting Battery</label><input id="battery" type="range" min="10" max="100" step="1" value="100"><div class="meta"><span>SITL battery injection</span><strong id="battery-v">100%</strong></div></div>
-        <div class="field"><label>RTL Battery Threshold</label><input id="rtl" type="range" min="5" max="50" step="1" value="20"><div class="meta"><span>PX4 critical threshold</span><strong id="rtl-v">20%</strong></div></div>
-        <div class="actions"><button id="launch" class="primary" disabled>Launch Live Simulator</button><button id="reload">Reload Latest Evidence</button></div>
+        <div class="grid2">
+          <div class="field"><label>Starting Battery</label><input id="battery" type="range" min="10" max="100" step="1" value="100"><div class="meta"><span>SITL battery injection</span><strong id="battery-v">100%</strong></div></div>
+          <div class="field"><label>Warn Threshold</label><input id="warn" type="range" min="12" max="50" step="1" value="25"><div class="meta"><span>PX4 low threshold</span><strong id="warn-v">25%</strong></div></div>
+          <div class="field"><label>RTL Battery Threshold</label><input id="rtl" type="range" min="5" max="50" step="1" value="20"><div class="meta"><span>PX4 critical threshold</span><strong id="rtl-v">20%</strong></div></div>
+          <div class="field"><label>Emergency Threshold</label><input id="emergency" type="range" min="3" max="50" step="1" value="18"><div class="meta"><span>PX4 land threshold</span><strong id="emergency-v">18%</strong></div></div>
+        </div>
+        <div class="card">
+          <label>Low Battery Action</label>
+          <div class="seg">
+            <button class="battery-action" data-battery-action="warning">Warn</button>
+            <button class="battery-action" data-battery-action="land">Land</button>
+            <button class="battery-action active" data-battery-action="return">RTL</button>
+          </div>
+        </div>
+        <div class="actions action-strip"><button id="launch" class="primary" disabled>Launch Live Simulator</button><button id="reload">Reload Latest Evidence</button></div>
         <div class="grid2"><div class="chip"><span>FPV Mode</span><strong id="fpv-mode-summary">simulation</strong></div><div class="chip"><span>Load State</span><strong id="load-state">Nominal</strong></div></div>
         <div class="terminal"><div class="terminal-head"><div class="terminal-meta"><label>Target</label><strong id="target">udpin://0.0.0.0:14540</strong></div><div class="terminal-meta"><label>Status</label><strong id="status">Bridge Active</strong></div></div><div id="term" class="terminal-body"></div></div>
         <div id="media" class="list"></div>
@@ -460,12 +568,18 @@
           <div class="hud-wrap"><div class="hud-grid"><div class="hud"><label>Altitude</label><strong id="h-alt">0.0 m</strong></div><div class="hud"><label>Speed</label><strong id="h-speed">0.0 m/s</strong></div><div class="hud"><label>Mode</label><strong id="h-mode">idle</strong></div><div class="hud"><label>Battery</label><strong id="h-battery">n/a</strong></div><div class="hud"><label>Dock Error</label><strong id="h-dock">0.00 m</strong></div><div class="hud"><label>Wind Load</label><strong id="h-load">0%</strong></div></div><div class="hud legend"><label>Trail Legend</label><ul><li><span class="sw" style="background:#53b7ff"></span>Replay Context</li><li><span class="sw" style="background:#00d4aa"></span>Live Ribbon Core</li><li><span class="sw" style="background:#ff6b7a"></span>High Wind Resistance</li></ul></div></div>
           <div id="fpv-shell" class="fpv-shell glass hidden">
             <div class="fpv-header"><span>FPV Camera</span><span id="fpv-status">Awaiting stream</span></div>
-            <img id="fpv-feed" alt="Live FPV MJPEG stream">
-            <div class="fpv-placeholder"><div><strong style="display:block;margin-bottom:10px">FPV stream offline</strong><div id="fpv-placeholder-text">Enable the companion MJPEG stream or point the dashboard proxy at the Raspberry Pi companion host.</div></div></div>
-            <div class="fpv-ar">
-              <div class="heading-tape"><div id="heading-track" class="heading-track"></div><div class="heading-center"></div></div>
-              <div class="horizon-frame"><div id="horizon-roll" class="horizon-roll"><div id="horizon-pitch" class="horizon-pitch"><div class="sky"></div><div class="earth"></div><div id="pitch-ladder" class="pitch-ladder"></div></div></div><div class="horizon-center"><span></span></div></div>
-              <div class="fpv-bottom"><div class="status-flag" id="fpv-flag">Heading<strong id="fpv-heading">000 deg</strong></div><div class="status-flag" id="stress-flag">Pitch / Roll<strong id="fpv-attitude">0.0 / 0.0 deg</strong></div><div class="status-flag" id="load-flag">Stress<strong id="fpv-stress">0%</strong></div></div>
+            <div class="fpv-media">
+              <img id="fpv-feed" alt="Live FPV MJPEG stream">
+              <div class="fpv-placeholder"><div><strong style="display:block;margin-bottom:10px">FPV stream offline</strong><div id="fpv-placeholder-text">Enable the companion MJPEG stream or point the dashboard proxy at the Raspberry Pi companion host.</div></div></div>
+              <div class="fpv-ar">
+                <div class="heading-tape"><div id="heading-track" class="heading-track"></div><div class="heading-center"></div></div>
+                <div class="horizon-frame"><div id="horizon-roll" class="horizon-roll"><div id="horizon-pitch" class="horizon-pitch"><div class="sky"></div><div class="earth"></div><div id="pitch-ladder" class="pitch-ladder"></div></div></div><div class="horizon-center"><span></span></div></div>
+              </div>
+            </div>
+            <div class="fpv-bottom">
+              <div class="status-flag" id="fpv-flag"><div class="status-copy"><span>Heading</span><strong id="fpv-heading">000 deg</strong></div></div>
+              <div class="status-flag" id="stress-flag"><div class="status-copy"><span>Pitch / Roll</span><strong id="fpv-attitude">0.0 / 0.0 deg</strong></div></div>
+              <div class="status-flag" id="load-flag"><div class="status-copy"><span>Stress</span><strong id="fpv-stress">0%</strong></div></div>
             </div>
           </div>
         </div>
@@ -488,10 +602,10 @@
     const dock = replay.simulation?.dock_target || { north_m: 0, east_m: 0, down_m: 0 };
     const fpvCfg = base.visualization?.fpv || { enabled: false, source_url: "", proxy_url: "/api/fpv/stream", mode: "simulation" };
     const cinematicCfg = base.visualization?.cinematic || { redline_pitch_deg: 15.0, redline_roll_deg: 15.0 };
-    const S = { waypoints: [], valid: false, locked: false, cam: "follow", cinematic: false, job: null, log: null, tel: null, last: null, liveFrames: [], liveFrameLimit: 1200, potholePulse: null };
+    const S = { waypoints: [], valid: false, locked: false, cam: "follow", cinematic: false, job: null, log: null, tel: null, last: null, liveFrames: [], liveFrameLimit: 1200, potholePulse: null, weatherMode: "proof", lowBatteryAction: "return" };
     const $ = (id) => document.getElementById(id);
     const E = {
-      alt: $("alt"), speed: $("speed"), wind: $("wind"), dir: $("dir"), gust: $("gust"), battery: $("battery"), rtl: $("rtl"), launch: $("launch"), reload: $("reload"), undo: $("undo"), clear: $("clear"), term: $("term"), waypoints: $("waypoints"), banner: $("banner"), bannerT: $("banner-t"), bannerD: $("banner-d"), cGeo: $("c-geofence"), cWp: $("c-waypoints"), cAlt: $("c-altitude"), mapText: $("map-text"), mapLive: $("map-live"), target: $("target"), status: $("status"), mGeo: $("m-geofence"), mHome: $("m-home"), mDock: $("m-dock"), mProof: $("m-proof"), mapMode: $("map-mode"), mapBattery: $("map-battery"), mapSats: $("map-sats"), mapLoad: $("map-load"), hAlt: $("h-alt"), hSpeed: $("h-speed"), hMode: $("h-mode"), hBattery: $("h-battery"), hDock: $("h-dock"), hLoad: $("h-load"), media: $("media"), fpvModeSummary: $("fpv-mode-summary"), loadState: $("load-state"), cinematicToggle: $("cinematic-toggle"), fpvShell: $("fpv-shell"), fpvFeed: $("fpv-feed"), fpvStatus: $("fpv-status"), fpvPlaceholderText: $("fpv-placeholder-text"), headingTrack: $("heading-track"), horizonRoll: $("horizon-roll"), horizonPitch: $("horizon-pitch"), pitchLadder: $("pitch-ladder"), fpvHeading: $("fpv-heading"), fpvAttitude: $("fpv-attitude"), fpvStress: $("fpv-stress"), fpvFlag: $("fpv-flag"), stressFlag: $("stress-flag"), loadFlag: $("load-flag") };
+      alt: $("alt"), speed: $("speed"), wind: $("wind"), dir: $("dir"), gust: $("gust"), battery: $("battery"), warn: $("warn"), rtl: $("rtl"), emergency: $("emergency"), launch: $("launch"), reload: $("reload"), undo: $("undo"), clear: $("clear"), term: $("term"), waypoints: $("waypoints"), banner: $("banner"), bannerT: $("banner-t"), bannerD: $("banner-d"), cGeo: $("c-geofence"), cWp: $("c-waypoints"), cAlt: $("c-altitude"), mapText: $("map-text"), mapLive: $("map-live"), target: $("target"), status: $("status"), mGeo: $("m-geofence"), mHome: $("m-home"), mDock: $("m-dock"), mProof: $("m-proof"), mapMode: $("map-mode"), mapBattery: $("map-battery"), mapSats: $("map-sats"), mapLoad: $("map-load"), hAlt: $("h-alt"), hSpeed: $("h-speed"), hMode: $("h-mode"), hBattery: $("h-battery"), hDock: $("h-dock"), hLoad: $("h-load"), media: $("media"), fpvModeSummary: $("fpv-mode-summary"), loadState: $("load-state"), cinematicToggle: $("cinematic-toggle"), fpvShell: $("fpv-shell"), fpvFeed: $("fpv-feed"), fpvStatus: $("fpv-status"), fpvPlaceholderText: $("fpv-placeholder-text"), headingTrack: $("heading-track"), horizonRoll: $("horizon-roll"), horizonPitch: $("horizon-pitch"), pitchLadder: $("pitch-ladder"), fpvHeading: $("fpv-heading"), fpvAttitude: $("fpv-attitude"), fpvStress: $("fpv-stress"), fpvFlag: $("fpv-flag"), stressFlag: $("stress-flag"), loadFlag: $("load-flag") };
     const fmt = (value, digits = 1) => Number(value || 0).toFixed(digits);
     const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
     const modeText = (mode) => (mode || "idle").replaceAll("_", " ");
@@ -499,9 +613,12 @@
     const ned = (lat, lon) => ({ north_m: (lat - home.lat) * 111320, east_m: (lon - home.lon) * 111320 * Math.cos(home.lat * Math.PI / 180) });
     function normalizeHeading(heading) { const raw = Number(heading || 0); return ((raw % 360) + 360) % 360; }
     function modeColor(mode) { if (mode === "return_to_launch") return 0xffb454; if (mode === "land" || mode === "dock") return 0x00d4aa; return 0x53b7ff; }
-    function sliderText() { $("alt-v").textContent = `${fmt(E.alt.value, 0)} m`; $("speed-v").textContent = `${fmt(E.speed.value)} m/s`; $("wind-v").textContent = `${fmt(E.wind.value)} m/s`; $("dir-v").textContent = `${fmt(E.dir.value, 0)} deg`; $("gust-v").textContent = `${fmt(E.gust.value, 2)}x`; $("battery-v").textContent = `${fmt(E.battery.value, 0)}%`; $("rtl-v").textContent = `${fmt(E.rtl.value, 0)}%`; }
+    function sliderText() { $("alt-v").textContent = `${fmt(E.alt.value, 0)} m`; $("speed-v").textContent = `${fmt(E.speed.value)} m/s`; $("wind-v").textContent = `${fmt(E.wind.value)} m/s`; $("dir-v").textContent = `${fmt(E.dir.value, 0)} deg`; $("gust-v").textContent = `${fmt(E.gust.value, 2)}x`; $("battery-v").textContent = `${fmt(E.battery.value, 0)}%`; $("warn-v").textContent = `${fmt(E.warn.value, 0)}%`; $("rtl-v").textContent = `${fmt(E.rtl.value, 0)}%`; $("emergency-v").textContent = `${fmt(E.emergency.value, 0)}%`; }
+    function setSegmentValue(selector, dataName, value) { document.querySelectorAll(selector).forEach((button) => button.classList.toggle("active", button.dataset[dataName] === value)); }
+    function setWeatherMode(mode) { S.weatherMode = mode; setSegmentValue(".weather-mode", "weatherMode", mode); }
+    function setLowBatteryAction(action) { S.lowBatteryAction = action; setSegmentValue(".battery-action", "batteryAction", action); }
     function buildPayload() {
-      return { mission_id: "dashboard-live-mission", cruise_speed_mps: Number(E.speed.value), waypoints: S.waypoints.map((waypoint) => ({ north_m: waypoint.north_m, east_m: waypoint.east_m, altitude_m: waypoint.altitude_m })), environment: { wind_speed_mps: Number(E.wind.value), wind_direction_deg: Number(E.dir.value), gust_multiplier: Number(E.gust.value) }, battery: { initial_battery_percent: Number(E.battery.value), rtl_battery_threshold_percent: Number(E.rtl.value) } };
+      return { mission_id: "dashboard-live-mission", cruise_speed_mps: Number(E.speed.value), weather_profile_mode: S.weatherMode, waypoints: S.waypoints.map((waypoint) => ({ north_m: waypoint.north_m, east_m: waypoint.east_m, altitude_m: waypoint.altitude_m })), environment: { wind_speed_mps: Number(E.wind.value), wind_direction_deg: Number(E.dir.value), gust_multiplier: Number(E.gust.value) }, battery: { initial_battery_percent: Number(E.battery.value), warn_battery_threshold_percent: Number(E.warn.value), rtl_battery_threshold_percent: Number(E.rtl.value), emergency_battery_threshold_percent: Number(E.emergency.value), low_battery_action: S.lowBatteryAction } };
     }
     function log(message, className = "") { const node = document.createElement("div"); node.className = className; node.textContent = message; E.term.appendChild(node); E.term.scrollTop = E.term.scrollHeight; }
     function setBanner(ok, title, detail, geofenceState, waypointState, altitudeState) { E.banner.className = `banner ${ok ? "ok" : "bad"}`; E.bannerT.textContent = title; E.bannerD.textContent = detail; E.cGeo.textContent = geofenceState; E.cWp.textContent = waypointState; E.cAlt.textContent = altitudeState; S.valid = ok; E.launch.disabled = !ok || S.locked; }
@@ -544,7 +661,11 @@
       E.dir.value = String(payload.default_environment.wind_direction_deg);
       E.gust.value = String(payload.default_environment.gust_multiplier);
       E.battery.value = String(payload.default_battery.initial_battery_percent);
+      E.warn.value = String(payload.default_battery.warn_battery_threshold_percent);
       E.rtl.value = String(payload.default_battery.rtl_battery_threshold_percent);
+      E.emergency.value = String(payload.default_battery.emergency_battery_threshold_percent);
+      setWeatherMode(payload.default_simulation?.weather_profile_mode || "proof");
+      setLowBatteryAction(payload.default_battery.low_battery_action || "return");
       E.fpvModeSummary.textContent = payload.fpv?.mode || fpvCfg.mode || "simulation";
       sliderText();
     }
@@ -571,7 +692,10 @@
     E.mProof.textContent = replay.dock?.proof_status || replay.summary?.dock_proof_status || "idle";
     renderMedia(replay.media || []);
     const map = L.map("map").setView([home.lat, home.lon], 18);
-    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", { maxZoom: 20, subdomains: "abcd", attribution: "&copy; OpenStreetMap contributors &copy; CARTO" }).addTo(map);
+    L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+      maxZoom: 20,
+      attribution: "Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community",
+    }).addTo(map);
     const homeIcon = L.divIcon({ className: "", html: '<div class="home-icon"></div>', iconSize: [20, 20], iconAnchor: [10, 10] });
     const droneIcon = L.divIcon({ className: "", html: '<div class="drone-icon"></div>', iconSize: [20, 20], iconAnchor: [10, 10] });
     const waypointIcon = L.divIcon({ className: "", html: '<div class="wp-icon"></div>', iconSize: [16, 16], iconAnchor: [8, 8] });
@@ -886,8 +1010,9 @@
       const url = sourceUrl ? `${proxyUrl}?source_url=${encodeURIComponent(sourceUrl)}` : proxyUrl;
       E.fpvPlaceholderText.textContent = `Proxy source: ${sourceUrl || "dashboard local stream"}`;
       E.fpvStatus.textContent = "Connecting";
-      E.fpvFeed.addEventListener("load", () => { E.fpvShell.classList.add("live"); E.fpvStatus.textContent = `${config.mode || "simulation"} live`; });
-      E.fpvFeed.addEventListener("error", () => { E.fpvShell.classList.remove("live"); E.fpvStatus.textContent = "Stream unavailable"; });
+      E.fpvFeed.style.visibility = "hidden";
+      E.fpvFeed.addEventListener("load", () => { E.fpvFeed.style.visibility = "visible"; E.fpvShell.classList.add("live"); E.fpvStatus.textContent = `${config.mode || "simulation"} live`; });
+      E.fpvFeed.addEventListener("error", () => { E.fpvFeed.style.visibility = "hidden"; E.fpvShell.classList.remove("live"); E.fpvStatus.textContent = "Stream unavailable"; });
       E.fpvFeed.src = url;
     }
     function renderPotholePulse() {
@@ -967,8 +1092,11 @@
       });
     });
     E.cinematicToggle.addEventListener("click", () => { S.cinematic = !S.cinematic; E.cinematicToggle.classList.toggle("active", S.cinematic); E.cinematicToggle.dataset.active = String(S.cinematic); });
-    [E.alt, E.speed, E.wind, E.dir, E.gust, E.battery, E.rtl].forEach((element) => element.addEventListener("input", sliderText));
+    [E.alt, E.speed, E.wind, E.dir, E.gust, E.battery, E.warn, E.rtl, E.emergency].forEach((element) => element.addEventListener("input", sliderText));
+    document.querySelectorAll(".weather-mode").forEach((button) => button.addEventListener("click", async () => { if (S.locked) return; setWeatherMode(button.dataset.weatherMode || "proof"); await validateMission(); }));
+    document.querySelectorAll(".battery-action").forEach((button) => button.addEventListener("click", async () => { if (S.locked) return; setLowBatteryAction(button.dataset.batteryAction || "return"); await validateMission(); }));
     E.alt.addEventListener("input", async () => { S.waypoints = S.waypoints.map((waypoint) => ({ ...waypoint, altitude_m: Number(E.alt.value) })); await validateMission(); });
+    [E.wind, E.dir, E.gust, E.battery, E.warn, E.rtl, E.emergency].forEach((element) => element.addEventListener("change", validateMission));
     E.launch.addEventListener("click", launchMission);
     E.reload.addEventListener("click", refreshArtifacts);
     E.undo.addEventListener("click", async () => { if (S.locked) return; S.waypoints.pop(); await validateMission(); });

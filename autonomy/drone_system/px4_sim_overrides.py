@@ -7,7 +7,12 @@ from typing import Any
 from xml.etree import ElementTree
 
 from .config import SystemBaseline
-from .interactive_mission import InteractiveMissionSpec
+from .interactive_mission import (
+    InteractiveMissionSpec,
+    LOW_BATTERY_ACTION_LAND,
+    LOW_BATTERY_ACTION_RETURN,
+    LOW_BATTERY_ACTION_WARNING,
+)
 
 
 @dataclass(frozen=True)
@@ -17,16 +22,29 @@ class Px4SimOverridePlan:
     wind_speed_mps: float
     wind_direction_deg: float
     gust_multiplier: float
+    weather_profile_mode: str
+    low_battery_action: str
     wind_vector_enu_mps: tuple[float, float, float]
+
+
+def low_battery_action_to_px4(action: str) -> int:
+    normalized = action.strip().lower()
+    if normalized == LOW_BATTERY_ACTION_WARNING:
+        return 0
+    if normalized == LOW_BATTERY_ACTION_LAND:
+        return 2
+    if normalized == LOW_BATTERY_ACTION_RETURN:
+        return 3
+    raise ValueError(f"Unsupported low battery action: {action}")
 
 
 def build_px4_sim_override_plan(
     spec: InteractiveMissionSpec,
     baseline: SystemBaseline,
 ) -> Px4SimOverridePlan:
+    warning_threshold_norm = max(0.12, min(0.5, spec.battery.warn_battery_threshold_percent / 100.0))
     rtl_threshold_norm = max(0.05, min(0.5, spec.battery.rtl_battery_threshold_percent / 100.0))
-    emergency_threshold_norm = max(0.05, min(rtl_threshold_norm - 0.02, rtl_threshold_norm))
-    warning_threshold_norm = min(0.99, max(rtl_threshold_norm + 0.05, rtl_threshold_norm))
+    emergency_threshold_norm = max(0.03, min(0.5, spec.battery.emergency_battery_threshold_percent / 100.0))
     wind_vector_enu_mps = wind_direction_to_enu(
         speed_mps=spec.environment.wind_speed_mps,
         direction_deg=spec.environment.wind_direction_deg,
@@ -39,11 +57,13 @@ def build_px4_sim_override_plan(
             "BAT_EMERGEN_THR": emergency_threshold_norm,
         },
         int_params={
-            "COM_LOW_BAT_ACT": 3,
+            "COM_LOW_BAT_ACT": low_battery_action_to_px4(spec.battery.low_battery_action),
         },
         wind_speed_mps=spec.environment.wind_speed_mps,
         wind_direction_deg=spec.environment.wind_direction_deg,
         gust_multiplier=spec.environment.gust_multiplier,
+        weather_profile_mode=spec.weather_profile_mode,
+        low_battery_action=spec.battery.low_battery_action,
         wind_vector_enu_mps=wind_vector_enu_mps,
     )
 

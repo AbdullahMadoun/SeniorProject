@@ -1,32 +1,38 @@
 {
   "system_address": "udpin://0.0.0.0:14540",
   "connect_timeout_s": 15.0,
-  "mission_id": "dashboard-http-smoke-buffered",
-  "waypoint_count": 3,
+  "mission_id": "dashboard-live-mission",
+  "waypoint_count": 4,
   "planner_waypoints_local": [
     {
       "index": 0,
       "north_m": 0.0,
       "east_m": 0.0,
-      "altitude_m": 10.0
+      "altitude_m": 5.0
     },
     {
       "index": 1,
       "north_m": 18.0,
       "east_m": 12.0,
-      "altitude_m": 10.0
+      "altitude_m": 5.0
     },
     {
       "index": 2,
       "north_m": 28.0,
       "east_m": -8.0,
-      "altitude_m": 10.0
+      "altitude_m": 5.0
+    },
+    {
+      "index": 3,
+      "north_m": -11.534920993813387,
+      "east_m": -8.684784960527011,
+      "altitude_m": 5.0
     }
   ],
   "simulator_overrides": {
     "plan": {
       "float_params": {
-        "SIM_BAT_MIN_PCT": 97.0,
+        "SIM_BAT_MIN_PCT": 100.0,
         "BAT_LOW_THR": 0.25,
         "BAT_CRIT_THR": 0.2,
         "BAT_EMERGEN_THR": 0.18000000000000002
@@ -34,20 +40,20 @@
       "int_params": {
         "COM_LOW_BAT_ACT": 3
       },
-      "wind_speed_mps": 3.8,
-      "wind_direction_deg": 60.0,
-      "gust_multiplier": 1.38,
+      "wind_speed_mps": 3.2,
+      "wind_direction_deg": 45.0,
+      "gust_multiplier": 1.31,
       "wind_vector_enu_mps": {
-        "east_mps": 3.2909,
-        "north_mps": 1.9,
+        "east_mps": 2.2627,
+        "north_mps": 2.2627,
         "up_mps": 0.0
       }
     },
     "applied_parameters": {
       "SIM_BAT_MIN_PCT": {
         "param_type": "float",
-        "desired_value": 97.0,
-        "applied_value": 97.0
+        "desired_value": 100.0,
+        "applied_value": 100.0
       },
       "BAT_LOW_THR": {
         "param_type": "float",
@@ -78,9 +84,9 @@
     "mode": "hold",
     "battery_percent": 100.0,
     "position": {
-      "lat": 47.3979709,
-      "lon": 8.5461639,
-      "alt_m": 0.003000000026077032
+      "lat": 47.3979712,
+      "lon": 8.546164,
+      "alt_m": -0.0020000000949949026
     },
     "mission_progress": {
       "current": 0,
@@ -88,16 +94,16 @@
     }
   },
   "initial_local_pose": {
-    "north_m": 0.007996819913387299,
-    "east_m": -0.010343922302126884,
-    "down_m": 0.04590977728366852,
-    "yaw_deg": 97.76062774658203,
-    "roll_deg": 0.16014930605888367,
-    "pitch_deg": -0.34964966773986816
+    "north_m": 0.004866446368396282,
+    "east_m": -0.03675159066915512,
+    "down_m": -0.06320010125637054,
+    "yaw_deg": 97.86279296875,
+    "roll_deg": 0.18446624279022217,
+    "pitch_deg": -0.3463323414325714
   },
   "mission_phase_snapshots": [
     {
-      "t_s": 1643521.687,
+      "t_s": 1674070.875,
       "snapshot": {
         "connected": true,
         "armed": true,
@@ -107,7 +113,7 @@
         "position": {
           "lat": 47.3979712,
           "lon": 8.5461637,
-          "alt_m": 0.0
+          "alt_m": -0.0020000000949949026
         },
         "mission_progress": {
           "current": 0,
@@ -115,78 +121,78 @@
         }
       },
       "local_pose": {
-        "north_m": 0.07496313005685806,
-        "east_m": 0.04446382820606232,
-        "down_m": -6.561620235443115,
-        "yaw_deg": 97.7314224243164,
-        "roll_deg": 1.4846845865249634,
-        "pitch_deg": 1.6495155096054077
+        "north_m": 0.13060958683490753,
+        "east_m": 0.05360516160726547,
+        "down_m": -4.584095478057861,
+        "yaw_deg": 96.94371032714844,
+        "roll_deg": -7.649145603179932,
+        "pitch_deg": -5.7282185554504395
       },
       "attitude_euler": {
-        "roll_deg": 1.4846845865249634,
-        "pitch_deg": 1.6495155096054077,
-        "yaw_deg": 97.7314224243164
+        "roll_deg": -7.649145603179932,
+        "pitch_deg": -5.7282185554504395,
+        "yaw_deg": 96.94371032714844
       }
     },
     {
-      "t_s": 1643527.796,
+      "t_s": 1674076.187,
       "local_pose": {
-        "north_m": 0.06748872995376587,
-        "east_m": 0.04515557363629341,
-        "down_m": -6.93112325668335,
-        "yaw_deg": 97.7412109375,
-        "roll_deg": 1.4013516902923584,
-        "pitch_deg": 1.7718294858932495
+        "north_m": 0.21509981155395508,
+        "east_m": 0.12483321875333786,
+        "down_m": -4.690706253051758,
+        "yaw_deg": 94.97073364257812,
+        "roll_deg": -13.173674583435059,
+        "pitch_deg": -7.527492046356201
       },
       "attitude_euler": {
-        "roll_deg": 1.4013516902923584,
-        "pitch_deg": 1.7718294858932495,
-        "yaw_deg": 97.7412109375
+        "roll_deg": -13.173674583435059,
+        "pitch_deg": -7.527492046356201,
+        "yaw_deg": 94.97073364257812
       },
-      "horizontal_distance_to_dock_m": 0.0812019365606206,
+      "horizontal_distance_to_dock_m": 0.2486991383878635,
       "snapshot": {
         "connected": true,
         "armed": true,
         "in_air": true,
         "mode": "mission",
-        "battery_percent": 97.0,
+        "battery_percent": 100.0,
         "position": {
-          "lat": 47.3979715,
-          "lon": 8.5461644,
-          "alt_m": 8.009000778198242
+          "lat": 47.3979754,
+          "lon": 8.546168399999999,
+          "alt_m": 4.744000434875488
         },
         "mission_progress": {
-          "current": 0,
-          "total": 0
+          "current": 2,
+          "total": 4
         }
       }
     },
     {
-      "t_s": 1643534.89,
+      "t_s": 1674087.859,
       "local_pose": {
-        "north_m": 16.252256393432617,
-        "east_m": 10.916303634643555,
-        "down_m": -10.01971435546875,
-        "yaw_deg": 30.88903045654297,
-        "roll_deg": -8.46548843383789,
-        "pitch_deg": 6.164200305938721
+        "north_m": 25.538837432861328,
+        "east_m": -3.162835121154785,
+        "down_m": -4.9460859298706055,
+        "yaw_deg": -62.41250991821289,
+        "roll_deg": -2.8358073234558105,
+        "pitch_deg": 4.7691121101379395
       },
       "attitude_euler": {
-        "roll_deg": -8.46548843383789,
-        "pitch_deg": 6.164200305938721,
-        "yaw_deg": 30.88903045654297
+        "roll_deg": -2.8358073234558105,
+        "pitch_deg": 4.7691121101379395,
+        "yaw_deg": -62.41250991821289
       },
-      "horizontal_distance_to_dock_m": 19.57808782597533,
+      "horizontal_distance_to_dock_m": 25.733941466975658,
       "snapshot": {
         "connected": true,
         "armed": true,
         "in_air": true,
         "mode": "mission",
-        "battery_percent": 97.0,
+        "battery_percent": 100.0,
         "position": {
-          "lat": 47.398120999999996,
-          "lon": 8.5463107,
-          "alt_m": 10.022000312805176
+          "lat": 47.398204799999995,
+          "lon": 8.5461114,
+          "alt_m": 4.914000034332275
         },
         "mission_progress": {
           "current": 0,
@@ -200,11 +206,11 @@
     "armed": true,
     "in_air": true,
     "mode": "return_to_launch",
-    "battery_percent": 97.0,
+    "battery_percent": 100.0,
     "position": {
-      "lat": 47.3979733,
-      "lon": 8.5461627,
-      "alt_m": 25.238000869750977
+      "lat": 47.397970199999996,
+      "lon": 8.5461621,
+      "alt_m": 17.17300033569336
     },
     "mission_progress": {
       "current": 0,
@@ -212,12 +218,12 @@
     }
   },
   "after_rtl_local_pose": {
-    "north_m": 0.052599214017391205,
-    "east_m": -0.10023040324449539,
-    "down_m": -11.150605201721191,
-    "yaw_deg": 97.84117889404297,
-    "roll_deg": 1.5008959770202637,
-    "pitch_deg": 1.518712043762207
+    "north_m": 0.019682539626955986,
+    "east_m": -0.06258560717105865,
+    "down_m": -3.275759220123291,
+    "yaw_deg": 97.84420776367188,
+    "roll_deg": 1.8132988214492798,
+    "pitch_deg": 0.7698174118995667
   },
   "weather_validation_path": "D:\\downloads\\SeniorProject\\Skylink2\\artifacts\\live_px4\\latest_live_weather_validation.json",
   "weather_triggered_action": "return_to_launch"

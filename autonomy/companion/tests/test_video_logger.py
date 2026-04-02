@@ -8,6 +8,7 @@ import threading
 import time
 import urllib.request
 import unittest
+from unittest.mock import patch
 
 
 AUTONOMY_ROOT = Path(__file__).resolve().parents[2]
@@ -82,6 +83,22 @@ class VideoLoggerTests(unittest.TestCase):
             summary = result_holder["summary"]
             self.assertTrue(summary["stream"]["enabled"])
             self.assertTrue(summary["stream"]["url"])
+
+    def test_video_logger_applies_configured_cpu_affinity(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = Path(tmp)
+            config = VideoLoggerConfig(
+                output_dir=output_dir,
+                max_frames=2,
+                frame_interval_s=0.01,
+                use_mock_mavlink=True,
+                use_mock_camera=True,
+                cpu_core=1,
+            )
+            with patch("autonomy.companion.video_logger.enforce_cpu_affinity") as enforce_mock:
+                VideoLoggerService(config).run()
+
+            enforce_mock.assert_called_once_with(1, label="video_logger")
 
 
 if __name__ == "__main__":

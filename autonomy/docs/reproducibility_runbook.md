@@ -22,10 +22,10 @@ Create the isolated autonomy environment:
 python -m venv D:\downloads\SeniorProject\Skylink2\autonomy\.venv
 ```
 
-Install MAVSDK into that environment:
+Install MAVSDK plus the runtime dependencies used by the API, affinity isolation, and MAVLink tools into that environment:
 
 ```powershell
-D:\downloads\SeniorProject\Skylink2\autonomy\.venv\Scripts\python -m pip install mavsdk pymavlink
+D:\downloads\SeniorProject\Skylink2\autonomy\.venv\Scripts\python -m pip install mavsdk pymavlink psutil
 ```
 
 ### Validation On Host
@@ -69,7 +69,7 @@ D:\downloads\SeniorProject\Skylink2\autonomy\.venv\Scripts\python D:\downloads\S
 Run the interactive mission API:
 
 ```powershell
-python D:\downloads\SeniorProject\Skylink2\autonomy\scripts\mission_api.py
+python D:\downloads\SeniorProject\Skylink2\autonomy\scripts\mission_api.py --cpu-core 0
 ```
 
 Planner URL:
@@ -498,6 +498,29 @@ The root route redirects to the live Mega-Dashboard at:
 
 - `/dashboard/index.html`
 
+### 1a. CPU Core Isolation Defaults
+
+The validated default topology on this workstation is:
+
+- API / Uvicorn:
+  - Core `0`
+- companion FPV logger:
+  - Core `1`
+- live execution / PX4 orchestration:
+  - Cores `2,3`
+
+Direct examples:
+
+```powershell
+python D:\downloads\SeniorProject\Skylink2\autonomy\scripts\mission_api.py --cpu-core 0
+python D:\downloads\SeniorProject\Skylink2\autonomy\companion\video_logger.py --mock-mavlink --mock-camera --stream --cpu-core 1
+python D:\downloads\SeniorProject\Skylink2\autonomy\scripts\run_live_interactive_mission.py --mission-spec D:\downloads\SeniorProject\Skylink2\artifacts\planner\job_cache\<job-id>\mission_request.json --cpu-cores 2,3
+```
+
+Graceful fallback rule:
+
+- if `psutil` or host affinity support is unavailable, the runtime prints an `[AFFINITY] warning ...` line and continues unpinned instead of aborting execution
+
 ### 2. Planner / Dashboard Payload Contract
 
 `POST /api/mission/execute` accepts:
@@ -537,6 +560,42 @@ It proves:
 - `/api/system/logs` emits metadata immediately
 - `/api/telemetry/live` emits real telemetry frames before job completion
 - the live run finishes successfully and rebuilds replay/showcase/dashboard artifacts
+
+## Simulation Launcher and Full-Trip Calibration
+
+### One-command simulation stack
+
+To restore the pre-dashboard “bring the sim back” path, run:
+
+```powershell
+D:\downloads\SeniorProject\Skylink2\autonomy\scripts\run_simulation.ps1 `
+  -Host 127.0.0.1 -Port 8625 `
+  -StartMockFpv `
+  -FpvPort 5050 `
+  -ApiCpuCore 0 `
+  -VideoCpuCore 1
+```
+
+This script:
+- starts the companion MJPEG logger in mock mode pinned to Core 1
+- launches `mission_api.py` pinned to the chosen API core
+- optionally opens the dashboard in your default browser
+
+### Battery / weather controls
+
+The planner/dashboard buttons now expose the entire battery chain that also feeds PX4:
+
+- `battery.initial_battery_percent`
+- `battery.warn_battery_threshold_percent`
+- `battery.rtl_battery_threshold_percent`
+- `battery.emergency_battery_threshold_percent`
+- `battery.low_battery_action` (`warning`, `land`, `return`)
+
+These values flow through `interactive_mission.py` into both the validation rules and `px4_sim_overrides.py` via `BAT_LOW_THR`, `BAT_CRIT_THR`, and `BAT_EMERGEN_THR`. Launch tests now enforce strict ordering (initial &gt; warn &gt; RTL &gt; emergency) so the dashboard mirrors the simulator limits.
+
+### Full trip mode
+
+The new planner toggle posts `weather_profile_mode = "full_trip"` instead of the default `proof` mode. In this mode, the live SITL runner generates a gentle weather waveform that stays safely below the abort threshold, so you can simulate full missions without the forced RTL that the proof mode uses to demonstrate weather-triggered recovery. Drop the toggle back to `Proof RTL` when you want to show the safety-carrier abort behavior again.
 
 ## Refreshing Judge-Facing 3D Showcase Inputs
 

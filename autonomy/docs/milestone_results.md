@@ -1413,3 +1413,162 @@ Result:
 - the Mega-Dashboard now presents live SITL state as a cinematic ground-control station without disconnecting from the underlying telemetry
 - the companion path can now provide a real or mock MJPEG FPV stream into the same dashboard surface
 - the presentation layer is stronger, but still grounded in the same PX4/MAVLink runtime evidence used by the rest of the system
+
+## Milestone 22 - Satellite Basemap And UI Stability Overhaul
+
+Objective:
+- fix the audited UI failures before any further visual work
+- replace placeholder map styling with real terrain imagery in both operator surfaces
+- stabilize the dashboard layout so controls, log headers, media cards, and FPV panes stop clipping or overlapping
+
+Implemented:
+- replaced the dashboard map tile source with Esri World Imagery in [dashboard_template.html](/D:/downloads/SeniorProject/Skylink2/autonomy/drone_system/dashboard_template.html)
+- replaced the planner canvas map with a real Leaflet satellite map in [index.html](/D:/downloads/SeniorProject/Skylink2/artifacts/planner/index.html)
+- tightened dashboard layout constraints in:
+  - [dashboard_template.html](/D:/downloads/SeniorProject/Skylink2/autonomy/drone_system/dashboard_template.html)
+  - [index.html](/D:/downloads/SeniorProject/Skylink2/artifacts/dashboard/index.html)
+- added UI regression coverage in:
+  - [test_dashboard_builder.py](/D:/downloads/SeniorProject/Skylink2/autonomy/tests/test_dashboard_builder.py)
+  - [test_ui_static_artifacts.py](/D:/downloads/SeniorProject/Skylink2/autonomy/tests/test_ui_static_artifacts.py)
+- hardened the companion MJPEG handler against Windows client disconnect noise in [video_logger.py](/D:/downloads/SeniorProject/Skylink2/autonomy/companion/video_logger.py)
+
+Key fixes:
+- both planner and dashboard now use:
+  - `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}`
+- dashboard sidebar is now fixed-height with a single controlled scroll surface instead of the earlier double-scroll feel
+- the `Launch Live Simulator` row is sticky and remains visible while scrolling the sidebar
+- `Target` / `Status` blocks now wrap safely under long `udpin://...` strings
+- media cards now use responsive overflow wrapping so path text no longer bleeds out of the card
+- FPV pane width is clamped against the scene viewport so it no longer forces layout overflow
+
+Executed:
+- `python -m unittest discover -s D:\downloads\SeniorProject\Skylink2\autonomy\tests -p "test_*.py"`
+- `python -m unittest discover -s D:\downloads\SeniorProject\Skylink2\autonomy\companion\tests -p "test_*.py"`
+- `python D:\downloads\SeniorProject\Skylink2\autonomy\scripts\build_dashboard.py`
+
+Validation:
+- autonomy regression status:
+  - `Ran 71 tests ... OK`
+- companion regression status:
+  - `Ran 12 tests ... OK`
+- dashboard rebuild succeeded at [artifacts/dashboard](/D:/downloads/SeniorProject/Skylink2/artifacts/dashboard)
+
+Result:
+- the planner now exposes real terrain imagery instead of a synthetic canvas grid
+- the dashboard is materially more stable under long strings, media content, and the FPV overlay
+- the live simulation viewer still uses the same SSE telemetry pipeline, but the surrounding UI no longer fights the operator
+
+## Milestone 23 - Core Isolation And FPV HUD Separation
+
+Objective:
+- stop the Mega-Dashboard stack from self-contention on limited hardware
+- isolate API, execution, and MJPEG workloads onto separate CPU cores where the host supports affinity
+- clean up the FPV HUD layout so offline state, telemetry text, and video never overlap again
+
+Implemented:
+- shared affinity helper in [runtime_affinity.py](/D:/downloads/SeniorProject/Skylink2/autonomy/drone_system/runtime_affinity.py)
+- API affinity injection in [mission_api.py](/D:/downloads/SeniorProject/Skylink2/autonomy/scripts/mission_api.py)
+- execution affinity injection in:
+  - [execute_interactive_mission.py](/D:/downloads/SeniorProject/Skylink2/autonomy/scripts/execute_interactive_mission.py)
+  - [run_live_interactive_mission.py](/D:/downloads/SeniorProject/Skylink2/autonomy/scripts/run_live_interactive_mission.py)
+- companion logger affinity injection in [video_logger.py](/D:/downloads/SeniorProject/Skylink2/autonomy/companion/video_logger.py)
+- FPV HUD structure and CSS cleanup in [dashboard_template.html](/D:/downloads/SeniorProject/Skylink2/autonomy/drone_system/dashboard_template.html)
+- regression coverage in:
+  - [test_runtime_affinity.py](/D:/downloads/SeniorProject/Skylink2/autonomy/tests/test_runtime_affinity.py)
+  - [test_mission_api.py](/D:/downloads/SeniorProject/Skylink2/autonomy/tests/test_mission_api.py)
+  - [test_execute_interactive_mission.py](/D:/downloads/SeniorProject/Skylink2/autonomy/tests/test_execute_interactive_mission.py)
+  - [test_dashboard_builder.py](/D:/downloads/SeniorProject/Skylink2/autonomy/tests/test_dashboard_builder.py)
+  - [test_ui_static_artifacts.py](/D:/downloads/SeniorProject/Skylink2/autonomy/tests/test_ui_static_artifacts.py)
+  - [test_video_logger.py](/D:/downloads/SeniorProject/Skylink2/autonomy/companion/tests/test_video_logger.py)
+
+Key behavior:
+- `mission_api.py`
+  - accepts `--cpu-core`
+  - defaults to Core `0`
+- `video_logger.py`
+  - accepts `--cpu-core`
+  - defaults to Core `1`
+- live execution path:
+  - defaults to Cores `2,3`
+  - pins both the validator process and the spawned SITL / bridge processes where supported
+- graceful fallback:
+  - if `psutil` is missing or the host does not support `cpu_affinity`, the runtime prints a warning and continues unpinned instead of crashing
+- FPV HUD separation:
+  - video is confined to `.fpv-media`
+  - telemetry is confined to `.fpv-bottom`
+  - broken `<img>` fallback text is hidden
+  - offline placeholder is isolated from heading / pitch / roll readouts
+
+Executed:
+- `D:\downloads\SeniorProject\Skylink2\autonomy\.venv\Scripts\python -m pip install psutil`
+- direct host affinity probe via [runtime_affinity.py](/D:/downloads/SeniorProject/Skylink2/autonomy/drone_system/runtime_affinity.py)
+- `D:\downloads\SeniorProject\Skylink2\autonomy\.venv\Scripts\python -m unittest discover -s D:\downloads\SeniorProject\Skylink2\autonomy\tests -p "test_*.py"`
+- `D:\downloads\SeniorProject\Skylink2\autonomy\.venv\Scripts\python -m unittest discover -s D:\downloads\SeniorProject\Skylink2\autonomy\companion\tests -p "test_*.py"`
+- `D:\downloads\SeniorProject\Skylink2\autonomy\.venv\Scripts\python D:\downloads\SeniorProject\Skylink2\autonomy\scripts\build_dashboard.py`
+
+Observed result:
+- direct host affinity probe succeeded:
+  - `[AFFINITY] applied label=manual_probe ... cores=0`
+- dashboard rebuild succeeded at [artifacts/dashboard](/D:/downloads/SeniorProject/Skylink2/artifacts/dashboard)
+- built dashboard now contains explicit FPV layout barriers:
+  - `.fpv-media`
+  - `.fpv-bottom`
+  - `.status-copy`
+  - hidden broken-image fallback styles
+
+Validation:
+- autonomy regression status:
+  - `Ran 77 tests ... OK`
+- companion regression status:
+  - `Ran 13 tests ... OK`
+
+Result:
+- the API, FPV logger, and live execution path now support physical CPU separation on supported hosts
+- deployments no longer fail if affinity is unsupported or `psutil` is absent
+- the FPV pane is structurally separated, so the offline stream state no longer destroys the telemetry overlay
+
+## Milestone 24 - Simulation Launcher, Battery Calibration, And Full-Trip Mode
+
+Objective:
+- restore the “bring the sim back” command path so the whole dashboard/API stack can be launched in one shot
+- expand the battery override controls so planners can request warning/RTL/emergency thresholds instead of only a single battery percent
+- expose a “full trip” simulation profile to prove complete missions without the forced RTL that the proof path uses for weather injection
+
+Implemented:
+- simulation launcher script at [run_simulation.ps1](/D:/downloads/SeniorProject/Skylink2/autonomy/scripts/run_simulation.ps1) that:
+  - spins up the companion MJPEG stream (`video_logger.py --mock-mavlink --mock-camera --stream --max-frames 0`)
+  - optionally opens the dashboard URL
+  - launches `mission_api.py` pinned to Core 0
+  - mirrors the API/FPV affinity defaults used in production
+- battery/weather contract changes in:
+  - [interactive_mission.py](/D:/downloads/SeniorProject/Skylink2/autonomy/drone_system/interactive_mission.py)
+  - [px4_sim_overrides.py](/D:/downloads/SeniorProject/Skylink2/autonomy/drone_system/px4_sim_overrides.py)
+  - [mission_api.py](/D:/downloads/SeniorProject/Skylink2/autonomy/scripts/mission_api.py)
+- UI controls (sliders/buttons) and payload builders in [dashboard_template.html](/D:/downloads/SeniorProject/Skylink2/autonomy/drone_system/dashboard_template.html)
+- validation/test coverage in:
+  - [test_interactive_mission.py](/D:/downloads/SeniorProject/Skylink2/autonomy/tests/test_interactive_mission.py)
+  - [test_mission_api.py](/D:/downloads/SeniorProject/Skylink2/autonomy/tests/test_mission_api.py)
+  - [test_px4_sim_overrides.py](/D:/downloads/SeniorProject/Skylink2/autonomy/tests/test_px4_sim_overrides.py)
+
+Executed:
+- `python -m unittest discover -s D:\downloads\SeniorProject\Skylink2\autonomy\tests -p "test_*.py"`
+- `python D:\downloads\SeniorProject\Skylink2\autonomy\scripts\build_dashboard.py`
+
+Observed result:
+- `run_simulation.ps1` now brings up the entire simulation stack, FPV stream, and dashboard in one comfy command
+- dashboard payloads (JSON + SSE) now supply all five battery thresholds plus the `low_battery_action` to both validation and the PX4 override plan
+- `WEATHER_PROFILE_MODE_FULL_TRIP` generates a calm weather waveform (`gust <= 6.6 m/s`) so you can prove full missions without forced RTL
+
+Validation:
+- autonomy regression status:
+  - `Ran 82 tests ... OK`
+- dashboard rebuild succeeded at [artifacts/dashboard](/D:/downloads/SeniorProject/Skylink2/artifacts/dashboard)
+
+Result:
+- the planner and dashboard can now request custom battery safety envelopes and background simulation profiles
+- you can reproduce a full “no forced RTL” mission by flipping the full-trip toggle or invoking the command-line simulation launcher
+- the new `px4_sim_overrides.py` plan now writes `BAT_LOW_THR`, `BAT_CRIT_THR`, `BAT_EMERGEN_THR`, and `COM_LOW_BAT_ACT` with the desired thresholds/action every run
+
+Known gaps:
+- the `run_simulation.ps1` script launches a mock MJPEG stream; replacing it with the real camera path requires live hardware or the Pi deployment stack
+- there is still no UI button that dynamically switches between `proof` and `full_trip` without an API refresh; pressing the buttons triggers `validateMission()` to push the new profile

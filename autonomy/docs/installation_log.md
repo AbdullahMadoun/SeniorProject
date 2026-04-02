@@ -392,5 +392,48 @@ Observed result:
   - validation accepted real environment and battery overrides
   - metadata SSE arrived immediately from `/api/system/logs`
   - live telemetry SSE arrived during flight from `/api/telemetry/live`
-  - live run completed successfully with `status = completed`, `exit_code = 0`, `telemetry_event_count = 10`
+- live run completed successfully with `status = completed`, `exit_code = 0`, `telemetry_event_count = 10`
 - full suite: `Ran 68 tests ... OK`
+
+## 2026-04-02
+
+### CPU Affinity Dependency And Host Validation
+
+Executed on Windows host:
+
+```powershell
+D:\downloads\SeniorProject\Skylink2\autonomy\.venv\Scripts\python -m pip install psutil
+@'
+from autonomy.drone_system.runtime_affinity import enforce_cpu_affinity
+print(enforce_cpu_affinity([0], label="manual_probe"))
+'@ | D:\downloads\SeniorProject\Skylink2\autonomy\.venv\Scripts\python -
+```
+
+Observed result:
+
+- `psutil` installed in the autonomy virtual environment
+- direct affinity probe applied successfully on the host:
+  - `{'applied': True, 'label': 'manual_probe', 'pid': ..., 'requested': [0], 'cores': [0]}`
+
+### Core Isolation And FPV HUD Cleanup Regression Pass
+
+Executed on Windows host:
+
+```powershell
+D:\downloads\SeniorProject\Skylink2\autonomy\.venv\Scripts\python -m unittest discover -s D:\downloads\SeniorProject\Skylink2\autonomy\tests -p "test_*.py"
+D:\downloads\SeniorProject\Skylink2\autonomy\.venv\Scripts\python -m unittest discover -s D:\downloads\SeniorProject\Skylink2\autonomy\companion\tests -p "test_*.py"
+D:\downloads\SeniorProject\Skylink2\autonomy\.venv\Scripts\python D:\downloads\SeniorProject\Skylink2\autonomy\scripts\build_dashboard.py
+```
+
+Observed result:
+
+- autonomy regression suite:
+  - `Ran 77 tests ... OK`
+- companion regression suite:
+  - `Ran 13 tests ... OK`
+- dashboard rebuilt successfully at [artifacts/dashboard](/D:/downloads/SeniorProject/Skylink2/artifacts/dashboard)
+- new runtime behavior validated:
+  - [mission_api.py](/D:/downloads/SeniorProject/Skylink2/autonomy/scripts/mission_api.py) accepts `--cpu-core` and pins the API to Core `0` by default
+  - [video_logger.py](/D:/downloads/SeniorProject/Skylink2/autonomy/companion/video_logger.py) accepts `--cpu-core` and pins the MJPEG logger to Core `1` by default
+  - [execute_interactive_mission.py](/D:/downloads/SeniorProject/Skylink2/autonomy/scripts/execute_interactive_mission.py) and [run_live_interactive_mission.py](/D:/downloads/SeniorProject/Skylink2/autonomy/scripts/run_live_interactive_mission.py) pin live execution to Cores `2,3` by default
+  - [dashboard_template.html](/D:/downloads/SeniorProject/Skylink2/autonomy/drone_system/dashboard_template.html) now separates FPV media, telemetry readout, and offline state into distinct layout regions so overlay text no longer collides

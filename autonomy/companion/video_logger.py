@@ -4,6 +4,7 @@ import argparse
 import csv
 from dataclasses import asdict, dataclass
 from http import server as http_server
+import itertools
 import json
 import os
 from pathlib import Path
@@ -19,8 +20,10 @@ if __package__ in {None, ""}:
     if str(REPO_ROOT) not in sys.path:
         sys.path.insert(0, str(REPO_ROOT))
     from autonomy.companion.mock_rpi import build_mock_camera_source, load_cv2_module
+    from autonomy.drone_system.runtime_affinity import enforce_cpu_affinity
 else:
     from .mock_rpi import build_mock_camera_source, load_cv2_module
+    from ..drone_system.runtime_affinity import enforce_cpu_affinity
 
 
 DEFAULT_MAVLINK_TARGET = os.environ.get("SKYLINK_MAVLINK_TARGET", "udp:127.0.0.1:14551")
@@ -67,6 +70,7 @@ class VideoLoggerConfig:
     stream_host: str = os.environ.get("SKYLINK_VIDEO_STREAM_HOST", "127.0.0.1")
     stream_port: int = _env_int("SKYLINK_VIDEO_STREAM_PORT", 5050)
     stream_path: str = os.environ.get("SKYLINK_VIDEO_STREAM_PATH", "/stream")
+    cpu_core: int = _env_int("SKYLINK_VIDEO_LOGGER_CPU_CORE", 1)
 
 
 class MjpegStreamServer:
@@ -111,7 +115,7 @@ class MjpegStreamServer:
                         self.wfile.write(frame)
                         self.wfile.write(b"\r\n")
                         self.wfile.flush()
-                except (BrokenPipeError, ConnectionResetError):
+                except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
                     return
 
             def log_message(self, _format: str, *_args: Any) -> None:
@@ -374,6 +378,7 @@ class VideoLoggerService:
         writer.writerow(row)
 
     def run(self) -> dict[str, Any]:
+        enforce_cpu_affinity(self.config.cpu_core, label="video_logger")
         self.config.output_dir.mkdir(parents=True, exist_ok=True)
         csv_path = self.config.output_dir / "telemetry_log.csv"
         summary_path = self.config.output_dir / "summary.json"
@@ -399,7 +404,8 @@ class VideoLoggerService:
             with csv_path.open("w", newline="", encoding="utf-8") as handle:
                 writer = csv.DictWriter(handle, fieldnames=fieldnames)
                 writer.writeheader()
-                for frame_index in range(self.config.max_frames):
+                frame_indices = range(self.config.max_frames) if self.config.max_frames > 0 else itertools.count()
+                for frame_index in frame_indices:
                     ok, frame = camera.read()
                     if not ok or frame is None:
                         time.sleep(self.config.frame_interval_s)
@@ -463,6 +469,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--stream-host", default="127.0.0.1")
     parser.add_argument("--stream-port", type=int, default=5050)
     parser.add_argument("--stream-path", default="/stream")
+    parser.add_argument("--cpu-core", type=int, default=_env_int("SKYLINK_VIDEO_LOGGER_CPU_CORE", 1))
     return parser
 
 
@@ -484,6 +491,7 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
         stream_host=args.stream_host,
         stream_port=args.stream_port,
         stream_path=args.stream_path,
+        cpu_core=args.cpu_core,
     )
     service = VideoLoggerService(config)
     summary = service.run()

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import asyncio
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -26,6 +27,11 @@ import uvicorn
 
 from autonomy.drone_system.config import load_system_baseline
 from autonomy.drone_system.interactive_mission import (
+    LOW_BATTERY_ACTION_LAND,
+    LOW_BATTERY_ACTION_RETURN,
+    LOW_BATTERY_ACTION_WARNING,
+    WEATHER_PROFILE_MODE_FULL_TRIP,
+    WEATHER_PROFILE_MODE_PROOF,
     default_battery_overrides,
     default_environment_overrides,
     default_weather_profile,
@@ -33,6 +39,7 @@ from autonomy.drone_system.interactive_mission import (
     interactive_mission_spec_to_dict,
     validate_interactive_mission,
 )
+from autonomy.drone_system.runtime_affinity import enforce_cpu_affinity
 
 
 RUNNER_SCRIPT = AUTONOMY_ROOT / "scripts" / "run_live_interactive_mission.py"
@@ -48,6 +55,8 @@ DEFAULT_FPV_SOURCE_URL = os.environ.get("SKYLINK_FPV_SOURCE_URL", "http://127.0.
 DEFAULT_FPV_PROXY_PATH = "/api/fpv/stream"
 DEFAULT_FPV_ENABLED = os.environ.get("SKYLINK_FPV_ENABLED", "1").strip().lower() in {"1", "true", "yes", "on"}
 DEFAULT_FPV_MODE = os.environ.get("SKYLINK_FPV_MODE", "simulation")
+DEFAULT_CPU_CORE = int(os.environ.get("SKYLINK_API_CPU_CORE", "0"))
+DEFAULT_EXECUTION_CPU_CORES = os.environ.get("SKYLINK_EXECUTION_CPU_CORES", "2,3")
 
 baseline = load_system_baseline()
 default_environment = default_environment_overrides()
@@ -98,8 +107,23 @@ def _constraints_payload() -> dict[str, Any]:
         },
         "default_battery": {
             "initial_battery_percent": default_battery.initial_battery_percent,
+            "warn_battery_threshold_percent": default_battery.warn_battery_threshold_percent,
             "rtl_battery_threshold_percent": default_battery.rtl_battery_threshold_percent,
+            "emergency_battery_threshold_percent": default_battery.emergency_battery_threshold_percent,
+            "low_battery_action": default_battery.low_battery_action,
         },
+        "default_simulation": {
+            "weather_profile_mode": WEATHER_PROFILE_MODE_PROOF,
+        },
+        "battery_actions": [
+            {"id": LOW_BATTERY_ACTION_WARNING, "label": "Warn Only"},
+            {"id": LOW_BATTERY_ACTION_LAND, "label": "Land"},
+            {"id": LOW_BATTERY_ACTION_RETURN, "label": "Return"},
+        ],
+        "weather_profile_modes": [
+            {"id": WEATHER_PROFILE_MODE_PROOF, "label": "Proof RTL"},
+            {"id": WEATHER_PROFILE_MODE_FULL_TRIP, "label": "Full Trip"},
+        ],
         "default_weather_profile": [
             {
                 "t_s": point.t_s,
@@ -301,6 +325,8 @@ class MissionExecutionManager:
             str(RUNNER_SCRIPT),
             "--mission-spec",
             str(job.spec_path),
+            "--cpu-cores",
+            DEFAULT_EXECUTION_CPU_CORES,
         ]
         process = subprocess.Popen(
             command,
@@ -531,8 +557,15 @@ async def dashboard_redirect() -> RedirectResponse:
     return RedirectResponse(url="/dashboard/index.html", status_code=307)
 
 
-def main() -> None:
-    uvicorn.run(app, host="127.0.0.1", port=8625)
+def main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--port", type=int, default=8625)
+    parser.add_argument("--cpu-core", type=int, default=DEFAULT_CPU_CORE)
+    args = parser.parse_args(argv)
+
+    enforce_cpu_affinity(args.cpu_core, label="mission_api")
+    uvicorn.run(app, host=args.host, port=args.port)
 
 
 if __name__ == "__main__":

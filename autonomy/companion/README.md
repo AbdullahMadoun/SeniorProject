@@ -25,7 +25,7 @@ same Python modules to run:
 - `calibrate_camera.py`
   - template-mode and real-image camera calibration utility
 - `video_logger.py`
-  - threaded MAVLink `GLOBAL_POSITION_INT` polling plus camera overlay, CSV logging, and optional MJPEG FPV streaming for the dashboard
+  - threaded MAVLink `GLOBAL_POSITION_INT` polling plus camera overlay, CSV logging, optional MJPEG FPV streaming for the dashboard, and default CPU isolation on Core `1`
 - `aruco_detector.py`
   - ArUco marker detection and `LANDING_TARGET` MAVLink publishing
 - `gpio_charging.py`
@@ -64,6 +64,7 @@ python D:\downloads\SeniorProject\Skylink2\autonomy\companion\generate_checkerbo
 python D:\downloads\SeniorProject\Skylink2\autonomy\companion\generate_aruco_marker.py --output-dir D:\downloads\SeniorProject\Skylink2\autonomy\companion\artifacts\marker_target
 python D:\downloads\SeniorProject\Skylink2\autonomy\companion\calibrate_camera.py --image-glob "D:\captures\checkerboard\*.png" --output D:\downloads\SeniorProject\Skylink2\autonomy\companion\artifacts\camera_calibration.json --template-only
 python D:\downloads\SeniorProject\Skylink2\autonomy\companion\video_logger.py --mock-mavlink --mock-camera --max-frames 5
+python D:\downloads\SeniorProject\Skylink2\autonomy\companion\video_logger.py --mock-mavlink --mock-camera --stream --cpu-core 1 --max-frames 30
 python D:\downloads\SeniorProject\Skylink2\autonomy\companion\video_logger.py --mock-mavlink --mock-camera --stream --stream-port 5050 --max-frames 30
 python D:\downloads\SeniorProject\Skylink2\autonomy\companion\aruco_detector.py --mock-mavlink --mock-camera --max-frames 5
 python D:\downloads\SeniorProject\Skylink2\autonomy\companion\gpio_charging.py --cycles 1
