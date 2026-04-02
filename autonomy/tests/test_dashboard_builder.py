@@ -74,14 +74,20 @@ class DashboardBuilderTests(unittest.TestCase):
         self.assertIn("baseline", payload)
         self.assertIn("latest_replay", payload)
         self.assertEqual(payload["latest_replay"]["dock"]["proof_status"], "consumed_from_live_telemetry_projection")
+        self.assertIn("visualization", payload["baseline"])
+        self.assertEqual(payload["baseline"]["visualization"]["fpv"]["proxy_url"], "/api/fpv/stream")
 
     def test_render_dashboard_html_contains_leaflet_three_and_live_api_hooks(self) -> None:
         html = render_dashboard_html(build_dashboard_data(self._sample_manifest()))
 
         self.assertIn("leaflet@1.9.4", html)
         self.assertIn("three@0.164.1", html)
+        self.assertIn("Line2", html)
         self.assertIn("/api/telemetry/live", html)
+        self.assertIn("/api/fpv/stream", html)
         self.assertIn("Launch Live Simulator", html)
+        self.assertIn("Cinematic Mode", html)
+        self.assertIn("fpv-feed", html)
 
     def test_write_dashboard_writes_index_and_data(self) -> None:
         manifest = self._sample_manifest()

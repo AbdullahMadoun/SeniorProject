@@ -19,6 +19,17 @@
       "battery_rtl_percent": 20.0,
       "battery_emergency_percent": 10.0,
       "max_operating_wind_mps": 7.0
+    },
+    "visualization": {
+      "fpv": {
+        "enabled": true,
+        "source_url": "http://127.0.0.1:5050/stream",
+        "proxy_url": "/api/fpv/stream"
+      },
+      "cinematic": {
+        "redline_pitch_deg": 15.0,
+        "redline_roll_deg": 15.0
+      }
     }
   },
   "latest_replay": {

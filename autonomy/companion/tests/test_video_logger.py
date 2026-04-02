@@ -4,6 +4,9 @@ import csv
 from pathlib import Path
 import sys
 import tempfile
+import threading
+import time
+import urllib.request
 import unittest
 
 
@@ -39,7 +42,47 @@ class VideoLoggerTests(unittest.TestCase):
             self.assertEqual(len(rows), 4)
             self.assertEqual(rows[0]["telemetry_source"], "mock_mavlink")
 
+    def test_video_logger_can_publish_mjpeg_stream(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = Path(tmp)
+            config = VideoLoggerConfig(
+                output_dir=output_dir,
+                max_frames=24,
+                frame_interval_s=0.02,
+                use_mock_mavlink=True,
+                use_mock_camera=True,
+                stream_enabled=True,
+                stream_port=0,
+            )
+            service = VideoLoggerService(config)
+            result_holder: dict[str, object] = {}
+
+            def _runner() -> None:
+                result_holder["summary"] = service.run()
+
+            thread = threading.Thread(target=_runner, daemon=True)
+            thread.start()
+            deadline = time.time() + 5.0
+            stream_url = None
+            while time.time() < deadline:
+                stream_url = service.current_stream_url()
+                if stream_url:
+                    break
+                time.sleep(0.05)
+            self.assertTrue(stream_url)
+
+            with urllib.request.urlopen(stream_url, timeout=5.0) as response:
+                content_type = response.headers.get("Content-Type", "")
+                first_chunk = response.read(128)
+
+            thread.join(timeout=10.0)
+            self.assertFalse(thread.is_alive())
+            self.assertIn("multipart/x-mixed-replace", content_type)
+            self.assertIn(b"--frame", first_chunk)
+            summary = result_holder["summary"]
+            self.assertTrue(summary["stream"]["enabled"])
+            self.assertTrue(summary["stream"]["url"])
+
 
 if __name__ == "__main__":
     unittest.main()
-

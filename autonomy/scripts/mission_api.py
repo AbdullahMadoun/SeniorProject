@@ -4,12 +4,15 @@ import asyncio
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
 import threading
 import uuid
 from typing import Any
+import urllib.error
+import urllib.request
 
 AUTONOMY_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = AUTONOMY_ROOT.parent
@@ -41,6 +44,10 @@ JOB_CACHE_DIR = PLANNER_DIR / "job_cache"
 DEFAULT_TARGET = "udpin://0.0.0.0:14540"
 DEFAULT_BRIDGE_STATUS = "Bridge Active"
 TELEMETRY_PREFIX = "__TELEMETRY__"
+DEFAULT_FPV_SOURCE_URL = os.environ.get("SKYLINK_FPV_SOURCE_URL", "http://127.0.0.1:5050/stream")
+DEFAULT_FPV_PROXY_PATH = "/api/fpv/stream"
+DEFAULT_FPV_ENABLED = os.environ.get("SKYLINK_FPV_ENABLED", "1").strip().lower() in {"1", "true", "yes", "on"}
+DEFAULT_FPV_MODE = os.environ.get("SKYLINK_FPV_MODE", "simulation")
 
 baseline = load_system_baseline()
 default_environment = default_environment_overrides()
@@ -77,6 +84,12 @@ def _constraints_payload() -> dict[str, Any]:
         "connection": {
             "target": DEFAULT_TARGET,
             "status": DEFAULT_BRIDGE_STATUS,
+        },
+        "fpv": {
+            "enabled": DEFAULT_FPV_ENABLED,
+            "mode": DEFAULT_FPV_MODE,
+            "source_url": DEFAULT_FPV_SOURCE_URL,
+            "proxy_url": DEFAULT_FPV_PROXY_PATH,
         },
         "default_environment": {
             "wind_speed_mps": default_environment.wind_speed_mps,
@@ -145,6 +158,10 @@ def _extract_telemetry_payload(line: str) -> dict[str, Any] | None:
     except json.JSONDecodeError:
         return None
     return payload if isinstance(payload, dict) else None
+
+
+def _fpv_stream_target(source_url: str | None) -> str:
+    return source_url or DEFAULT_FPV_SOURCE_URL
 
 
 @dataclass
@@ -397,6 +414,37 @@ async def execute_mission(body: Any = Body(...)) -> dict[str, Any]:
         "bridge_status": DEFAULT_BRIDGE_STATUS,
         "spec": job.spec,
     }
+
+
+@app.get("/api/fpv/stream")
+async def fpv_stream(source_url: str | None = Query(default=None)) -> StreamingResponse:
+    if not DEFAULT_FPV_ENABLED and source_url is None:
+        raise HTTPException(status_code=503, detail="FPV stream is disabled.")
+
+    target = _fpv_stream_target(source_url)
+    try:
+        probe = urllib.request.urlopen(target, timeout=5.0)
+        content_type = probe.headers.get("Content-Type", "multipart/x-mixed-replace; boundary=frame")
+        probe.close()
+    except urllib.error.URLError as exc:
+        raise HTTPException(status_code=502, detail=f"FPV stream unavailable: {target}") from exc
+
+    def _stream() -> Any:
+        with urllib.request.urlopen(target, timeout=30.0) as response:
+            while True:
+                chunk = response.read(8192)
+                if not chunk:
+                    break
+                yield chunk
+
+    return StreamingResponse(
+        _stream(),
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "Content-Type": content_type,
+        },
+    )
 
 
 @app.get("/api/system/logs")

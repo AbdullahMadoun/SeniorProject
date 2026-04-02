@@ -16,6 +16,26 @@ from fastapi.testclient import TestClient
 from autonomy.scripts import mission_api
 
 
+class _FakeStreamResponse:
+    def __init__(self, chunks: list[bytes], content_type: str = "multipart/x-mixed-replace; boundary=frame") -> None:
+        self._chunks = list(chunks)
+        self.headers = {"Content-Type": content_type}
+
+    def read(self, _size: int = -1) -> bytes:
+        if not self._chunks:
+            return b""
+        return self._chunks.pop(0)
+
+    def close(self) -> None:
+        return None
+
+    def __enter__(self) -> "_FakeStreamResponse":
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> bool:
+        return False
+
+
 class MissionApiTests(unittest.TestCase):
     def setUp(self) -> None:
         self.client = TestClient(mission_api.app)
@@ -37,6 +57,8 @@ class MissionApiTests(unittest.TestCase):
         self.assertEqual(payload["mission_limits"]["max_altitude_m"], 100.0)
         self.assertEqual(payload["connection"]["target"], "udpin://0.0.0.0:14540")
         self.assertEqual(payload["safety"]["max_operating_wind_mps"], 7.0)
+        self.assertTrue(payload["fpv"]["enabled"])
+        self.assertEqual(payload["fpv"]["proxy_url"], "/api/fpv/stream")
 
     def test_validate_returns_400_with_exact_reason_for_altitude_violation(self) -> None:
         response = self.client.post(
@@ -95,6 +117,18 @@ class MissionApiTests(unittest.TestCase):
         response = self.client.get("/", follow_redirects=False)
         self.assertEqual(response.status_code, 307)
         self.assertEqual(response.headers["location"], "/dashboard/index.html")
+
+    def test_fpv_stream_proxy_relays_upstream_mjpeg_bytes(self) -> None:
+        target = "http://fpv.example/stream"
+        probe = _FakeStreamResponse([], content_type="multipart/x-mixed-replace; boundary=frame")
+        stream = _FakeStreamResponse([b"--frame\r\nContent-Type: image/jpeg\r\n\r\nabc", b""], content_type="multipart/x-mixed-replace; boundary=frame")
+
+        with patch.object(mission_api.urllib.request, "urlopen", side_effect=[probe, stream]):
+            response = self.client.get(f"/api/fpv/stream?source_url={target}")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("multipart/x-mixed-replace", response.headers["content-type"])
+        self.assertIn(b"--frame", response.content)
 
     def test_live_telemetry_endpoint_streams_job_frames(self) -> None:
         fake_job = mission_api.MissionExecutionJob(

@@ -116,6 +116,17 @@ Outputs:
 - `summary.json`
 - `latest_frame.jpg.npy` in mock mode
 
+MJPEG stream mode for the Mega-Dashboard:
+
+```powershell
+python D:\downloads\SeniorProject\Skylink2\autonomy\companion\video_logger.py --mock-mavlink --mock-camera --stream --stream-host 127.0.0.1 --stream-port 5050 --stream-path /stream --max-frames 60
+```
+
+Expected dashboard source:
+
+- `http://127.0.0.1:5050/stream`
+- proxied through [mission_api.py](/D:/downloads/SeniorProject/Skylink2/autonomy/scripts/mission_api.py) at `/api/fpv/stream`
+
 ### ArUco Precision Landing
 
 Mock mode:

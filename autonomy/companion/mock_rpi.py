@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import importlib
 import os
 from pathlib import Path
@@ -13,6 +14,14 @@ DEFAULT_FRAME_WIDTH = 640
 DEFAULT_FRAME_HEIGHT = 480
 DEFAULT_CONTACT_VOLTAGE = 1.2
 DEFAULT_BATTERY_VOLTAGE = 16.8
+MINIMAL_JPEG_BYTES = base64.b64decode(
+    "/9j/4AAQSkZJRgABAQAAAQABAAD/2wCEAAkGBxAQEBAQEBAVFhUVFRUVFRUVFRUVFRUVFRUWFhUVFRUY"
+    "HSggGBolGxUVITEhJSkrLi4uFx8zODMsNygtLisBCgoKDg0OGhAQGy0mICYtLS0tLS0tLS0tLS0tLS0t"
+    "LS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLf/AABEIAMgAyAMBIgACEQEDEQH/xAAXAAADAQAA"
+    "AAAAAAAAAAAAAAABAgME/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAwDAQACEAMQAAAB6A//xAAZEAEA"
+    "AwEBAAAAAAAAAAAAAAABABEhMWH/2gAIAQEAAT8A1VJrn//EABQRAQAAAAAAAAAAAAAAAAAAABD/2gAI"
+    "AQIBAT8Af//EABQRAQAAAAAAAAAAAAAAAAAAABD/2gAIAQMBAT8Af//Z"
+)
 
 
 def _mock_env_flag(name: str, *, default: bool = False) -> bool:
@@ -265,6 +274,11 @@ class MockCV2Module:
         target.parent.mkdir(parents=True, exist_ok=True)
         np.save(target.with_suffix(target.suffix + ".npy"), image)
         return True
+
+    def imencode(self, ext: str, _image: np.ndarray) -> tuple[bool, np.ndarray]:
+        if ext.lower() not in {".jpg", ".jpeg"}:
+            return False, np.array([], dtype=np.uint8)
+        return True, np.frombuffer(MINIMAL_JPEG_BYTES, dtype=np.uint8)
 
     def destroyAllWindows(self) -> None:
         return None

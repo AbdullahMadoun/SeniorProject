@@ -107,6 +107,8 @@ Date-stamped installation and execution history is recorded in `docs/installatio
   - unified live Mega-Dashboard
   - Leaflet 2D GPS map
   - Three.js live 3D telemetry scene
+  - telemetry-driven cinematic orbit camera and wind-load trajectory ribbon
+  - AR-style FPV HUD with companion MJPEG stream proxy
   - live environmental overrides
   - SSE log HUD and live telemetry feed
 

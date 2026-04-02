@@ -1373,3 +1373,43 @@ Result:
 - the planner and showcase are now unified into a real live Mega-Dashboard instead of separate products
 - the browser can drive a real SITL mission with live telemetry feeding both the 2D map and the 3D scene
 - the API execution path is now proven, repeatable, and bounded enough to use as the basis for the next hardware-integration phase
+
+## Milestone 21 - Cinematic Dashboard Visualization And Companion FPV Streaming
+
+Objective:
+- increase presentation power without weakening technical honesty
+- keep the live dashboard driven by the real SSE telemetry stream instead of replay-only visuals or fake UI animation
+- expose a companion FPV path that works on a Windows laptop in mock mode and maps directly onto the Raspberry Pi deployment path
+
+Implemented:
+- upgraded companion MJPEG support in [video_logger.py](/D:/downloads/SeniorProject/Skylink2/autonomy/companion/video_logger.py)
+- added JPEG fallback support in [mock_rpi.py](/D:/downloads/SeniorProject/Skylink2/autonomy/companion/mock_rpi.py)
+- upgraded dashboard constraints/API metadata and FPV proxy path in [mission_api.py](/D:/downloads/SeniorProject/Skylink2/autonomy/scripts/mission_api.py)
+- extended dashboard visualization baseline in [dashboard_builder.py](/D:/downloads/SeniorProject/Skylink2/autonomy/drone_system/dashboard_builder.py)
+- replaced the live dashboard surface in [dashboard_template.html](/D:/downloads/SeniorProject/Skylink2/autonomy/drone_system/dashboard_template.html)
+- rebuilt the operator artifact in [index.html](/D:/downloads/SeniorProject/Skylink2/artifacts/dashboard/index.html)
+
+Key behavior:
+- FPV `<img>` pane now proxies MJPEG from `/api/fpv/stream`
+- artificial horizon, pitch ladder, heading tape, and load indicators are driven by live `attitude_euler`
+- 3D ribbon positions are driven by live `local_pose`
+- ribbon color shifts from blue to red using real pitch/roll load against the configured redline values
+- cinematic camera mode now sweeps around the live vehicle and tightens automatically during high-load or low-altitude phases
+- replay ghost path remains visible for context, while the glowing ribbon is reserved for live telemetry only
+
+Executed:
+- `python -m unittest discover -s D:\downloads\SeniorProject\Skylink2\autonomy\tests -p "test_*.py"`
+- `python -m unittest discover -s D:\downloads\SeniorProject\Skylink2\autonomy\companion\tests -p "test_*.py"`
+- `python D:\downloads\SeniorProject\Skylink2\autonomy\scripts\build_dashboard.py`
+
+Validation:
+- autonomy regression status:
+  - `Ran 69 tests ... OK`
+- companion regression status:
+  - `Ran 12 tests ... OK`
+- dashboard rebuild succeeded at [artifacts/dashboard](/D:/downloads/SeniorProject/Skylink2/artifacts/dashboard)
+
+Result:
+- the Mega-Dashboard now presents live SITL state as a cinematic ground-control station without disconnecting from the underlying telemetry
+- the companion path can now provide a real or mock MJPEG FPV stream into the same dashboard surface
+- the presentation layer is stronger, but still grounded in the same PX4/MAVLink runtime evidence used by the rest of the system
