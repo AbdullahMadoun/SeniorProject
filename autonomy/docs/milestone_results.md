@@ -1572,3 +1572,90 @@ Result:
 Known gaps:
 - the `run_simulation.ps1` script launches a mock MJPEG stream; replacing it with the real camera path requires live hardware or the Pi deployment stack
 - there is still no UI button that dynamically switches between `proof` and `full_trip` without an API refresh; pressing the buttons triggers `validateMission()` to push the new profile
+
+---
+
+## Milestone 25 - HITL Hardware Integration & Event Timeline Dashboard
+
+Date: 2026-04-02
+
+Objective:
+- Prepare repo for physical Raspberry Pi + Pixhawk hardware deployment
+- Add event timeline visualization to existing Mega-Dashboard without breaking CSS flexboxes or FPV layouts
+
+Implemented:
+
+### Agent 1: HITL Hardware Deployment Guide
+- Created [hitl_integration_guide.md](/D:/downloads/SeniorProject/Skylink2/autonomy/docs/hitl_integration_guide.md)
+- Complete 7-phase transition procedure from mock/simulation to real hardware
+- Pin wiring diagrams for `/dev/ttyAMA0` UART connection to Pixhawk TELEM2
+- GPIO pin map (BCM 17 for charging MOSFET, ADS1115 on I2C SCL/SDA)
+- Camera calibration workflow with calibration target generation
+- Hardware deployment launcher script template (`run_companion_hardware.sh`)
+- Quick reference table for mock vs hardware environment variables
+- Safety checklist before any flight
+
+### Agent 2: Event Timeline Dashboard Enhancement
+- Added event timeline bar to [dashboard_template.html](/D:/downloads/SeniorProject/Skylink2/autonomy/drone_system/dashboard_template.html)
+- CSS-injected event timeline at bottom of 3D scene section (does not affect FPV layout)
+- Event detection in `liveFrame()` function:
+  - RTL triggered (battery <= RTL threshold)
+  - Battery warning threshold crossed
+  - Wind limit exceeded (>7 m/s)
+  - Mode transitions (mission start, landing, dock approach)
+- Interactive event markers on timeline track
+- Click-to-show popup with event time and narrative message
+- Responsive CSS for mobile breakpoints
+- Updated [AGENTS.md](/D:/downloads/SeniorProject/Skylink2/AGENTS.md) with corrected scope (Foxglove and SSE rebuild CANCELLED per directive)
+
+What works now:
+- HITL transition guide provides step-by-step from SITL to physical hardware
+- Dashboard now displays real-time event markers during mission execution
+- Event timeline shows: `[03:45] Battery warning: 25%`, `[06:12] RTL triggered at 20%`, `[08:30] Wind limit exceeded: 7.2 m/s`
+- All 82 autonomy tests pass after dashboard rebuild
+
+Validation:
+- autonomy regression status:
+  - `Ran 82 tests ... OK`
+- dashboard rebuild succeeded at [artifacts/dashboard](/D:/downloads/SeniorProject/Skylink2/artifacts/dashboard)
+
+Result:
+- Clear HITL path documented: mock → `/dev/ttyAMA0` UART remap
+- Event timeline injects cleanly into existing flexbox layout without breaking FPV positioning
+- Judges can now see annotated autonomy decision events during live simulation
+
+Known gaps:
+- ArUco camera calibration still requires physical checkerboard capture (placeholder intrinsics remain in `aruco_detector.py`)
+- Real hardware end-to-end validation pending physical bring-up
+
+---
+
+## Milestone 25 Patch 1 - Dashboard UI Bug Fixes
+
+Date: 2026-04-02
+
+Objective:
+- Fix two UX regressions introduced by event timeline injection
+
+### Issue 1: Permanent UI State Lockout
+
+**Problem:** If SSE stream from `mission_api.py` drops without proper `complete`/`failed` payload, `S.locked` remains permanently `true`, blocking all buttons.
+
+**Fix Applied:**
+- Added 5-minute (300000ms) fallback timeout in `streamLogs()` that unconditionally unlocks UI
+- Added `onerror` handlers to properly close SSE connections
+- Added `S.logTimeout` and `S.telTimeout` to state object for timeout tracking
+- `E.launch.disabled` now properly re-enabled when unlock triggers
+
+### Issue 2: Event Timeline CSS Squashing
+
+**Problem:** Timeline was being crushed to 0 pixels height due to CSS box-model issues.
+
+**Fix Applied:**
+- Added `flex-shrink: 0` to `.event-timeline` to prevent compression
+- Added explicit `z-index: 1` to `#scene` canvas to establish proper stacking context
+- Timeline now properly positioned at `z-index: 15` above canvas but below HUD overlay (`z-index: 20`)
+
+Validation:
+- autonomy regression status: `Ran 82 tests ... OK`
+- dashboard rebuild succeeded

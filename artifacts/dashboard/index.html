@@ -182,7 +182,7 @@
       gap: 12px;
       flex-wrap: wrap;
     }
-    .map-shell, .scene-shell {
+.map-shell, .scene-shell {
       position: relative;
       margin: 16px 18px 18px;
       height: calc(100% - 76px);
@@ -193,7 +193,7 @@
       background: #05070b;
       min-width: 0;
     }
-    #map, #scene { position: absolute; inset: 0; }
+    #map, #scene { position: absolute; inset: 0; z-index: 1; }
     .overlay {
       position: absolute;
       top: 16px;
@@ -490,7 +490,7 @@
       .hud-grid { max-width: calc(100% - 320px); }
       .fpv-shell { width: min(54vw, 380px); }
     }
-    @media (max-width: 860px) {
+@media (max-width: 860px) {
       .page { width: min(100% - 12px, 1680px); margin: 8px auto; }
       .grid2, .grid3, .grid4, .terminal-head, .hud-grid { grid-template-columns: 1fr; }
       .hud-wrap { position: static; padding: 12px; flex-direction: column; pointer-events: auto; }
@@ -498,6 +498,106 @@
       .legend { max-width: none; }
       .fpv-shell { left: 12px; right: 12px; bottom: 12px; width: auto; min-width: 0; max-width: none; }
       .fpv-bottom { grid-template-columns: 1fr; }
+      .event-timeline { height: 44px; padding: 0 10px; }
+      .event-timeline-label { display: none; }
+    }
+    .event-timeline {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 52px;
+      flex-shrink: 0;
+      background: rgba(8, 11, 18, 0.88);
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 16px;
+      z-index: 15;
+      overflow: hidden;
+    }
+    .event-timeline-track {
+      flex: 1;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 999px;
+      position: relative;
+      cursor: pointer;
+    }
+    .event-timeline-progress {
+      position: absolute;
+      left: 0;
+      top: 0;
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), var(--accent-blue));
+      border-radius: 999px;
+      transition: width 0.3s ease;
+    }
+    .event-marker {
+      position: absolute;
+      top: -4px;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      transform: translateX(-50%);
+      cursor: pointer;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      transition: transform 0.15s ease, border-color 0.15s ease;
+    }
+    .event-marker:hover {
+      transform: translateX(-50%) scale(1.3);
+      border-color: rgba(255, 255, 255, 0.7);
+      z-index: 2;
+    }
+    .event-marker.rtl { background: var(--warn); }
+    .event-marker.land { background: var(--accent); }
+    .event-marker.mode { background: var(--accent-blue); }
+    .event-marker.battery { background: var(--danger); }
+    .event-marker.wind { background: var(--danger); }
+    .event-marker.dock { background: var(--accent); }
+    .event-timeline-label {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+    .event-detail-popup {
+      display: none;
+      position: absolute;
+      bottom: 58px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(12, 14, 20, 0.96);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 12px;
+      padding: 10px 14px;
+      min-width: 200px;
+      max-width: 280px;
+      z-index: 30;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    }
+    .event-detail-popup.visible { display: block; }
+    .event-detail-popup .event-time {
+      font-size: 0.72rem;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 4px;
+    }
+    .event-detail-popup .event-message {
+      font-size: 0.84rem;
+      color: var(--text);
+      line-height: 1.4;
+    }
+    .event-count {
+      font-size: 0.72rem;
+      color: var(--muted);
+      white-space: nowrap;
+      padding: 4px 8px;
+      background: rgba(255, 255, 255, 0.06);
+      border-radius: 999px;
     }
   </style>
 </head>
@@ -580,6 +680,17 @@
               <div class="status-flag" id="fpv-flag"><div class="status-copy"><span>Heading</span><strong id="fpv-heading">000 deg</strong></div></div>
               <div class="status-flag" id="stress-flag"><div class="status-copy"><span>Pitch / Roll</span><strong id="fpv-attitude">0.0 / 0.0 deg</strong></div></div>
               <div class="status-flag" id="load-flag"><div class="status-copy"><span>Stress</span><strong id="fpv-stress">0%</strong></div></div>
+            </div>
+          </div>
+          <div id="event-timeline" class="event-timeline">
+            <span class="event-timeline-label">Events</span>
+            <div id="timeline-track" class="event-timeline-track">
+              <div id="timeline-progress" class="event-timeline-progress" style="width: 0%"></div>
+            </div>
+            <span id="event-count" class="event-count">0 events</span>
+            <div id="event-detail-popup" class="event-detail-popup">
+              <div class="event-time" id="popup-time"></div>
+              <div class="event-message" id="popup-message"></div>
             </div>
           </div>
         </div>
@@ -1386,9 +1497,15 @@
     const dock = replay.simulation?.dock_target || { north_m: 0, east_m: 0, down_m: 0 };
     const fpvCfg = base.visualization?.fpv || { enabled: false, source_url: "", proxy_url: "/api/fpv/stream", mode: "simulation" };
     const cinematicCfg = base.visualization?.cinematic || { redline_pitch_deg: 15.0, redline_roll_deg: 15.0 };
-    const S = { waypoints: [], valid: false, locked: false, cam: "follow", cinematic: false, job: null, log: null, tel: null, last: null, liveFrames: [], liveFrameLimit: 1200, potholePulse: null, weatherMode: "proof", lowBatteryAction: "return" };
+    const S = { waypoints: [], valid: false, locked: false, cam: "follow", cinematic: false, job: null, log: null, tel: null, logTimeout: null, telTimeout: null, last: null, liveFrames: [], liveFrameLimit: 1200, potholePulse: null, weatherMode: "proof", lowBatteryAction: "return", events: [], missionStartTime: null, lastBattery: null, lastMode: null, windThreshold: 7.0 };
     const $ = (id) => document.getElementById(id);
     const E = {
+      timelineTrack: $("timeline-track"),
+      timelineProgress: $("timeline-progress"),
+      eventCount: $("event-count"),
+      eventDetailPopup: $("event-detail-popup"),
+      popupTime: $("popup-time"),
+      popupMessage: $("popup-message"),
       alt: $("alt"), speed: $("speed"), wind: $("wind"), dir: $("dir"), gust: $("gust"), battery: $("battery"), warn: $("warn"), rtl: $("rtl"), emergency: $("emergency"), launch: $("launch"), reload: $("reload"), undo: $("undo"), clear: $("clear"), term: $("term"), waypoints: $("waypoints"), banner: $("banner"), bannerT: $("banner-t"), bannerD: $("banner-d"), cGeo: $("c-geofence"), cWp: $("c-waypoints"), cAlt: $("c-altitude"), mapText: $("map-text"), mapLive: $("map-live"), target: $("target"), status: $("status"), mGeo: $("m-geofence"), mHome: $("m-home"), mDock: $("m-dock"), mProof: $("m-proof"), mapMode: $("map-mode"), mapBattery: $("map-battery"), mapSats: $("map-sats"), mapLoad: $("map-load"), hAlt: $("h-alt"), hSpeed: $("h-speed"), hMode: $("h-mode"), hBattery: $("h-battery"), hDock: $("h-dock"), hLoad: $("h-load"), media: $("media"), fpvModeSummary: $("fpv-mode-summary"), loadState: $("load-state"), cinematicToggle: $("cinematic-toggle"), fpvShell: $("fpv-shell"), fpvFeed: $("fpv-feed"), fpvStatus: $("fpv-status"), fpvPlaceholderText: $("fpv-placeholder-text"), headingTrack: $("heading-track"), horizonRoll: $("horizon-roll"), horizonPitch: $("horizon-pitch"), pitchLadder: $("pitch-ladder"), fpvHeading: $("fpv-heading"), fpvAttitude: $("fpv-attitude"), fpvStress: $("fpv-stress"), fpvFlag: $("fpv-flag"), stressFlag: $("stress-flag"), loadFlag: $("load-flag") };
     const fmt = (value, digits = 1) => Number(value || 0).toFixed(digits);
     const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
@@ -1769,12 +1886,14 @@
       const livePoints = livePolyline.getLatLngs();
       livePoints.push([lat, lon]);
       livePolyline.setLatLngs(livePoints);
-      E.mapMode.textContent = modeText(telemetryMode(frame));
+E.mapMode.textContent = modeText(telemetryMode(frame));
       const batteryPercent = telemetryBattery(frame);
       E.mapBattery.textContent = batteryPercent == null ? "n/a" : `${fmt(batteryPercent, 0)}%`;
       E.mapSats.textContent = gps.sats != null ? String(gps.sats) : "n/a";
       const altitudeText = gps.alt == null ? Math.max(0, -Number(pose.down_m || 0)) : gps.alt;
       E.mapLive.textContent = `Lat ${Number(lat).toFixed(6)}, Lon ${Number(lon).toFixed(6)}, Alt ${fmt(altitudeText)} m`;
+      detectEvents(frame, previous, batteryPercent);
+      updateTimeline();
     }
     function preloadReplay() {
       const frames = replay.flight_telemetry || [];
@@ -1785,7 +1904,73 @@
       updateDrone(syntheticFrame);
       updateAttitudeHud(syntheticFrame);
     }
-    function resetLiveState() { S.liveFrames = []; livePolyline.setLatLngs([]); updateRibbon(); E.mapLive.textContent = "Awaiting live mission start."; log("[META] Live telemetry stream armed", "info"); }
+    function resetLiveState() { S.liveFrames = []; S.events = []; S.missionStartTime = Date.now(); S.lastBattery = null; S.lastMode = null; livePolyline.setLatLngs([]); updateRibbon(); updateTimeline(); E.mapLive.textContent = "Awaiting live mission start."; log("[META] Live telemetry stream armed", "info"); }
+    function detectEvents(frame, previous, batteryPercent) {
+      const currentMode = telemetryMode(frame);
+      const elapsed = (Date.now() - S.missionStartTime) / 1000;
+      const rtlThreshold = Number(E.rtl.value) || 20;
+      const warnThreshold = Number(E.warn.value) || 25;
+      if (previous) {
+        if (currentMode === "return_to_launch" && S.lastMode !== "return_to_launch") {
+          S.events.push({ t: elapsed, type: "rtl", message: `RTL triggered at ${fmt(batteryPercent, 0)}% battery` });
+          log(`[EVENT] Return-to-Launch at ${fmt(batteryPercent, 0)}%`, "info");
+        }
+        if (currentMode === "land" && S.lastMode !== "land") {
+          S.events.push({ t: elapsed, type: "land", message: "Landing sequence initiated" });
+          log("[EVENT] Landing initiated", "info");
+        }
+        if (currentMode === "auto_mission" && S.lastMode !== "auto_mission" && S.lastMode !== "return_to_launch") {
+          S.events.push({ t: elapsed, type: "mode", message: "Mission execution started" });
+        }
+      }
+      if (batteryPercent != null && S.lastBattery != null) {
+        if (batteryPercent <= rtlThreshold && S.lastBattery > rtlThreshold) {
+          S.events.push({ t: elapsed, type: "battery", message: `Battery at ${fmt(batteryPercent, 0)}% - RTL threshold` });
+          log(`[EVENT] Battery RTL threshold reached: ${fmt(batteryPercent, 0)}%`, "info");
+        }
+        if (batteryPercent <= warnThreshold && S.lastBattery > warnThreshold) {
+          S.events.push({ t: elapsed, type: "battery", message: `Battery warning: ${fmt(batteryPercent, 0)}%` });
+          log(`[EVENT] Battery warning: ${fmt(batteryPercent, 0)}%`, "info");
+        }
+      }
+      if (frame.wind_speed_mps != null && frame.wind_speed_mps > S.windThreshold && (previous == null || previous.wind_speed_mps <= S.windThreshold)) {
+        S.events.push({ t: elapsed, type: "wind", message: `Wind limit exceeded: ${fmt(frame.wind_speed_mps, 1)} m/s` });
+        log(`[EVENT] Wind limit exceeded: ${fmt(frame.wind_speed_mps, 1)} m/s`, "info");
+      }
+      if (frame.horizontal_distance_to_dock_m != null && frame.horizontal_distance_to_dock_m < 5 && (previous == null || previous.horizontal_distance_to_dock_m >= 5)) {
+        S.events.push({ t: elapsed, type: "dock", message: "Dock approach initiated" });
+        log("[EVENT] Dock approach started", "info");
+      }
+      S.lastBattery = batteryPercent;
+      S.lastMode = currentMode;
+    }
+    function updateTimeline() {
+      if (!E.timelineTrack) return;
+      const totalTime = S.liveFrames.length > 0 ? (Number(S.liveFrames[S.liveFrames.length - 1].elapsed_s || 0)) || Math.max(1, (Date.now() - S.missionStartTime) / 1000) : 1;
+      const progress = Math.min(100, (totalTime > 0 ? ((Date.now() - S.missionStartTime) / 1000 / totalTime) * 100 : 0));
+      E.timelineProgress.style.width = `${progress}%`;
+      E.timelineTrack.querySelectorAll(".event-marker").forEach(m => m.remove());
+      S.events.forEach(event => {
+        const marker = document.createElement("div");
+        marker.className = `event-marker ${event.type}`;
+        const pct = totalTime > 0 ? (event.t / totalTime) * 100 : 0;
+        marker.style.left = `${Math.min(98, Math.max(2, pct))}%`;
+        marker.title = `[${fmt(event.t, 1)}s] ${event.message}`;
+        marker.addEventListener("click", (e) => {
+          e.stopPropagation();
+          showEventPopup(event);
+        });
+        E.timelineTrack.appendChild(marker);
+      });
+      const count = S.events.length;
+      E.eventCount.textContent = `${count} event${count !== 1 ? "s" : ""}`;
+    }
+    function showEventPopup(event) {
+      E.popupTime.textContent = `T+${fmt(event.t, 1)}s`;
+      E.popupMessage.textContent = event.message;
+      E.eventDetailPopup.classList.add("visible");
+      setTimeout(() => E.eventDetailPopup.classList.remove("visible"), 3000);
+    }
     function configureFpv(config) {
       if (!config.enabled) { E.fpvShell.classList.add("hidden"); E.fpvStatus.textContent = "FPV disabled"; return; }
       E.fpvShell.classList.remove("hidden");
@@ -1807,19 +1992,25 @@
       const lon = Number(detection.lon_deg || home.lon);
       S.potholePulse = L.marker([lat, lon], { icon: pulseIcon }).addTo(map);
     }
-    function streamLogs(jobId) {
+function streamLogs(jobId) {
       if (S.log) S.log.close();
+      if (S.logTimeout) clearTimeout(S.logTimeout);
+      if (S.telTimeout) clearTimeout(S.telTimeout);
       S.log = new EventSource(`/api/system/logs?job_id=${encodeURIComponent(jobId)}`);
       S.log.addEventListener("metadata", (event) => { const payload = JSON.parse(event.data); log(`[META] job=${payload.job_id} target=${payload.target} bridge=${payload.bridge_status}`, "info"); });
       S.log.addEventListener("status", (event) => { const payload = JSON.parse(event.data); log(`[STATUS] ${payload.message}`, "info"); });
       S.log.addEventListener("log", (event) => { const payload = JSON.parse(event.data); const message = payload.message || ""; log(message, /error|fail|traceback/i.test(message) ? "error" : ""); });
-      S.log.addEventListener("complete", async () => { log("[STATUS] Mission execution completed. Reloading latest evidence.", "info"); S.locked = false; await refreshArtifacts(); await validateMission(); });
-      S.log.addEventListener("failed", async (event) => { const payload = JSON.parse(event.data); log(`[ERROR] Mission job failed with exit code ${payload.exit_code}`, "error"); S.locked = false; await validateMission(); });
+      S.log.addEventListener("complete", async () => { if (S.logTimeout) clearTimeout(S.logTimeout); if (S.telTimeout) clearTimeout(S.telTimeout); log("[STATUS] Mission execution completed. Reloading latest evidence.", "info"); S.locked = false; E.launch.disabled = !S.valid; await refreshArtifacts(); await validateMission(); });
+      S.log.addEventListener("failed", async (event) => { if (S.logTimeout) clearTimeout(S.logTimeout); if (S.telTimeout) clearTimeout(S.telTimeout); const payload = JSON.parse(event.data); log(`[ERROR] Mission job failed with exit code ${payload.exit_code}`, "error"); S.locked = false; E.launch.disabled = !S.valid; await validateMission(); });
+      S.log.onerror = () => { if (S.log) S.log.close(); };
+      S.logTimeout = setTimeout(() => { log("[WARN] SSE timeout after 5min - unlocking UI", "info"); S.locked = false; E.launch.disabled = !S.valid; if (S.log) S.log.close(); if (S.tel) S.tel.close(); }, 300000);
     }
-    function streamTelemetry(jobId) {
+function streamTelemetry(jobId) {
       if (S.tel) S.tel.close();
+      if (S.telTimeout) clearTimeout(S.telTimeout);
       S.tel = new EventSource(`/api/telemetry/live?job_id=${encodeURIComponent(jobId)}`);
       S.tel.addEventListener("telemetry", (event) => liveFrame(JSON.parse(event.data)));
+      S.tel.onerror = () => { if (S.tel) S.tel.close(); };
     }
     async function launchMission() {
       if (!S.valid || S.locked) return;
