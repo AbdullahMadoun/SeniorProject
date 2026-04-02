@@ -36,6 +36,7 @@ to build a simulation-first backbone that can later connect to PX4 hardware with
 - `drone_system/scenario_runner.py`
 - `drone_system/safety_engine.py`
 - `drone_system/showcase_builder.py`
+- `drone_system/runtime_affinity.py`
 - `drone_system/vehicle_interface.py`
 - `drone_system/weather_gate.py`
 - `drone_system/weather_scenario_runner.py`
@@ -100,20 +101,24 @@ Date-stamped installation and execution history is recorded in `docs/installatio
 
 - `artifacts/planner/index.html`
   - interactive 2D mission planning
+  - Leaflet + Esri World Imagery satellite basemap
   - Python-backed constraint validation
 - `artifacts/showcase/latest/index.html`
   - replay and evidence presentation
 - `artifacts/dashboard/index.html`
   - unified live Mega-Dashboard
-  - Leaflet 2D GPS map
+  - Leaflet 2D GPS map with Esri World Imagery satellite basemap
   - Three.js live 3D telemetry scene
+  - telemetry-driven cinematic orbit camera and wind-load trajectory ribbon
+  - AR-style FPV HUD with companion MJPEG stream proxy
+  - CPU-isolated API, SITL execution, and FPV logging paths
   - live environmental overrides
   - SSE log HUD and live telemetry feed
 
 Run the dashboard/API locally with:
 
 ```powershell
-python D:\downloads\SeniorProject\Skylink2\autonomy\scripts\mission_api.py
+python D:\downloads\SeniorProject\Skylink2\autonomy\scripts\mission_api.py --cpu-core 0
 ```
 
 Then open:

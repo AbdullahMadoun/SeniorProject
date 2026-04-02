@@ -18,6 +18,7 @@ if str(REPO_ROOT) not in sys.path:
 from autonomy.drone_system.config import load_system_baseline
 from autonomy.drone_system.interactive_mission import interactive_mission_spec_from_dict
 from autonomy.drone_system.px4_sim_overrides import build_px4_sim_override_plan, write_generated_gz_world
+from autonomy.drone_system.runtime_affinity import enforce_cpu_affinity, parse_cpu_cores
 
 VENV_PYTHON = AUTONOMY_ROOT / ".venv" / "Scripts" / "python.exe"
 PX4_REPO = REPO_ROOT / "vendor" / "PX4-Autopilot"
@@ -92,6 +93,7 @@ def _run_step(
     label: str,
     env: dict[str, str] | None = None,
     log_path: Path | None = None,
+    cpu_cores: list[int] | None = None,
 ) -> None:
     process = subprocess.Popen(
         command,
@@ -102,6 +104,8 @@ def _run_step(
         env=env,
         cwd=str(REPO_ROOT),
     )
+    if cpu_cores:
+        enforce_cpu_affinity(cpu_cores, pid=process.pid, label=label.lower())
     assert process.stdout is not None
     log_handle = log_path.open("w", encoding="utf-8", errors="replace") if log_path is not None else None
     try:
@@ -174,7 +178,9 @@ def main() -> None:
     parser.add_argument("--mission-spec", required=True, type=Path)
     parser.add_argument("--model", default="gz_x500")
     parser.add_argument("--world", default="")
+    parser.add_argument("--cpu-cores", default=os.environ.get("SKYLINK_EXECUTION_CPU_CORES", "2,3"))
     args = parser.parse_args()
+    execution_cpu_cores = parse_cpu_cores(args.cpu_cores, default=[2, 3])
 
     if not VENV_PYTHON.exists():
         raise RuntimeError(f"Expected Windows autonomy venv python at {VENV_PYTHON}")
@@ -219,9 +225,11 @@ def main() -> None:
 
     print(
         "[RUNNER] simulator overrides "
+        f"weather_profile_mode={override_plan.weather_profile_mode} "
         f"wind_speed_mps={override_plan.wind_speed_mps:.1f} "
         f"wind_direction_deg={override_plan.wind_direction_deg:.1f} "
         f"gust_multiplier={override_plan.gust_multiplier:.2f} "
+        f"low_battery_action={override_plan.low_battery_action} "
         f"world={generated_world.name}",
         flush=True,
     )
@@ -243,6 +251,7 @@ def main() -> None:
             bufsize=1,
             cwd=str(REPO_ROOT),
         )
+        enforce_cpu_affinity(execution_cpu_cores, pid=world_process.pid, label="world")
         world_thread = _stream_process_output(
             world_process,
             label="WORLD",
@@ -261,6 +270,7 @@ def main() -> None:
         bufsize=1,
         cwd=str(REPO_ROOT),
     )
+    enforce_cpu_affinity(execution_cpu_cores, pid=sitl_process.pid, label="sitl")
     sitl_thread = _stream_process_output(
         sitl_process,
         label="SITL",
@@ -277,6 +287,7 @@ def main() -> None:
         bufsize=1,
         cwd=str(REPO_ROOT),
     )
+    enforce_cpu_affinity(execution_cpu_cores, pid=bridge_process.pid, label="bridge")
     bridge_thread = _stream_process_output(
         bridge_process,
         label="BRIDGE",
@@ -297,10 +308,18 @@ def main() -> None:
         env["LIVE_PX4_SITL_LOG_PATH"] = str(sitl_log_path)
         env["LIVE_PX4_BRIDGE_LOG_PATH"] = str(bridge_log_path)
         _run_step(
-            [str(VENV_PYTHON), str(VALIDATOR_SCRIPT), "--mission-spec", str(args.mission_spec)],
+            [
+                str(VENV_PYTHON),
+                str(VALIDATOR_SCRIPT),
+                "--mission-spec",
+                str(args.mission_spec),
+                "--cpu-cores",
+                ",".join(str(core) for core in execution_cpu_cores),
+            ],
             label="VALIDATOR",
             env=env,
             log_path=validator_log_path,
+            cpu_cores=execution_cpu_cores,
         )
 
         print("[RUNNER] building replay bundle", flush=True)

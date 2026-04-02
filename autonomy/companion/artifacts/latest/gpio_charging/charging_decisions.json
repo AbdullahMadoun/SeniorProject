@@ -1,0 +1,31 @@
+{
+  "config": {
+    "charge_enable_pin": 17,
+    "contact_channel": 0,
+    "battery_channel": 1,
+    "contact_threshold_v": 0.5,
+    "battery_nominal_v": 16.8,
+    "battery_tolerance_v": 1.5,
+    "output_dir": "D:\\downloads\\SeniorProject\\Skylink2\\autonomy\\companion\\artifacts\\latest\\gpio_charging",
+    "cycles": 1,
+    "poll_interval_s": 0.0
+  },
+  "used_mock_gpio": true,
+  "used_mock_board": true,
+  "used_mock_busio": true,
+  "used_mock_ads": true,
+  "decisions": [
+    {
+      "contact_voltage_v": 1.2,
+      "battery_voltage_v": 16.8,
+      "contact_detected": true,
+      "battery_in_range": true,
+      "charge_enabled": true,
+      "reason": "Dock contact valid and battery voltage within charging band."
+    }
+  ],
+  "final_pin_state": {
+    "direction": "OUT",
+    "value": 1
+  }
+}

@@ -7,6 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
   <style>
     :root {
       --bg: #0a0a0f;
@@ -38,6 +39,7 @@
       margin: 20px auto 32px;
       display: grid;
       gap: 18px;
+      min-height: calc(100vh - 52px);
     }
     .hero {
       display: grid;
@@ -52,6 +54,7 @@
       backdrop-filter: blur(20px);
       -webkit-backdrop-filter: blur(20px);
       overflow: hidden;
+      min-width: 0;
     }
     .panel-inner {
       padding: 22px;
@@ -80,6 +83,7 @@
       border-radius: 18px;
       border: 1px solid rgba(255,255,255,0.08);
       background: rgba(255,255,255,0.04);
+      min-width: 0;
     }
     .card label, .metric label, .rule-chip label, .log-meta label, .waypoint-card label {
       display: block;
@@ -92,6 +96,9 @@
     .metric strong, .card strong, .rule-chip strong, .log-meta strong {
       font-size: 1.15rem;
       line-height: 1.2;
+      display: block;
+      overflow-wrap: anywhere;
+      word-break: break-word;
     }
     .good { color: var(--accent); }
     .warn { color: var(--warn); }
@@ -105,16 +112,15 @@
       position: relative;
       border-radius: 24px;
       border: 1px solid rgba(255,255,255,0.08);
-      background:
-        radial-gradient(circle at center, rgba(0, 212, 170, 0.08), transparent 50%),
-        linear-gradient(180deg, rgba(8, 10, 16, 0.94), rgba(8, 10, 16, 0.98));
+      background: #091019;
       overflow: hidden;
+      min-height: 620px;
     }
     #mission-map {
       display: block;
       width: 100%;
-      aspect-ratio: 1 / 1;
-      cursor: crosshair;
+      height: min(72vh, 760px);
+      min-height: 520px;
     }
     .map-overlay {
       position: absolute;
@@ -133,6 +139,18 @@
       backdrop-filter: blur(18px);
       -webkit-backdrop-filter: blur(18px);
     }
+    .leaflet-control-attribution {
+      background: rgba(10, 10, 15, 0.72);
+      color: var(--muted);
+    }
+    .leaflet-control-attribution a { color: var(--accent); }
+    .home-icon, .waypoint-icon {
+      border-radius: 999px;
+      border: 2px solid rgba(255,255,255,0.88);
+      box-shadow: 0 0 18px rgba(0,0,0,0.34);
+    }
+    .home-icon { width: 18px; height: 18px; background: var(--accent); }
+    .waypoint-icon { width: 16px; height: 16px; background: var(--accent-2); }
     .controls-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -218,6 +236,7 @@
       border-radius: 16px;
       background: rgba(255,255,255,0.04);
       border: 1px solid rgba(255,255,255,0.08);
+      min-width: 0;
     }
     .terminal {
       margin-top: 16px;
@@ -229,10 +248,11 @@
     .terminal-head {
       padding: 14px 16px;
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: minmax(0, 1.6fr) minmax(120px, 0.8fr);
       gap: 10px;
       border-bottom: 1px solid rgba(255,255,255,0.08);
       background: rgba(255,255,255,0.03);
+      align-items: start;
     }
     .terminal-body {
       min-height: 340px;
@@ -285,10 +305,10 @@
           <h2>Home, Geofence, and click-to-place waypoints</h2>
           <p>Click anywhere inside the grid to place a waypoint in local NED coordinates. The geofence ring is the hard 100 m limit enforced by the backend. The route line is exactly what gets sent to validation and execution.</p>
           <div class="map-shell">
-            <canvas id="mission-map" width="960" height="960"></canvas>
+            <div id="mission-map"></div>
             <div class="map-overlay">
               <div class="overlay-chip" id="map-cursor">Cursor: -</div>
-              <div class="overlay-chip">Home: (0.0 m, 0.0 m)</div>
+              <div class="overlay-chip" id="map-home">Home: -</div>
             </div>
           </div>
           <div class="controls-grid">
@@ -341,6 +361,7 @@
     </section>
   </div>
 
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <script>
     const state = {
       constraints: null,
@@ -349,10 +370,14 @@
       jobId: null,
       eventSource: null,
       mapRadiusM: 120,
+      map: null,
+      homeMarker: null,
+      geofenceCircle: null,
+      routePolyline: null,
+      waypointMarkers: [],
     };
 
-    const canvas = document.getElementById("mission-map");
-    const ctx = canvas.getContext("2d");
+    const mapEl = document.getElementById("mission-map");
     const missionIdInput = document.getElementById("mission-id");
     const cruiseSpeedInput = document.getElementById("cruise-speed");
     const waypointAltitudeInput = document.getElementById("waypoint-altitude");
@@ -366,6 +391,7 @@
     const hudStatus = document.getElementById("hud-status");
     const validationAlert = document.getElementById("validation-alert");
     const cursorChip = document.getElementById("map-cursor");
+    const mapHomeChip = document.getElementById("map-home");
 
     function appendTerminal(message, className = "") {
       const line = document.createElement("div");
@@ -434,107 +460,81 @@
       ].join("");
     }
 
-    function worldToCanvas(northM, eastM) {
-      const size = canvas.width;
-      const center = size / 2;
-      const scale = (size * 0.44) / state.mapRadiusM;
+    function nedToLatLng(northM, eastM) {
+      const home = state.constraints?.home;
+      if (!home) { return null; }
+      return [
+        home.lat + (northM / 111320),
+        home.lon + (eastM / (111320 * Math.cos(home.lat * Math.PI / 180))),
+      ];
+    }
+
+    function latLngToNed(lat, lon) {
+      const home = state.constraints?.home;
+      if (!home) {
+        return { north_m: 0, east_m: 0 };
+      }
       return {
-        x: center + eastM * scale,
-        y: center - northM * scale,
+        north_m: (lat - home.lat) * 111320,
+        east_m: (lon - home.lon) * 111320 * Math.cos(home.lat * Math.PI / 180),
       };
     }
 
-    function canvasToWorld(x, y) {
-      const size = canvas.width;
-      const center = size / 2;
-      const scale = state.mapRadiusM / (size * 0.44);
-      return {
-        north_m: (center - y) * scale,
-        east_m: (x - center) * scale,
-      };
-    }
+    function ensureMap() {
+      if (state.map || !state.constraints) { return; }
+      const home = state.constraints.home;
+      state.map = L.map("mission-map", { zoomControl: true, preferCanvas: true }).setView([home.lat, home.lon], 19);
+      L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+        maxZoom: 20,
+        attribution: "Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community",
+      }).addTo(state.map);
 
-    function drawMap() {
-      const size = canvas.width;
-      const center = size / 2;
-      const geofence = Number(state.constraints?.mission_limits?.max_radius_m || 100);
-      const ring = worldToCanvas(geofence, 0).y;
-      ctx.clearRect(0, 0, size, size);
-      ctx.fillStyle = "#090c12";
-      ctx.fillRect(0, 0, size, size);
+      const homeIcon = L.divIcon({ className: "", html: '<div class="home-icon"></div>', iconSize: [18, 18], iconAnchor: [9, 9] });
+      state.homeMarker = L.marker([home.lat, home.lon], { icon: homeIcon }).addTo(state.map);
+      state.geofenceCircle = L.circle([home.lat, home.lon], {
+        radius: Number(state.constraints.mission_limits.max_radius_m || 100),
+        color: "#00d4aa",
+        weight: 2,
+        fillColor: "#00d4aa",
+        fillOpacity: 0.08,
+      }).addTo(state.map);
+      state.routePolyline = L.polyline([], { color: "#53b7ff", weight: 3 }).addTo(state.map);
 
-      const gridStep = size / 12;
-      ctx.strokeStyle = "rgba(255,255,255,0.05)";
-      ctx.lineWidth = 1;
-      for (let index = 0; index <= 12; index += 1) {
-        const offset = index * gridStep;
-        ctx.beginPath();
-        ctx.moveTo(offset, 0);
-        ctx.lineTo(offset, size);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(0, offset);
-        ctx.lineTo(size, offset);
-        ctx.stroke();
-      }
-
-      ctx.beginPath();
-      ctx.arc(center, center, Math.abs(center - ring), 0, Math.PI * 2);
-      ctx.strokeStyle = "rgba(0, 212, 170, 0.86)";
-      ctx.lineWidth = 3;
-      ctx.stroke();
-
-      ctx.beginPath();
-      ctx.arc(center, center, Math.abs(center - ring) * 1.12, 0, Math.PI * 2);
-      ctx.strokeStyle = "rgba(0, 212, 170, 0.14)";
-      ctx.lineWidth = 22;
-      ctx.stroke();
-
-      ctx.beginPath();
-      ctx.moveTo(center, 0);
-      ctx.lineTo(center, size);
-      ctx.moveTo(0, center);
-      ctx.lineTo(size, center);
-      ctx.strokeStyle = "rgba(232,232,237,0.18)";
-      ctx.lineWidth = 1.2;
-      ctx.stroke();
-
-      ctx.fillStyle = "#00d4aa";
-      ctx.beginPath();
-      ctx.arc(center, center, 9, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "#e8e8ed";
-      ctx.font = "700 14px Inter";
-      ctx.fillText("HOME", center + 14, center - 14);
-
-      if (state.waypoints.length > 1) {
-        ctx.strokeStyle = "#53b7ff";
-        ctx.lineWidth = 3.2;
-        ctx.beginPath();
-        state.waypoints.forEach((waypoint, index) => {
-          const point = worldToCanvas(waypoint.north_m, waypoint.east_m);
-          if (index === 0) {
-            ctx.moveTo(point.x, point.y);
-          } else {
-            ctx.lineTo(point.x, point.y);
-          }
-        });
-        ctx.stroke();
-      }
-
-      state.waypoints.forEach((waypoint, index) => {
-        const point = worldToCanvas(waypoint.north_m, waypoint.east_m);
-        ctx.fillStyle = "#6366f1";
-        ctx.beginPath();
-        ctx.arc(point.x, point.y, 8, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = "rgba(255,255,255,0.72)";
-        ctx.lineWidth = 2;
-        ctx.stroke();
-        ctx.fillStyle = "#e8e8ed";
-        ctx.font = "700 13px Inter";
-        ctx.fillText(String(index + 1), point.x + 12, point.y - 12);
+      state.map.on("mousemove", (event) => {
+        const local = latLngToNed(event.latlng.lat, event.latlng.lng);
+        cursorChip.textContent = `Cursor: N ${local.north_m.toFixed(1)} m · E ${local.east_m.toFixed(1)} m`;
       });
+      state.map.on("click", (event) => {
+        const world = latLngToNed(event.latlng.lat, event.latlng.lng);
+        state.waypoints.push({
+          north_m: world.north_m,
+          east_m: world.east_m,
+          altitude_m: Number(waypointAltitudeInput.value || 0),
+        });
+        validateMission();
+      });
+    }
+
+    function syncMap() {
+      if (!state.map || !state.constraints) { return; }
+      const home = state.constraints.home;
+      mapHomeChip.textContent = `Home: ${home.lat.toFixed(6)}, ${home.lon.toFixed(6)}`;
+
+      state.waypointMarkers.forEach((marker) => marker.remove());
+      state.waypointMarkers = state.waypoints.map((waypoint, index) => {
+        const latLng = nedToLatLng(waypoint.north_m, waypoint.east_m);
+        const icon = L.divIcon({ className: "", html: '<div class="waypoint-icon"></div>', iconSize: [16, 16], iconAnchor: [8, 8] });
+        return L.marker(latLng, {
+          icon,
+          title: `Waypoint ${index + 1}`,
+        }).bindTooltip(`WP ${index + 1}<br>N ${waypoint.north_m.toFixed(1)} m<br>E ${waypoint.east_m.toFixed(1)} m`, {
+          direction: "top",
+          offset: [0, -10],
+        }).addTo(state.map);
+      });
+      state.routePolyline.setLatLngs(
+        state.waypoints.map((waypoint) => nedToLatLng(waypoint.north_m, waypoint.east_m)).filter(Boolean)
+      );
     }
 
     function parseWeatherProfile() {
@@ -573,7 +573,7 @@
       clearTimeout(validateTimer);
       validateTimer = setTimeout(async () => {
         updateWaypointList();
-        drawMap();
+        syncMap();
         if (state.waypoints.length < 2) {
           executeButton.disabled = true;
           updateRuleGrid(false);
@@ -684,29 +684,6 @@
       }
     }
 
-    canvas.addEventListener("mousemove", (event) => {
-      const rect = canvas.getBoundingClientRect();
-      const local = canvasToWorld(
-        ((event.clientX - rect.left) / rect.width) * canvas.width,
-        ((event.clientY - rect.top) / rect.height) * canvas.height,
-      );
-      cursorChip.textContent = `Cursor: N ${local.north_m.toFixed(1)} m · E ${local.east_m.toFixed(1)} m`;
-    });
-
-    canvas.addEventListener("click", (event) => {
-      const rect = canvas.getBoundingClientRect();
-      const world = canvasToWorld(
-        ((event.clientX - rect.left) / rect.width) * canvas.width,
-        ((event.clientY - rect.top) / rect.height) * canvas.height,
-      );
-      state.waypoints.push({
-        north_m: world.north_m,
-        east_m: world.east_m,
-        altitude_m: Number(waypointAltitudeInput.value || 0),
-      });
-      validateMission();
-    });
-
     undoButton.addEventListener("click", () => {
       state.waypoints.pop();
       validateMission();
@@ -721,7 +698,7 @@
     executeButton.addEventListener("click", executeMission);
     missionIdInput.addEventListener("input", validateMission);
     cruiseSpeedInput.addEventListener("input", validateMission);
-    waypointAltitudeInput.addEventListener("input", drawMap);
+    waypointAltitudeInput.addEventListener("input", syncMap);
     weatherProfileInput.addEventListener("input", validateMission);
 
     async function initialize() {
@@ -732,9 +709,10 @@
       weatherProfileInput.value = state.constraints.default_weather_profile
         .map((point) => `${point.t_s.toFixed(0)}s:${Number(point.gust_wind_mps ?? point.steady_wind_mps).toFixed(1)}`)
         .join(", ");
+      ensureMap();
       updateSummary();
       updateWaypointList();
-      drawMap();
+      syncMap();
       validateMission();
     }
 

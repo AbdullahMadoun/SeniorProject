@@ -1,0 +1,32 @@
+{
+  "status": "template",
+  "image_glob": "D:\\captures\\checkerboard\\*.png",
+  "inner_corners_cols": 9,
+  "inner_corners_rows": 6,
+  "square_size_mm": 24.0,
+  "camera_matrix": [
+    [
+      615.0,
+      0.0,
+      320.0
+    ],
+    [
+      0.0,
+      615.0,
+      240.0
+    ],
+    [
+      0.0,
+      0.0,
+      1.0
+    ]
+  ],
+  "dist_coeffs": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+  ],
+  "note": "Replace this template by running calibration on a machine with OpenCV chessboard support and real images."
+}

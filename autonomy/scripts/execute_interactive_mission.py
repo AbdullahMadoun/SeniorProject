@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+from dataclasses import asdict
 import json
 import os
 from pathlib import Path
@@ -16,9 +17,11 @@ if str(REPO_ROOT) not in sys.path:
 from autonomy.drone_system.config import load_system_baseline
 from autonomy.drone_system.geofence import build_home_geofence
 from autonomy.drone_system.interactive_mission import (
+    WEATHER_PROFILE_MODE_PROOF,
     build_mission_request,
     interactive_mission_spec_from_dict,
     interactive_mission_spec_to_dict,
+    runtime_baseline_for_spec,
     validate_interactive_mission,
     weather_reading_at,
 )
@@ -38,6 +41,7 @@ from autonomy.drone_system.live_px4_runtime import (
 )
 from autonomy.drone_system.models import Waypoint
 from autonomy.drone_system.px4_sim_overrides import build_px4_sim_override_plan, plan_to_dict
+from autonomy.drone_system.runtime_affinity import enforce_cpu_affinity, parse_cpu_cores
 from autonomy.drone_system.safety_engine import MissionSafetyEngine
 from autonomy.drone_system.vehicle_interface import MavsdkVehicleGateway
 from autonomy.drone_system.weather_gate import MissionWeatherGate
@@ -90,6 +94,26 @@ def _weather_profile_payload(spec) -> list[dict[str, float | None]]:
         }
         for point in spec.weather_profile
     ]
+
+
+def _battery_payload(spec) -> dict[str, object]:
+    return asdict(spec.battery)
+
+
+def _estimate_rtl_approach_timeout_s(spec, dock_target: DockTarget) -> float:
+    route_points = [(0.0, 0.0)]
+    route_points.extend((waypoint.north_m, waypoint.east_m) for waypoint in spec.waypoints)
+    if spec.rtl_after_mission:
+        route_points.append((dock_target.north_m, dock_target.east_m))
+
+    horizontal_distance_m = 0.0
+    for index in range(1, len(route_points)):
+        prev_north, prev_east = route_points[index - 1]
+        north_m, east_m = route_points[index]
+        horizontal_distance_m += ((north_m - prev_north) ** 2 + (east_m - prev_east) ** 2) ** 0.5
+
+    cruise_speed_mps = max(1.0, spec.cruise_speed_mps)
+    return max(RTL_APPROACH_TIMEOUT_S, ((horizontal_distance_m / cruise_speed_mps) * 3.0) + 45.0)
 
 
 def _emit_live_telemetry(payload: dict[str, object]) -> None:
@@ -206,6 +230,7 @@ async def _monitor_dynamic_weather(
 
     payload = {
         "mission_id": spec.mission_id,
+        "weather_profile_mode": spec.weather_profile_mode,
         "weather_profile": _weather_profile_payload(spec),
         "trigger_timeout_s": WEATHER_TRIGGER_TIMEOUT_S,
         "dock_wait_timeout_s": DOCK_WEATHER_TIMEOUT_S,
@@ -224,11 +249,78 @@ async def _monitor_dynamic_weather(
     return payload, latest_snapshot
 
 
+async def _monitor_nominal_weather(
+    gateway: MavsdkVehicleGateway,
+    *,
+    baseline,
+    spec,
+    runtime_start_s: float,
+) -> tuple[dict[str, object], object]:
+    gate = MissionWeatherGate(baseline)
+    engine = MissionSafetyEngine(baseline)
+    elapsed_s = time.monotonic() - runtime_start_s
+    reading = weather_reading_at(spec.weather_profile, elapsed_s)
+    gate_decision = gate.assess(reading)
+    snapshot = await gateway.get_snapshot()
+    local_pose = await gateway.get_local_pose()
+    inflight_decision = engine.assess_inflight(
+        snapshot,
+        wind_mps=gate_decision.effective_wind_mps,
+    )
+    observation = {
+        "elapsed_s": round(elapsed_s, 3),
+        "weather": {
+            "steady_wind_mps": reading.steady_wind_mps,
+            "gust_wind_mps": reading.gust_wind_mps,
+            "source": reading.source,
+            "effective_wind_mps": gate_decision.effective_wind_mps,
+        },
+        "gate_decision": {
+            "launch_allowed": gate_decision.launch_allowed,
+            "mission_continue_allowed": gate_decision.mission_continue_allowed,
+            "dock_allowed": gate_decision.dock_allowed,
+            "reasons": [reason.value for reason in gate_decision.reasons],
+            "details": list(gate_decision.details),
+        },
+        "inflight_decision": {
+            "action": inflight_decision.action.value,
+            "reasons": [reason.value for reason in inflight_decision.reasons],
+            "details": list(inflight_decision.details),
+        },
+        "snapshot_before": snapshot_to_dict(snapshot),
+        "local_pose_before": local_pose_to_dict(local_pose),
+        "snapshot_after": snapshot_to_dict(snapshot),
+        "local_pose_after": local_pose_to_dict(local_pose),
+    }
+    payload = {
+        "mission_id": spec.mission_id,
+        "weather_profile_mode": spec.weather_profile_mode,
+        "weather_profile": _weather_profile_payload(spec),
+        "trigger_timeout_s": WEATHER_TRIGGER_TIMEOUT_S,
+        "dock_wait_timeout_s": DOCK_WEATHER_TIMEOUT_S,
+        "observations": [observation],
+        "dock_weather_observations": [
+            {
+                "elapsed_s": round(elapsed_s, 3),
+                "weather": observation["weather"],
+                "dock_allowed": gate_decision.dock_allowed,
+                "details": list(gate_decision.details),
+            }
+        ],
+        "triggered_action": None,
+        "triggered_at_s": None,
+        "dock_recovered_at_s": round(elapsed_s, 3),
+        "proof_status": "nominal_weather_profile_no_forced_rtl",
+    }
+    return payload, snapshot
+
+
 async def main_async(spec_path: Path) -> None:
     baseline = load_system_baseline()
     raw_spec = json.loads(spec_path.read_text(encoding="utf-8-sig"))
     spec = interactive_mission_spec_from_dict(raw_spec, baseline)
     validate_interactive_mission(spec, baseline)
+    runtime_baseline = runtime_baseline_for_spec(baseline, spec)
 
     system_address = os.environ.get("MAVSDK_SYSTEM_ADDRESS", DEFAULT_SYSTEM_ADDRESS)
     connect_timeout_s = float(
@@ -287,8 +379,8 @@ async def main_async(spec_path: Path) -> None:
 
         print("stage=preflight_weather_gate", flush=True)
         preflight_weather = weather_reading_at(spec.weather_profile, 0.0)
-        preflight_gate = MissionWeatherGate(baseline).assess(preflight_weather)
-        preflight_safety = MissionSafetyEngine(baseline).assess_preflight(
+        preflight_gate = MissionWeatherGate(runtime_baseline).assess(preflight_weather)
+        preflight_safety = MissionSafetyEngine(runtime_baseline).assess_preflight(
             initial_snapshot,
             mission_request,
             wind_mps=preflight_gate.effective_wind_mps,
@@ -315,6 +407,7 @@ async def main_async(spec_path: Path) -> None:
                 "plan": plan_to_dict(override_plan),
                 "applied_parameters": applied_overrides,
             },
+            "battery_overrides": _battery_payload(spec),
             "geofence": {
                 "center": {
                     "lat": geofence.center.lat,
@@ -357,12 +450,20 @@ async def main_async(spec_path: Path) -> None:
             timeout_s=DEPARTURE_TIMEOUT_S,
         )
         print("stage=dynamic_weather_injection", flush=True)
-        weather_payload, snapshot_after_weather = await _monitor_dynamic_weather(
-            gateway,
-            baseline=baseline,
-            spec=spec,
-            runtime_start_s=runtime_start_s,
-        )
+        if spec.weather_profile_mode == WEATHER_PROFILE_MODE_PROOF:
+            weather_payload, snapshot_after_weather = await _monitor_dynamic_weather(
+                gateway,
+                baseline=runtime_baseline,
+                spec=spec,
+                runtime_start_s=runtime_start_s,
+            )
+        else:
+            weather_payload, snapshot_after_weather = await _monitor_nominal_weather(
+                gateway,
+                baseline=runtime_baseline,
+                spec=spec,
+                runtime_start_s=runtime_start_s,
+            )
         _write_json(WEATHER_OUTPUT_PATH, weather_payload)
 
         execution_payload = {
@@ -375,6 +476,7 @@ async def main_async(spec_path: Path) -> None:
                 "plan": plan_to_dict(override_plan),
                 "applied_parameters": applied_overrides,
             },
+            "battery_overrides": _battery_payload(spec),
             "initial_snapshot": snapshot_to_dict(initial_snapshot),
             "initial_local_pose": local_pose_to_dict(initial_local_pose),
             "mission_phase_snapshots": mission_entry_observations + departure_observations,
@@ -386,11 +488,12 @@ async def main_async(spec_path: Path) -> None:
         _write_json(EXECUTION_OUTPUT_PATH, execution_payload)
 
         print("stage=rtl_approach_window", flush=True)
+        rtl_approach_timeout_s = _estimate_rtl_approach_timeout_s(spec, dock_target)
         approach_local_pose, rtl_approach_observations = await wait_for_rtl_approach_window(
             gateway,
             dock_target,
             activation_radius_m=baseline.docking.approach_activation_radius_m,
-            timeout_s=RTL_APPROACH_TIMEOUT_S,
+            timeout_s=rtl_approach_timeout_s,
         )
 
         print("stage=landing_target_stream", flush=True)
@@ -443,6 +546,7 @@ async def main_async(spec_path: Path) -> None:
                 "plan": plan_to_dict(override_plan),
                 "applied_parameters": applied_overrides,
             },
+            "battery_overrides": _battery_payload(spec),
             "dock_target": {
                 "north_m": dock_target.north_m,
                 "east_m": dock_target.east_m,
@@ -502,10 +606,12 @@ async def main_async(spec_path: Path) -> None:
         await gateway.disconnect()
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--mission-spec", required=True, type=Path)
-    args = parser.parse_args()
+    parser.add_argument("--cpu-cores", default=os.environ.get("SKYLINK_EXECUTION_CPU_CORES", "2,3"))
+    args = parser.parse_args(argv)
+    enforce_cpu_affinity(parse_cpu_cores(args.cpu_cores, default=[2, 3]), label="execute_interactive_mission")
     asyncio.run(main_async(args.mission_spec))
 
 

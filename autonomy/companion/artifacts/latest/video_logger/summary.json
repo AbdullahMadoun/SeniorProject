@@ -1,0 +1,21 @@
+{
+  "config": {
+    "mavlink_target": "udp:127.0.0.1:14551",
+    "mavlink_baud": 57600,
+    "camera_source": "0",
+    "output_dir": "D:\\downloads\\SeniorProject\\Skylink2\\autonomy\\companion\\artifacts\\latest\\video_logger",
+    "max_frames": 5,
+    "frame_width": 640,
+    "frame_height": 480,
+    "frame_interval_s": 0.01,
+    "telemetry_timeout_s": 0.5,
+    "use_mock_mavlink": true,
+    "use_mock_camera": true
+  },
+  "processed_frames": 5,
+  "telemetry_updates": 3,
+  "used_mock_camera": true,
+  "used_mock_mavlink": true,
+  "csv_path": "D:\\downloads\\SeniorProject\\Skylink2\\autonomy\\companion\\artifacts\\latest\\video_logger\\telemetry_log.csv",
+  "preview_path": "D:\\downloads\\SeniorProject\\Skylink2\\autonomy\\companion\\artifacts\\latest\\video_logger\\latest_frame.jpg"
+}

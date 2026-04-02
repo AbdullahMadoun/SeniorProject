@@ -1,0 +1,10 @@
+{
+  "marker_id": 0,
+  "dictionary": "DICT_4X4_50",
+  "side_pixels": 256,
+  "marker_path": "D:\\downloads\\SeniorProject\\Skylink2\\autonomy\\companion\\artifacts\\marker_target\\aruco_id_0.pgm",
+  "generation_source": "opencv_aruco",
+  "used_mock_cv2": true,
+  "flight_ready": false,
+  "note": "Mock-generated marker is for local tooling validation only."
+}

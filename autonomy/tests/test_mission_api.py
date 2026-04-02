@@ -16,6 +16,41 @@ from fastapi.testclient import TestClient
 from autonomy.scripts import mission_api
 
 
+class _FakeStdout:
+    def __iter__(self):
+        return iter(())
+
+
+class _FakeProcess:
+    def __init__(self, command: list[str]) -> None:
+        self.command = command
+        self.stdout = _FakeStdout()
+        self.returncode = 0
+
+    def wait(self) -> int:
+        return self.returncode
+
+
+class _FakeStreamResponse:
+    def __init__(self, chunks: list[bytes], content_type: str = "multipart/x-mixed-replace; boundary=frame") -> None:
+        self._chunks = list(chunks)
+        self.headers = {"Content-Type": content_type}
+
+    def read(self, _size: int = -1) -> bytes:
+        if not self._chunks:
+            return b""
+        return self._chunks.pop(0)
+
+    def close(self) -> None:
+        return None
+
+    def __enter__(self) -> "_FakeStreamResponse":
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> bool:
+        return False
+
+
 class MissionApiTests(unittest.TestCase):
     def setUp(self) -> None:
         self.client = TestClient(mission_api.app)
@@ -37,6 +72,12 @@ class MissionApiTests(unittest.TestCase):
         self.assertEqual(payload["mission_limits"]["max_altitude_m"], 100.0)
         self.assertEqual(payload["connection"]["target"], "udpin://0.0.0.0:14540")
         self.assertEqual(payload["safety"]["max_operating_wind_mps"], 7.0)
+        self.assertTrue(payload["fpv"]["enabled"])
+        self.assertEqual(payload["fpv"]["proxy_url"], "/api/fpv/stream")
+        self.assertEqual(payload["default_battery"]["warn_battery_threshold_percent"], 25.0)
+        self.assertEqual(payload["default_battery"]["emergency_battery_threshold_percent"], 18.0)
+        self.assertEqual(payload["default_battery"]["low_battery_action"], "return")
+        self.assertEqual(payload["default_simulation"]["weather_profile_mode"], "proof")
 
     def test_validate_returns_400_with_exact_reason_for_altitude_violation(self) -> None:
         response = self.client.post(
@@ -91,10 +132,78 @@ class MissionApiTests(unittest.TestCase):
         self.assertEqual(payload["status"], "running")
         self.assertEqual(payload["bridge_status"], "Bridge Active")
 
+    def test_validate_accepts_full_trip_mode_and_extended_battery_controls(self) -> None:
+        response = self.client.post(
+            "/api/mission/validate",
+            json={
+                "mission_id": "api-full-trip",
+                "weather_profile_mode": "full_trip",
+                "cruise_speed_mps": 5.0,
+                "waypoints": [
+                    {"north_m": 0.0, "east_m": 0.0, "altitude_m": 10.0},
+                    {"north_m": 20.0, "east_m": 12.0, "altitude_m": 10.0},
+                ],
+                "battery": {
+                    "initial_battery_percent": 100.0,
+                    "warn_battery_threshold_percent": 24.0,
+                    "rtl_battery_threshold_percent": 14.0,
+                    "emergency_battery_threshold_percent": 7.0,
+                    "low_battery_action": "warning",
+                },
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        mission = response.json()["mission"]
+        self.assertEqual(mission["weather_profile_mode"], "full_trip")
+        self.assertEqual(mission["battery"]["low_battery_action"], "warning")
+        self.assertLessEqual(max(point["gust_wind_mps"] for point in mission["weather_profile"]), 7.0)
+
+    def test_runner_command_includes_execution_cpu_cores(self) -> None:
+        job = mission_api.MissionExecutionJob(
+            job_id="job456",
+            spec_path=Path("mission_request.json"),
+            created_at="2026-04-02T00:00:00Z",
+            spec={},
+        )
+        process_holder: dict[str, _FakeProcess] = {}
+
+        def _fake_popen(command, **kwargs):
+            process = _FakeProcess(command)
+            process_holder["process"] = process
+            return process
+
+        with patch.object(mission_api.subprocess, "Popen", side_effect=_fake_popen):
+            mission_api.job_manager._run_job(job)
+
+        command = process_holder["process"].command
+        self.assertIn("--cpu-cores", command)
+        self.assertEqual(command[command.index("--cpu-cores") + 1], mission_api.DEFAULT_EXECUTION_CPU_CORES)
+        self.assertEqual(job.status, "completed")
+
     def test_root_redirects_to_dashboard(self) -> None:
         response = self.client.get("/", follow_redirects=False)
         self.assertEqual(response.status_code, 307)
         self.assertEqual(response.headers["location"], "/dashboard/index.html")
+
+    def test_main_applies_cpu_affinity_before_starting_uvicorn(self) -> None:
+        with patch.object(mission_api, "enforce_cpu_affinity") as enforce_mock, patch.object(mission_api.uvicorn, "run") as run_mock:
+            mission_api.main(["--host", "0.0.0.0", "--port", "9000", "--cpu-core", "0"])
+
+        enforce_mock.assert_called_once_with(0, label="mission_api")
+        run_mock.assert_called_once_with(mission_api.app, host="0.0.0.0", port=9000)
+
+    def test_fpv_stream_proxy_relays_upstream_mjpeg_bytes(self) -> None:
+        target = "http://fpv.example/stream"
+        probe = _FakeStreamResponse([], content_type="multipart/x-mixed-replace; boundary=frame")
+        stream = _FakeStreamResponse([b"--frame\r\nContent-Type: image/jpeg\r\n\r\nabc", b""], content_type="multipart/x-mixed-replace; boundary=frame")
+
+        with patch.object(mission_api.urllib.request, "urlopen", side_effect=[probe, stream]):
+            response = self.client.get(f"/api/fpv/stream?source_url={target}")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("multipart/x-mixed-replace", response.headers["content-type"])
+        self.assertIn(b"--frame", response.content)
 
     def test_live_telemetry_endpoint_streams_job_frames(self) -> None:
         fake_job = mission_api.MissionExecutionJob(

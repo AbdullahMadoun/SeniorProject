@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import math
 from typing import Any
 
@@ -32,10 +32,30 @@ class EnvironmentOverrides:
     gust_multiplier: float
 
 
+WEATHER_PROFILE_MODE_PROOF = "proof"
+WEATHER_PROFILE_MODE_FULL_TRIP = "full_trip"
+SUPPORTED_WEATHER_PROFILE_MODES = {
+    WEATHER_PROFILE_MODE_PROOF,
+    WEATHER_PROFILE_MODE_FULL_TRIP,
+}
+
+LOW_BATTERY_ACTION_WARNING = "warning"
+LOW_BATTERY_ACTION_LAND = "land"
+LOW_BATTERY_ACTION_RETURN = "return"
+SUPPORTED_LOW_BATTERY_ACTIONS = {
+    LOW_BATTERY_ACTION_WARNING,
+    LOW_BATTERY_ACTION_LAND,
+    LOW_BATTERY_ACTION_RETURN,
+}
+
+
 @dataclass(frozen=True)
 class BatteryOverrides:
     initial_battery_percent: float
+    warn_battery_threshold_percent: float
     rtl_battery_threshold_percent: float
+    emergency_battery_threshold_percent: float
+    low_battery_action: str
 
 
 @dataclass(frozen=True)
@@ -46,6 +66,7 @@ class InteractiveMissionSpec:
     rtl_after_mission: bool = True
     capture_images: bool = False
     weather_profile: tuple[WeatherProfilePoint, ...] = ()
+    weather_profile_mode: str = WEATHER_PROFILE_MODE_PROOF
     environment: EnvironmentOverrides = EnvironmentOverrides(
         wind_speed_mps=3.2,
         wind_direction_deg=45.0,
@@ -53,7 +74,10 @@ class InteractiveMissionSpec:
     )
     battery: BatteryOverrides = BatteryOverrides(
         initial_battery_percent=100.0,
+        warn_battery_threshold_percent=25.0,
         rtl_battery_threshold_percent=20.0,
+        emergency_battery_threshold_percent=18.0,
+        low_battery_action=LOW_BATTERY_ACTION_RETURN,
     )
 
 
@@ -68,7 +92,10 @@ def default_environment_overrides() -> EnvironmentOverrides:
 def default_battery_overrides() -> BatteryOverrides:
     return BatteryOverrides(
         initial_battery_percent=100.0,
+        warn_battery_threshold_percent=25.0,
         rtl_battery_threshold_percent=20.0,
+        emergency_battery_threshold_percent=18.0,
+        low_battery_action=LOW_BATTERY_ACTION_RETURN,
     )
 
 
@@ -76,16 +103,47 @@ def default_weather_profile(
     *,
     wind_speed_mps: float | None = None,
     gust_multiplier: float | None = None,
+    profile_mode: str = WEATHER_PROFILE_MODE_PROOF,
 ) -> tuple[WeatherProfilePoint, ...]:
     environment = default_environment_overrides()
     base_wind_mps = float(wind_speed_mps if wind_speed_mps is not None else environment.wind_speed_mps)
     gust_scale = float(gust_multiplier if gust_multiplier is not None else environment.gust_multiplier)
-    trigger_wind_mps = max(base_wind_mps + 3.2, 7.8)
-    recovery_wind_mps = min(max(base_wind_mps + 1.0, 4.2), 5.2)
 
     def _gust(steady_wind_mps: float) -> float:
         return round(max(steady_wind_mps, steady_wind_mps * gust_scale), 1)
 
+    if profile_mode == WEATHER_PROFILE_MODE_FULL_TRIP:
+        safe_peak_wind_mps = min(max(base_wind_mps + 0.8, base_wind_mps), 5.8)
+        safe_recovery_wind_mps = min(max(base_wind_mps + 0.4, base_wind_mps), 5.0)
+
+        def _safe_gust(steady_wind_mps: float) -> float:
+            return round(min(max(steady_wind_mps, steady_wind_mps * gust_scale), 6.6), 1)
+
+        return (
+            WeatherProfilePoint(
+                t_s=0.0,
+                steady_wind_mps=round(base_wind_mps, 1),
+                gust_wind_mps=_safe_gust(base_wind_mps),
+            ),
+            WeatherProfilePoint(
+                t_s=8.0,
+                steady_wind_mps=round(min(base_wind_mps + 0.6, safe_peak_wind_mps), 1),
+                gust_wind_mps=_safe_gust(min(base_wind_mps + 0.6, safe_peak_wind_mps)),
+            ),
+            WeatherProfilePoint(
+                t_s=18.0,
+                steady_wind_mps=round(safe_peak_wind_mps, 1),
+                gust_wind_mps=_safe_gust(safe_peak_wind_mps),
+            ),
+            WeatherProfilePoint(
+                t_s=36.0,
+                steady_wind_mps=round(safe_recovery_wind_mps, 1),
+                gust_wind_mps=_safe_gust(safe_recovery_wind_mps),
+            ),
+        )
+
+    trigger_wind_mps = max(base_wind_mps + 3.2, 7.8)
+    recovery_wind_mps = min(max(base_wind_mps + 1.0, 4.2), 5.2)
     return (
         WeatherProfilePoint(t_s=0.0, steady_wind_mps=round(base_wind_mps, 1), gust_wind_mps=_gust(base_wind_mps)),
         WeatherProfilePoint(
@@ -112,6 +170,7 @@ def interactive_mission_spec_to_dict(spec: InteractiveMissionSpec) -> dict[str, 
         "cruise_speed_mps": spec.cruise_speed_mps,
         "rtl_after_mission": spec.rtl_after_mission,
         "capture_images": spec.capture_images,
+        "weather_profile_mode": spec.weather_profile_mode,
         "waypoints": [
             {
                 "north_m": waypoint.north_m,
@@ -135,7 +194,10 @@ def interactive_mission_spec_to_dict(spec: InteractiveMissionSpec) -> dict[str, 
         },
         "battery": {
             "initial_battery_percent": spec.battery.initial_battery_percent,
+            "warn_battery_threshold_percent": spec.battery.warn_battery_threshold_percent,
             "rtl_battery_threshold_percent": spec.battery.rtl_battery_threshold_percent,
+            "emergency_battery_threshold_percent": spec.battery.emergency_battery_threshold_percent,
+            "low_battery_action": spec.battery.low_battery_action,
         },
     }
 
@@ -174,12 +236,31 @@ def interactive_mission_spec_from_dict(payload: dict[str, Any], baseline: System
         initial_battery_percent=float(
             raw_battery.get("initial_battery_percent", default_battery.initial_battery_percent)
         ),
+        warn_battery_threshold_percent=float(
+            raw_battery.get(
+                "warn_battery_threshold_percent",
+                default_battery.warn_battery_threshold_percent,
+            )
+        ),
         rtl_battery_threshold_percent=float(
             raw_battery.get(
                 "rtl_battery_threshold_percent",
                 default_battery.rtl_battery_threshold_percent,
             )
         ),
+        emergency_battery_threshold_percent=float(
+            raw_battery.get(
+                "emergency_battery_threshold_percent",
+                default_battery.emergency_battery_threshold_percent,
+            )
+        ),
+        low_battery_action=str(
+            raw_battery.get(
+                "low_battery_action",
+                default_battery.low_battery_action,
+            )
+        ).strip()
+        or default_battery.low_battery_action,
     )
 
     raw_profile = payload.get("weather_profile")
@@ -204,17 +285,23 @@ def interactive_mission_spec_from_dict(payload: dict[str, Any], baseline: System
     mission_id = str(payload.get("mission_id", "interactive-mission")).strip() or "interactive-mission"
     rtl_after_mission = bool(payload.get("rtl_after_mission", True))
     capture_images = bool(payload.get("capture_images", False))
+    weather_profile_mode = (
+        str(payload.get("weather_profile_mode", WEATHER_PROFILE_MODE_PROOF)).strip()
+        or WEATHER_PROFILE_MODE_PROOF
+    )
     return InteractiveMissionSpec(
         mission_id=mission_id,
         waypoints=tuple(waypoints),
         cruise_speed_mps=cruise_speed_mps,
         rtl_after_mission=rtl_after_mission,
         capture_images=capture_images,
+        weather_profile_mode=weather_profile_mode,
         weather_profile=tuple(weather_profile)
         if weather_profile
         else default_weather_profile(
             wind_speed_mps=environment.wind_speed_mps,
             gust_multiplier=environment.gust_multiplier,
+            profile_mode=weather_profile_mode,
         ),
         environment=environment,
         battery=battery,
@@ -276,12 +363,28 @@ def validate_interactive_mission(spec: InteractiveMissionSpec, baseline: SystemB
         raise ValueError("Wind direction must be in [0, 360) degrees.")
     if spec.environment.gust_multiplier < 1.0:
         raise ValueError("Gust multiplier must be at least 1.0.")
+    if spec.weather_profile_mode not in SUPPORTED_WEATHER_PROFILE_MODES:
+        raise ValueError(
+            f"Weather profile mode must be one of {sorted(SUPPORTED_WEATHER_PROFILE_MODES)}."
+        )
     if not 0.0 < spec.battery.initial_battery_percent <= 100.0:
         raise ValueError("Initial battery percent must be in (0, 100].")
+    if not 12.0 <= spec.battery.warn_battery_threshold_percent <= 50.0:
+        raise ValueError("Warn battery threshold percent must be in [12, 50].")
     if not 5.0 <= spec.battery.rtl_battery_threshold_percent <= 50.0:
         raise ValueError("RTL battery threshold percent must be in [5, 50].")
-    if spec.battery.initial_battery_percent <= spec.battery.rtl_battery_threshold_percent:
-        raise ValueError("Initial battery percent must be greater than the RTL battery threshold.")
+    if not 3.0 <= spec.battery.emergency_battery_threshold_percent <= 50.0:
+        raise ValueError("Emergency battery threshold percent must be in [3, 50].")
+    if spec.battery.low_battery_action not in SUPPORTED_LOW_BATTERY_ACTIONS:
+        raise ValueError(
+            f"Low battery action must be one of {sorted(SUPPORTED_LOW_BATTERY_ACTIONS)}."
+        )
+    if spec.battery.initial_battery_percent <= spec.battery.warn_battery_threshold_percent:
+        raise ValueError("Initial battery percent must be greater than the warn battery threshold.")
+    if spec.battery.warn_battery_threshold_percent <= spec.battery.rtl_battery_threshold_percent:
+        raise ValueError("Warn battery threshold must be greater than the RTL battery threshold.")
+    if spec.battery.rtl_battery_threshold_percent <= spec.battery.emergency_battery_threshold_percent:
+        raise ValueError("RTL battery threshold must be greater than the emergency battery threshold.")
 
 
 def validate_local_waypoint(waypoint: LocalMissionWaypoint, baseline: SystemBaseline) -> None:
@@ -321,4 +424,19 @@ def weather_reading_at(
         steady_wind_mps=current.steady_wind_mps,
         gust_wind_mps=current.gust_wind_mps,
         source=f"profile@{current.t_s:.1f}s",
+    )
+
+
+def runtime_baseline_for_spec(
+    baseline: SystemBaseline,
+    spec: InteractiveMissionSpec,
+) -> SystemBaseline:
+    return replace(
+        baseline,
+        safety=replace(
+            baseline.safety,
+            battery_warn_percent=spec.battery.warn_battery_threshold_percent,
+            battery_rtl_percent=spec.battery.rtl_battery_threshold_percent,
+            battery_emergency_percent=spec.battery.emergency_battery_threshold_percent,
+        ),
     )

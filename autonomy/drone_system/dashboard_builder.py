@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +16,8 @@ def default_replay_bundle_manifest_path(repo_root: Path) -> Path:
 def build_dashboard_data(replay_bundle_manifest: dict[str, Any]) -> dict[str, Any]:
     baseline = load_system_baseline()
     latest_replay = build_showcase_data(replay_bundle_manifest)
+    fpv_source_url = os.environ.get("SKYLINK_FPV_SOURCE_URL", "http://127.0.0.1:5050/stream")
+    fpv_enabled = os.environ.get("SKYLINK_FPV_ENABLED", "1").strip().lower() in {"1", "true", "yes", "on"}
     return {
         "baseline": {
             "home": {
@@ -36,6 +39,17 @@ def build_dashboard_data(replay_bundle_manifest: dict[str, Any]) -> dict[str, An
                 "battery_rtl_percent": baseline.safety.battery_rtl_percent,
                 "battery_emergency_percent": baseline.safety.battery_emergency_percent,
                 "max_operating_wind_mps": baseline.safety.max_operating_wind_mps,
+            },
+            "visualization": {
+                "fpv": {
+                    "enabled": fpv_enabled,
+                    "source_url": fpv_source_url,
+                    "proxy_url": "/api/fpv/stream",
+                },
+                "cinematic": {
+                    "redline_pitch_deg": 15.0,
+                    "redline_roll_deg": 15.0,
+                },
             },
         },
         "latest_replay": latest_replay,

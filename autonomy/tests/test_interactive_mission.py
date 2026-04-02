@@ -11,10 +11,14 @@ if str(REPO_ROOT) not in sys.path:
 
 from autonomy.drone_system.config import load_system_baseline
 from autonomy.drone_system.interactive_mission import (
+    BatteryOverrides,
     InteractiveMissionSpec,
     LocalMissionWaypoint,
+    LOW_BATTERY_ACTION_WARNING,
+    WEATHER_PROFILE_MODE_FULL_TRIP,
     WeatherProfilePoint,
     default_weather_profile,
+    runtime_baseline_for_spec,
     validate_interactive_mission,
     weather_reading_at,
 )
@@ -74,6 +78,53 @@ class InteractiveMissionTests(unittest.TestCase):
 
         self.assertGreater(trigger.gust_wind_mps or 0.0, self.baseline.safety.max_operating_wind_mps)
         self.assertLessEqual(recovery.gust_wind_mps or 0.0, self.baseline.safety.max_operating_wind_mps)
+
+    def test_full_trip_weather_profile_stays_below_abort_limit(self) -> None:
+        profile = default_weather_profile(
+            wind_speed_mps=3.4,
+            gust_multiplier=1.34,
+            profile_mode=WEATHER_PROFILE_MODE_FULL_TRIP,
+        )
+
+        self.assertTrue(all((point.gust_wind_mps or 0.0) <= self.baseline.safety.max_operating_wind_mps for point in profile))
+
+    def test_validate_interactive_mission_rejects_invalid_battery_threshold_order(self) -> None:
+        spec = InteractiveMissionSpec(
+            mission_id="planner-test",
+            cruise_speed_mps=self.baseline.speed_band.nominal_mps,
+            waypoints=(
+                LocalMissionWaypoint(north_m=0.0, east_m=0.0, altitude_m=10.0),
+                LocalMissionWaypoint(north_m=18.0, east_m=12.0, altitude_m=12.0),
+            ),
+            battery=BatteryOverrides(
+                initial_battery_percent=100.0,
+                warn_battery_threshold_percent=20.0,
+                rtl_battery_threshold_percent=25.0,
+                emergency_battery_threshold_percent=10.0,
+                low_battery_action=LOW_BATTERY_ACTION_WARNING,
+            ),
+        )
+
+        with self.assertRaises(ValueError) as context:
+            validate_interactive_mission(spec, self.baseline)
+
+        self.assertIn("Warn battery threshold", str(context.exception))
+
+    def test_runtime_baseline_for_spec_uses_battery_overrides(self) -> None:
+        spec = InteractiveMissionSpec(
+            mission_id="planner-test",
+            cruise_speed_mps=self.baseline.speed_band.nominal_mps,
+            waypoints=(
+                LocalMissionWaypoint(north_m=0.0, east_m=0.0, altitude_m=10.0),
+                LocalMissionWaypoint(north_m=18.0, east_m=12.0, altitude_m=12.0),
+            ),
+        )
+
+        runtime_baseline = runtime_baseline_for_spec(self.baseline, spec)
+
+        self.assertEqual(runtime_baseline.safety.battery_warn_percent, spec.battery.warn_battery_threshold_percent)
+        self.assertEqual(runtime_baseline.safety.battery_rtl_percent, spec.battery.rtl_battery_threshold_percent)
+        self.assertEqual(runtime_baseline.safety.battery_emergency_percent, spec.battery.emergency_battery_threshold_percent)
 
 
 if __name__ == "__main__":
