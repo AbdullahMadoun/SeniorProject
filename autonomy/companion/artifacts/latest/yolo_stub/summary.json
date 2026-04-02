@@ -1,0 +1,33 @@
+{
+  "detection_count": 3,
+  "csv_path": "D:\\downloads\\SeniorProject\\Skylink2\\autonomy\\companion\\artifacts\\latest\\yolo_stub\\pothole_detections.csv",
+  "detections": [
+    {
+      "frame_id": "frame-0001",
+      "x_min": 40,
+      "y_min": 55,
+      "x_max": 180,
+      "y_max": 145,
+      "confidence": 0.82,
+      "label": "pothole"
+    },
+    {
+      "frame_id": "frame-0002",
+      "x_min": 45,
+      "y_min": 59,
+      "x_max": 185,
+      "y_max": 149,
+      "confidence": 0.82,
+      "label": "pothole"
+    },
+    {
+      "frame_id": "frame-0003",
+      "x_min": 50,
+      "y_min": 63,
+      "x_max": 190,
+      "y_max": 153,
+      "confidence": 0.82,
+      "label": "pothole"
+    }
+  ]
+}

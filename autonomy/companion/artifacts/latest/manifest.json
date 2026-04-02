@@ -1,0 +1,142 @@
+{
+  "generated_at_utc": "2026-04-02T01:45:18.029926+00:00",
+  "artifact_root": "D:\\downloads\\SeniorProject\\Skylink2\\autonomy\\companion\\artifacts\\latest",
+  "modules": {
+    "video_logger": {
+      "config": {
+        "mavlink_target": "udp:127.0.0.1:14551",
+        "mavlink_baud": 57600,
+        "camera_source": "0",
+        "output_dir": "D:\\downloads\\SeniorProject\\Skylink2\\autonomy\\companion\\artifacts\\latest\\video_logger",
+        "max_frames": 5,
+        "frame_width": 640,
+        "frame_height": 480,
+        "frame_interval_s": 0.01,
+        "telemetry_timeout_s": 0.5,
+        "use_mock_mavlink": true,
+        "use_mock_camera": true
+      },
+      "processed_frames": 5,
+      "telemetry_updates": 3,
+      "used_mock_camera": true,
+      "used_mock_mavlink": true,
+      "csv_path": "D:\\downloads\\SeniorProject\\Skylink2\\autonomy\\companion\\artifacts\\latest\\video_logger\\telemetry_log.csv",
+      "preview_path": "D:\\downloads\\SeniorProject\\Skylink2\\autonomy\\companion\\artifacts\\latest\\video_logger\\latest_frame.jpg"
+    },
+    "aruco_detector": {
+      "config": {
+        "camera_source": "0",
+        "mavlink_target": "udpout:127.0.0.1:14550",
+        "mavlink_baud": 57600,
+        "output_dir": "D:\\downloads\\SeniorProject\\Skylink2\\autonomy\\companion\\artifacts\\latest\\aruco_detector",
+        "marker_id": 0,
+        "marker_size_m": 0.2,
+        "max_frames": 5,
+        "frame_interval_s": 0.01,
+        "use_mock_camera": true,
+        "use_mock_mavlink": true
+      },
+      "detections": [
+        {
+          "timestamp_utc": 1775094318.0299265,
+          "marker_id": 0,
+          "x_m": 0.05000000074505806,
+          "y_m": -0.029999999329447746,
+          "z_m": 0.20000000298023224,
+          "source": "cv2.aruco",
+          "landing_target_payload": {
+            "time_usec": 1775094318029926,
+            "target_num": 0,
+            "frame": 12,
+            "angle_x_rad": 0.0,
+            "angle_y_rad": 0.0,
+            "distance_m": 0.20832666950336812,
+            "size_x_rad": 0.0,
+            "size_y_rad": 0.0,
+            "x_m": 0.05000000074505806,
+            "y_m": -0.029999999329447746,
+            "z_m": 0.20000000298023224,
+            "q": [
+              1.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "target_type": 2,
+            "position_valid": 1
+          }
+        }
+      ],
+      "detection_count": 1,
+      "used_mock_camera": true,
+      "used_mock_mavlink": true,
+      "preview_path": "D:\\downloads\\SeniorProject\\Skylink2\\autonomy\\companion\\artifacts\\latest\\aruco_detector\\aruco_preview.jpg",
+      "log_path": "D:\\downloads\\SeniorProject\\Skylink2\\autonomy\\companion\\artifacts\\latest\\aruco_detector\\landing_target_log.json"
+    },
+    "gpio_charging": {
+      "config": {
+        "charge_enable_pin": 17,
+        "contact_channel": 0,
+        "battery_channel": 1,
+        "contact_threshold_v": 0.5,
+        "battery_nominal_v": 16.8,
+        "battery_tolerance_v": 1.5,
+        "output_dir": "D:\\downloads\\SeniorProject\\Skylink2\\autonomy\\companion\\artifacts\\latest\\gpio_charging",
+        "cycles": 1,
+        "poll_interval_s": 0.0
+      },
+      "used_mock_gpio": true,
+      "used_mock_board": true,
+      "used_mock_busio": true,
+      "used_mock_ads": true,
+      "decisions": [
+        {
+          "contact_voltage_v": 1.2,
+          "battery_voltage_v": 16.8,
+          "contact_detected": true,
+          "battery_in_range": true,
+          "charge_enabled": true,
+          "reason": "Dock contact valid and battery voltage within charging band."
+        }
+      ],
+      "final_pin_state": {
+        "direction": "OUT",
+        "value": 1
+      },
+      "output_path": "D:\\downloads\\SeniorProject\\Skylink2\\autonomy\\companion\\artifacts\\latest\\gpio_charging\\charging_decisions.json"
+    },
+    "yolo_stub": {
+      "detection_count": 3,
+      "csv_path": "D:\\downloads\\SeniorProject\\Skylink2\\autonomy\\companion\\artifacts\\latest\\yolo_stub\\pothole_detections.csv",
+      "detections": [
+        {
+          "frame_id": "frame-0001",
+          "x_min": 40,
+          "y_min": 55,
+          "x_max": 180,
+          "y_max": 145,
+          "confidence": 0.82,
+          "label": "pothole"
+        },
+        {
+          "frame_id": "frame-0002",
+          "x_min": 45,
+          "y_min": 59,
+          "x_max": 185,
+          "y_max": 149,
+          "confidence": 0.82,
+          "label": "pothole"
+        },
+        {
+          "frame_id": "frame-0003",
+          "x_min": 50,
+          "y_min": 63,
+          "x_max": 190,
+          "y_max": 153,
+          "confidence": 0.82,
+          "label": "pothole"
+        }
+      ]
+    }
+  }
+}

@@ -62,7 +62,7 @@ class MockTelemetrySource:
         return None
 
     def read(self, timeout_s: float) -> TelemetrySample | None:
-        del timeout_s
+        time.sleep(max(0.0, min(timeout_s, 0.05)))
         self._index += 1
         lat_deg = 47.397971 + (self._index * 0.000001)
         lon_deg = 8.546164 + (self._index * 0.0000015)
@@ -191,6 +191,14 @@ class VideoLoggerService:
                     self._latest_sample = sample
                     self._telemetry_updates += 1
 
+    def _wait_for_initial_sample(self, timeout_s: float) -> None:
+        deadline = time.monotonic() + timeout_s
+        while time.monotonic() < deadline:
+            with self._telemetry_lock:
+                if self._latest_sample is not None:
+                    return
+            time.sleep(0.01)
+
     def _overlay_lines(self, frame: Any, sample: TelemetrySample | None) -> Any:
         if sample is None:
             lines = ["GPS unavailable", "Using last-known or mock telemetry"]
@@ -245,6 +253,7 @@ class VideoLoggerService:
         self.telemetry_source.connect()
         telemetry_thread = threading.Thread(target=self._telemetry_loop, name="video-logger-telemetry", daemon=True)
         telemetry_thread.start()
+        self._wait_for_initial_sample(timeout_s=max(0.1, self.config.telemetry_timeout_s))
         fieldnames = [
             "frame_index",
             "timestamp_utc",
