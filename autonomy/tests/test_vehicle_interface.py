@@ -23,8 +23,8 @@ class VehicleInterfaceTests(unittest.TestCase):
             mission_id="nominal-mission",
             home=self.baseline.home,
             waypoints=(
-                Waypoint(lat=24.689050, lon=50.174000, alt_m=25.0),
-                Waypoint(lat=24.689120, lon=50.174160, alt_m=25.0),
+                Waypoint(lat=26.307150, lon=50.145900, alt_m=25.0),
+                Waypoint(lat=26.307220, lon=50.146060, alt_m=25.0),
             ),
             cruise_speed_mps=5.0,
         )
@@ -47,8 +47,8 @@ class VehicleInterfaceTests(unittest.TestCase):
             mission_id="far-mission",
             home=self.baseline.home,
             waypoints=(
-                Waypoint(lat=24.690500, lon=50.174000, alt_m=25.0),
-                Waypoint(lat=24.690700, lon=50.174100, alt_m=25.0),
+                Waypoint(lat=26.308500, lon=50.145900, alt_m=25.0),
+                Waypoint(lat=26.308700, lon=50.146100, alt_m=25.0),
             ),
             cruise_speed_mps=5.0,
         )
@@ -146,20 +146,20 @@ class VehicleInterfaceTests(unittest.TestCase):
             mission = FakeMission()
 
         async def _run() -> None:
+            from autonomy.drone_system.vehicle_interface import TelemetryStreamClosed
             gateway = MavsdkVehicleGateway(self.baseline)
             gateway._drone = FakeDrone()
-            async def _always_default(stream, default, transform=lambda item: item, timeout_s: float = 3.0):
-                return default
-            gateway._read_once_or_default = _always_default  # type: ignore[method-assign]
+            
+            async def _always_raise(stream, default=None, transform=lambda item: item, timeout_s: float = 3.0):
+                raise TelemetryStreamClosed("Simulated telemetry unavailable")
+            
+            gateway._read_once_or_default = _always_raise  # type: ignore[method-assign]
             snapshot = await gateway.get_snapshot()
             local_pose = await gateway.get_local_pose()
             gps_info = await gateway.get_gps_info()
-            self.assertTrue(snapshot.connected)
-            self.assertIsNone(snapshot.position)
-            self.assertIsNone(snapshot.battery_percent)
-            self.assertEqual(snapshot.mode, VehicleMode.HOLD)
-            self.assertFalse(snapshot.armed)
-            self.assertFalse(snapshot.in_air)
+            # With new telemetry health monitoring, unavailable telemetry means disconnected
+            self.assertFalse(snapshot.connected)
+            self.assertEqual(snapshot.mode, VehicleMode.DISCONNECTED)
             self.assertIsNone(local_pose)
             self.assertEqual(gps_info, {})
             with self.assertRaises(RuntimeError):

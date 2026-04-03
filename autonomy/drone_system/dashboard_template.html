@@ -641,6 +641,7 @@
           <div class="field"><label>Warn Threshold</label><input id="warn" type="range" min="12" max="50" step="1" value="25"><div class="meta"><span>PX4 low threshold</span><strong id="warn-v">25%</strong></div></div>
           <div class="field"><label>RTL Battery Threshold</label><input id="rtl" type="range" min="5" max="50" step="1" value="20"><div class="meta"><span>PX4 critical threshold</span><strong id="rtl-v">20%</strong></div></div>
           <div class="field"><label>Emergency Threshold</label><input id="emergency" type="range" min="3" max="50" step="1" value="18"><div class="meta"><span>PX4 land threshold</span><strong id="emergency-v">18%</strong></div></div>
+          <div class="field"><label>Battery Drain Rate</label><input id="battery-drain" type="range" min="0.1" max="5" step="0.1" value="1.0"><div class="meta"><span>1x = nominal</span><strong id="battery-drain-v">1.0x</strong></div></div>
         </div>
         <div class="card">
           <label>Low Battery Action</label>
@@ -650,7 +651,7 @@
             <button class="battery-action active" data-battery-action="return">RTL</button>
           </div>
         </div>
-        <div class="actions action-strip"><button id="launch" class="primary" disabled>Launch Live Simulator</button><button id="reload">Reload Latest Evidence</button></div>
+        <div class="actions action-strip"><button id="launch" class="primary" disabled>Launch Simulation</button><button id="reload">View Last Simulation</button></div>
         <div class="grid2"><div class="chip"><span>FPV Mode</span><strong id="fpv-mode-summary">simulation</strong></div><div class="chip"><span>Load State</span><strong id="load-state">Nominal</strong></div></div>
         <div class="terminal"><div class="terminal-head"><div class="terminal-meta"><label>Target</label><strong id="target">udpin://0.0.0.0:14540</strong></div><div class="terminal-meta"><label>Status</label><strong id="status">Bridge Active</strong></div></div><div id="term" class="terminal-body"></div></div>
         <div id="media" class="list"></div>
@@ -659,7 +660,7 @@
     <main class="right">
       <section class="panel">
         <div class="head"><div><div class="eyebrow">Top Right</div><h2>2D GPS Mission Map</h2></div><div class="grid4" style="min-width:420px"><div class="card"><label>Mode</label><strong id="map-mode">idle</strong></div><div class="card"><label>Battery</label><strong id="map-battery">n/a</strong></div><div class="card"><label>Satellites</label><strong id="map-sats">n/a</strong></div><div class="card"><label>Wind Load</label><strong id="map-load">0%</strong></div></div></div>
-        <div class="map-shell"><div id="map"></div><div class="overlay"><div class="card"><label>Map Controls</label><div id="map-text">Click inside the geofence to place mission waypoints.</div></div><div class="card"><label>Live Telemetry</label><div id="map-live">Awaiting live mission start.</div></div></div></div>
+        <div class="map-shell"><div id="map"></div><div class="overlay"><div class="card"><label>Simulation Phase</label><div id="sim-phase" style="color:var(--accent)">Ready</div></div><div class="card"><label>Map Controls</label><div id="map-text">Click inside the geofence to place mission waypoints.</div></div><div class="card"><label>Live Telemetry</label><div id="map-live">Awaiting live mission start.</div></div></div></div>
       </section>
       <section class="panel">
         <div class="toolbar"><div><div class="eyebrow">Bottom Right</div><h2>Live 3D Telemetry Viewer</h2></div><div class="seg"><button class="cam active" data-cam="follow">Follow</button><button class="cam" data-cam="top">Top-down</button><button class="cam" data-cam="side">Side</button><button class="cam" data-cam="free">Free</button><button id="cinematic-toggle">Cinematic Mode</button></div></div>
@@ -715,13 +716,15 @@
     const cinematicCfg = base.visualization?.cinematic || { redline_pitch_deg: 15.0, redline_roll_deg: 15.0 };
     const S = { waypoints: [], valid: false, locked: false, cam: "follow", cinematic: false, job: null, log: null, tel: null, logTimeout: null, telTimeout: null, last: null, liveFrames: [], liveFrameLimit: 1200, potholePulse: null, weatherMode: "proof", lowBatteryAction: "return", events: [], missionStartTime: null, lastBattery: null, lastMode: null, windThreshold: 7.0 };
     const $ = (id) => document.getElementById(id);
-    const E = {
+const E = {
       timelineTrack: $("timeline-track"),
       timelineProgress: $("timeline-progress"),
       eventCount: $("event-count"),
       eventDetailPopup: $("event-detail-popup"),
       popupTime: $("popup-time"),
       popupMessage: $("popup-message"),
+      simPhase: $("sim-phase"),
+      batteryDrain: $("battery-drain"),
       alt: $("alt"), speed: $("speed"), wind: $("wind"), dir: $("dir"), gust: $("gust"), battery: $("battery"), warn: $("warn"), rtl: $("rtl"), emergency: $("emergency"), launch: $("launch"), reload: $("reload"), undo: $("undo"), clear: $("clear"), term: $("term"), waypoints: $("waypoints"), banner: $("banner"), bannerT: $("banner-t"), bannerD: $("banner-d"), cGeo: $("c-geofence"), cWp: $("c-waypoints"), cAlt: $("c-altitude"), mapText: $("map-text"), mapLive: $("map-live"), target: $("target"), status: $("status"), mGeo: $("m-geofence"), mHome: $("m-home"), mDock: $("m-dock"), mProof: $("m-proof"), mapMode: $("map-mode"), mapBattery: $("map-battery"), mapSats: $("map-sats"), mapLoad: $("map-load"), hAlt: $("h-alt"), hSpeed: $("h-speed"), hMode: $("h-mode"), hBattery: $("h-battery"), hDock: $("h-dock"), hLoad: $("h-load"), media: $("media"), fpvModeSummary: $("fpv-mode-summary"), loadState: $("load-state"), cinematicToggle: $("cinematic-toggle"), fpvShell: $("fpv-shell"), fpvFeed: $("fpv-feed"), fpvStatus: $("fpv-status"), fpvPlaceholderText: $("fpv-placeholder-text"), headingTrack: $("heading-track"), horizonRoll: $("horizon-roll"), horizonPitch: $("horizon-pitch"), pitchLadder: $("pitch-ladder"), fpvHeading: $("fpv-heading"), fpvAttitude: $("fpv-attitude"), fpvStress: $("fpv-stress"), fpvFlag: $("fpv-flag"), stressFlag: $("stress-flag"), loadFlag: $("load-flag") };
     const fmt = (value, digits = 1) => Number(value || 0).toFixed(digits);
     const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
@@ -730,14 +733,27 @@
     const ned = (lat, lon) => ({ north_m: (lat - home.lat) * 111320, east_m: (lon - home.lon) * 111320 * Math.cos(home.lat * Math.PI / 180) });
     function normalizeHeading(heading) { const raw = Number(heading || 0); return ((raw % 360) + 360) % 360; }
     function modeColor(mode) { if (mode === "return_to_launch") return 0xffb454; if (mode === "land" || mode === "dock") return 0x00d4aa; return 0x53b7ff; }
-    function sliderText() { $("alt-v").textContent = `${fmt(E.alt.value, 0)} m`; $("speed-v").textContent = `${fmt(E.speed.value)} m/s`; $("wind-v").textContent = `${fmt(E.wind.value)} m/s`; $("dir-v").textContent = `${fmt(E.dir.value, 0)} deg`; $("gust-v").textContent = `${fmt(E.gust.value, 2)}x`; $("battery-v").textContent = `${fmt(E.battery.value, 0)}%`; $("warn-v").textContent = `${fmt(E.warn.value, 0)}%`; $("rtl-v").textContent = `${fmt(E.rtl.value, 0)}%`; $("emergency-v").textContent = `${fmt(E.emergency.value, 0)}%`; }
+    function sliderText() { $("alt-v").textContent = `${fmt(E.alt.value, 0)} m`; $("speed-v").textContent = `${fmt(E.speed.value)} m/s`; $("wind-v").textContent = `${fmt(E.wind.value)} m/s`; $("dir-v").textContent = `${fmt(E.dir.value, 0)} deg`; $("gust-v").textContent = `${fmt(E.gust.value, 2)}x`; $("battery-v").textContent = `${fmt(E.battery.value, 0)}%`; $("warn-v").textContent = `${fmt(E.warn.value, 0)}%`; $("rtl-v").textContent = `${fmt(E.rtl.value, 0)}%`; $("emergency-v").textContent = `${fmt(E.emergency.value, 0)}%`; $("battery-drain-v").textContent = `${fmt(E.batteryDrain.value, 1)}x`; }
     function setSegmentValue(selector, dataName, value) { document.querySelectorAll(selector).forEach((button) => button.classList.toggle("active", button.dataset[dataName] === value)); }
     function setWeatherMode(mode) { S.weatherMode = mode; setSegmentValue(".weather-mode", "weatherMode", mode); }
     function setLowBatteryAction(action) { S.lowBatteryAction = action; setSegmentValue(".battery-action", "batteryAction", action); }
-    function buildPayload() {
-      return { mission_id: "dashboard-live-mission", cruise_speed_mps: Number(E.speed.value), weather_profile_mode: S.weatherMode, waypoints: S.waypoints.map((waypoint) => ({ north_m: waypoint.north_m, east_m: waypoint.east_m, altitude_m: waypoint.altitude_m })), environment: { wind_speed_mps: Number(E.wind.value), wind_direction_deg: Number(E.dir.value), gust_multiplier: Number(E.gust.value) }, battery: { initial_battery_percent: Number(E.battery.value), warn_battery_threshold_percent: Number(E.warn.value), rtl_battery_threshold_percent: Number(E.rtl.value), emergency_battery_threshold_percent: Number(E.emergency.value), low_battery_action: S.lowBatteryAction } };
+function buildPayload() {
+      return { mission_id: "dashboard-live-mission", cruise_speed_mps: Number(E.speed.value), weather_profile_mode: S.weatherMode, waypoints: S.waypoints.map((waypoint) => ({ north_m: waypoint.north_m, east_m: waypoint.east_m, altitude_m: waypoint.altitude_m })), environment: { wind_speed_mps: Number(E.wind.value), wind_direction_deg: Number(E.dir.value), gust_multiplier: Number(E.gust.value) }, battery: { initial_battery_percent: Number(E.battery.value), warn_battery_threshold_percent: Number(E.warn.value), rtl_battery_threshold_percent: Number(E.rtl.value), emergency_battery_threshold_percent: Number(E.emergency.value), low_battery_action: S.lowBatteryAction, battery_drain_multiplier: Number(E.batteryDrain.value) } };
     }
-    function log(message, className = "") { const node = document.createElement("div"); node.className = className; node.textContent = message; E.term.appendChild(node); E.term.scrollTop = E.term.scrollHeight; }
+    function log(message, className = "") { const node = document.createElement("div"); node.className = className; node.textContent = message; E.term.appendChild(node); E.term.scrollTop = E.term.scrollHeight; updateSimPhase(message); }
+    const PHASE_PATTERNS = [
+      { pattern: /launching generated Gazebo world/i, phase: "Starting Gazebo" },
+      { pattern: /Gazebo world ready/i, phase: "Gazebo Ready" },
+      { pattern: /launching PX4 SITL/i, phase: "Starting PX4" },
+      { pattern: /PX4 SITL ready/i, phase: "PX4 Ready" },
+      { pattern: /starting validator/i, phase: "Running Validator" },
+      { pattern: /building replay bundle/i, phase: "Building Replay" },
+      { pattern: /building showcase/i, phase: "Building Showcase" },
+      { pattern: /building dashboard/i, phase: "Building Dashboard" },
+      { pattern: /completed/i, phase: "Complete!" },
+      { pattern: /error|fail|exception/i, phase: "Error!" },
+    ];
+    function updateSimPhase(message) { if (!E.simPhase || !S.locked) return; for (const { pattern, phase } of PHASE_PATTERNS) { if (pattern.test(message)) { E.simPhase.textContent = phase; E.simPhase.style.color = phase.includes("Error") ? "var(--danger)" : "var(--accent)"; break; } } }
     function setBanner(ok, title, detail, geofenceState, waypointState, altitudeState) { E.banner.className = `banner ${ok ? "ok" : "bad"}`; E.bannerT.textContent = title; E.bannerD.textContent = detail; E.cGeo.textContent = geofenceState; E.cWp.textContent = waypointState; E.cAlt.textContent = altitudeState; S.valid = ok; E.launch.disabled = !ok || S.locked; }
     function renderWaypointList() {
       E.waypoints.innerHTML = "";
@@ -829,11 +845,22 @@
       S.waypoints.push({ north_m: projected.north_m, east_m: projected.east_m, altitude_m: Number(E.alt.value) });
       await validateMission();
     });
-    function syncMapWaypoints() {
+function syncMapWaypoints() {
       waypointMarkers.forEach((marker) => marker.remove());
-      waypointMarkers = S.waypoints.map((waypoint) => L.marker(ll(waypoint.north_m, waypoint.east_m), { icon: waypointIcon }).addTo(map));
+      waypointMarkers = S.waypoints.map((waypoint, index) => {
+        const marker = L.marker(ll(waypoint.north_m, waypoint.east_m), { icon: waypointIcon, draggable: !S.locked }).addTo(map);
+        if (!S.locked) {
+          marker.on("dragend", async (e) => {
+            const projected = ned(e.target.getLatLng().lat, e.target.getLatLng().lng);
+            S.waypoints[index] = { north_m: projected.north_m, east_m: projected.east_m, altitude_m: waypoint.altitude_m };
+            sync3DWaypoints();
+            await validateMission();
+          });
+        }
+        return marker;
+      });
       missionPolyline.setLatLngs(S.waypoints.map((waypoint) => ll(waypoint.north_m, waypoint.east_m)));
-      E.mapText.textContent = S.locked ? "Mission is locked during live execution." : "Click inside the geofence to place mission waypoints.";
+      E.mapText.textContent = S.locked ? "Mission is locked during live execution. Waypoints can be edited before preparation." : "Click inside the geofence to place or drag waypoints.";
     }
     const sceneEl = $("scene");
     const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -1120,7 +1147,7 @@ E.mapMode.textContent = modeText(telemetryMode(frame));
       updateDrone(syntheticFrame);
       updateAttitudeHud(syntheticFrame);
     }
-    function resetLiveState() { S.liveFrames = []; S.events = []; S.missionStartTime = Date.now(); S.lastBattery = null; S.lastMode = null; livePolyline.setLatLngs([]); updateRibbon(); updateTimeline(); E.mapLive.textContent = "Awaiting live mission start."; log("[META] Live telemetry stream armed", "info"); }
+    function resetLiveState() { S.liveFrames = []; S.events = []; S.missionStartTime = Date.now(); S.lastBattery = null; S.lastMode = null; livePolyline.setLatLngs([]); updateRibbon(); updateTimeline(); E.mapLive.textContent = "Awaiting live mission start."; E.simPhase.textContent = "Starting..."; E.simPhase.style.color = "var(--warn)"; log("[META] Live telemetry stream armed", "info"); }
     function detectEvents(frame, previous, batteryPercent) {
       const currentMode = telemetryMode(frame);
       const elapsed = (Date.now() - S.missionStartTime) / 1000;
@@ -1226,8 +1253,10 @@ function streamTelemetry(jobId) {
       if (S.telTimeout) clearTimeout(S.telTimeout);
       S.tel = new EventSource(`/api/telemetry/live?job_id=${encodeURIComponent(jobId)}`);
       S.tel.addEventListener("telemetry", (event) => liveFrame(JSON.parse(event.data)));
-      S.tel.onerror = () => { if (S.tel) S.tel.close(); };
+S.tel.onerror = () => { if (S.tel) S.tel.close(); };
     }
+    function undoLastWaypoint() { if (S.locked || S.waypoints.length === 0) return; S.waypoints.pop(); syncMapWaypoints(); sync3DWaypoints(); validateMission(); }
+    function clearWaypoints() { if (S.locked) return; S.waypoints = []; syncMapWaypoints(); sync3DWaypoints(); validateMission(); }
     async function launchMission() {
       if (!S.valid || S.locked) return;
       S.locked = true;
@@ -1283,12 +1312,14 @@ function streamTelemetry(jobId) {
       });
     });
     E.cinematicToggle.addEventListener("click", () => { S.cinematic = !S.cinematic; E.cinematicToggle.classList.toggle("active", S.cinematic); E.cinematicToggle.dataset.active = String(S.cinematic); });
-    [E.alt, E.speed, E.wind, E.dir, E.gust, E.battery, E.warn, E.rtl, E.emergency].forEach((element) => element.addEventListener("input", sliderText));
+    [E.alt, E.speed, E.wind, E.dir, E.gust, E.battery, E.warn, E.rtl, E.emergency, E.batteryDrain].forEach((element) => element.addEventListener("input", sliderText));
     document.querySelectorAll(".weather-mode").forEach((button) => button.addEventListener("click", async () => { if (S.locked) return; setWeatherMode(button.dataset.weatherMode || "proof"); await validateMission(); }));
     document.querySelectorAll(".battery-action").forEach((button) => button.addEventListener("click", async () => { if (S.locked) return; setLowBatteryAction(button.dataset.batteryAction || "return"); await validateMission(); }));
     E.alt.addEventListener("input", async () => { S.waypoints = S.waypoints.map((waypoint) => ({ ...waypoint, altitude_m: Number(E.alt.value) })); await validateMission(); });
     [E.wind, E.dir, E.gust, E.battery, E.warn, E.rtl, E.emergency].forEach((element) => element.addEventListener("change", validateMission));
     E.launch.addEventListener("click", launchMission);
+    E.undo.addEventListener("click", undoLastWaypoint);
+    E.clear.addEventListener("click", clearWaypoints);
     E.reload.addEventListener("click", refreshArtifacts);
     E.undo.addEventListener("click", async () => { if (S.locked) return; S.waypoints.pop(); await validateMission(); });
     E.clear.addEventListener("click", async () => { if (S.locked) return; S.waypoints = []; await validateMission(); });

@@ -2,11 +2,43 @@ from __future__ import annotations
 
 import json
 import math
+
+import numpy as np
 from dataclasses import asdict, dataclass
 from enum import Enum
 from pathlib import Path
 
 from .config import SystemBaseline
+
+
+HORIZONTAL_ERROR_EPSILON = 1e-6
+MAX_VELOCITY_RATIO = 10.0
+MAX_CAMERA_ANGLE_RAD = math.radians(60.0)
+MIN_ANGLE_RAD = math.radians(0.1)
+MAX_RANGE_M = 100.0
+MIN_RANGE_M = 0.01
+
+
+def clamp_angle(angle_rad: float) -> float:
+    if abs(angle_rad) > MAX_CAMERA_ANGLE_RAD:
+        return math.copysign(MAX_CAMERA_ANGLE_RAD, angle_rad)
+    return angle_rad
+
+
+def validate_observation(observation: LandingTargetObservation) -> LandingTargetObservation:
+    if not math.isfinite(observation.forward_angle_rad):
+        raise ValueError(f"forward_angle_rad is not finite: {observation.forward_angle_rad}")
+    if not math.isfinite(observation.right_angle_rad):
+        raise ValueError(f"right_angle_rad is not finite: {observation.right_angle_rad}")
+    if not math.isfinite(observation.range_m):
+        raise ValueError(f"range_m is not finite: {observation.range_m}")
+    if observation.range_m <= MIN_RANGE_M:
+        raise ValueError(f"range_m must be > {MIN_RANGE_M}, got: {observation.range_m}")
+    if observation.range_m > MAX_RANGE_M:
+        raise ValueError(f"range_m exceeds maximum sensor range: {observation.range_m}")
+    if not (0.0 <= observation.quality <= 1.0):
+        raise ValueError(f"quality must be in [0, 1], got: {observation.quality}")
+    return observation
 
 
 class PrecisionLandingPhase(str, Enum):
@@ -90,8 +122,16 @@ class PrecisionLandingTuning:
 
 
 def estimate_relative_target(observation: LandingTargetObservation) -> RelativeLandingTarget:
-    forward_error_m = math.tan(observation.forward_angle_rad) * observation.range_m
-    right_error_m = math.tan(observation.right_angle_rad) * observation.range_m
+    forward_angle = clamp_angle(observation.forward_angle_rad)
+    right_angle = clamp_angle(observation.right_angle_rad)
+    if abs(forward_angle) < MIN_ANGLE_RAD:
+        forward_angle = 0.0
+    if abs(right_angle) < MIN_ANGLE_RAD:
+        right_angle = 0.0
+    forward_error_m = math.tan(forward_angle) * observation.range_m
+    right_error_m = math.tan(right_angle) * observation.range_m
+    forward_error_m = max(-observation.range_m, min(observation.range_m, forward_error_m))
+    right_error_m = max(-observation.range_m, min(observation.range_m, right_error_m))
     horizontal_error_m = math.hypot(forward_error_m, right_error_m)
     return RelativeLandingTarget(
         forward_error_m=forward_error_m,
@@ -122,18 +162,28 @@ class PrecisionLandingController:
     ) -> PrecisionLandingControllerState:
         if observation.acquired and observation.quality >= self._tuning.min_observation_quality:
             self._last_lock_time_s = time_s
+            observation = validate_observation(observation)
             target = estimate_relative_target(observation)
             horizontal_velocity_scale = min(
                 target.horizontal_error_m * self._tuning.align_gain,
                 self._tuning.max_horizontal_speed_mps,
             )
-            if target.horizontal_error_m > 0.0:
-                forward_velocity = -horizontal_velocity_scale * (
-                    target.forward_error_m / target.horizontal_error_m
+            if target.horizontal_error_m > HORIZONTAL_ERROR_EPSILON:
+                ratio = np.clip(
+                    target.forward_error_m / target.horizontal_error_m,
+                    -MAX_VELOCITY_RATIO,
+                    MAX_VELOCITY_RATIO,
                 )
-                right_velocity = -horizontal_velocity_scale * (
-                    target.right_error_m / target.horizontal_error_m
+                forward_velocity = -horizontal_velocity_scale * ratio
+                ratio = np.clip(
+                    target.right_error_m / target.horizontal_error_m,
+                    -MAX_VELOCITY_RATIO,
+                    MAX_VELOCITY_RATIO,
                 )
+                right_velocity = -horizontal_velocity_scale * ratio
+            elif target.horizontal_error_m > 0.0:
+                forward_velocity = 0.0
+                right_velocity = 0.0
             else:
                 forward_velocity = 0.0
                 right_velocity = 0.0

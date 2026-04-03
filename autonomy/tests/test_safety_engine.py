@@ -26,8 +26,8 @@ class SafetyEngineTests(unittest.TestCase):
             mission_id="safety-mission",
             home=self.baseline.home,
             waypoints=(
-                Waypoint(lat=24.689050, lon=50.174000, alt_m=25.0),
-                Waypoint(lat=24.689120, lon=50.174160, alt_m=25.0),
+                Waypoint(lat=26.307150, lon=50.145900, alt_m=25.0),
+                Waypoint(lat=26.307220, lon=50.146060, alt_m=25.0),
             ),
             cruise_speed_mps=5.0,
         )

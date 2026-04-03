@@ -5,6 +5,7 @@ from dataclasses import asdict, dataclass
 import json
 import os
 from pathlib import Path
+import signal
 import sys
 import time
 from typing import Any
@@ -19,6 +20,12 @@ else:
 
 
 DEFAULT_OUTPUT_DIR = Path(os.environ.get("SKYLINK_GPIO_OUTPUT", Path.cwd() / "companion_gpio"))
+
+I2C_MAX_RETRIES = 3
+I2C_RETRY_DELAY_S = 0.1
+I2C_RETRY_BACKOFF = 2.0
+VOLTAGE_SANITY_MAX_V = 24.0
+VOLTAGE_SANITY_MIN_V = 0.0
 
 
 @dataclass(frozen=True)
@@ -55,6 +62,7 @@ class GPIOChargingController:
         self._ads_device: Any | None = None
         self._contact_channel: Any | None = None
         self._battery_channel: Any | None = None
+        self._emergency_shutdown_requested = False
 
     def setup(self) -> None:
         self.GPIO.setmode(self.GPIO.BCM)
@@ -64,6 +72,46 @@ class GPIOChargingController:
         self._contact_channel = self.AnalogIn(self._ads_device, self.config.contact_channel)
         self._battery_channel = self.AnalogIn(self._ads_device, self.config.battery_channel)
         self._charge_pin_ready = True
+
+    def emergency_shutdown(self) -> None:
+        """Force MOSFET OFF - CRITICAL ACTION happens first regardless of any failures."""
+        try:
+            if self._charge_pin_ready:
+                self.GPIO.output(self.config.charge_enable_pin, self.GPIO.LOW)
+        finally:
+            try:
+                self._log_emergency_shutdown()
+            finally:
+                self.GPIO.cleanup()
+
+    def _log_emergency_shutdown(self) -> None:
+        """Log emergency shutdown event. Safe to fail."""
+        emergency_log_path = self.config.output_dir / "emergency_shutdown.log"
+        self.config.output_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = time.time()
+        entry = f"EMERGENCY_SHUTDOWN at {timestamp}\n"
+        try:
+            emergency_log_path.write_text(entry, encoding="utf-8", append=True)
+        except Exception:
+            pass
+
+    def read_voltages_with_retry(self) -> tuple[float, float]:
+        last_exception = None
+        delay_s = I2C_RETRY_DELAY_S
+        for attempt in range(I2C_MAX_RETRIES):
+            try:
+                contact = float(self._contact_channel.voltage)
+                battery = float(self._battery_channel.voltage)
+                if not (VOLTAGE_SANITY_MIN_V <= contact <= VOLTAGE_SANITY_MAX_V) or not (VOLTAGE_SANITY_MIN_V <= battery <= VOLTAGE_SANITY_MAX_V):
+                    raise ValueError(f"Voltage out of range: contact={contact}, battery={battery}")
+                return contact, battery
+            except (OSError, IOError, ValueError) as exc:
+                last_exception = exc
+                if attempt < I2C_MAX_RETRIES - 1:
+                    time.sleep(delay_s)
+                    delay_s *= I2C_RETRY_BACKOFF
+        self.emergency_shutdown()
+        raise RuntimeError(f"I2C read failed after {I2C_MAX_RETRIES} attempts") from last_exception
 
     def read_voltages(self) -> tuple[float, float]:
         if self._contact_channel is None or self._battery_channel is None:
@@ -98,7 +146,7 @@ class GPIOChargingController:
         )
 
     def run_cycle(self) -> ChargingDecision:
-        contact_voltage_v, battery_voltage_v = self.read_voltages()
+        contact_voltage_v, battery_voltage_v = self.read_voltages_with_retry()
         decision = self.evaluate(
             contact_voltage_v=contact_voltage_v,
             battery_voltage_v=battery_voltage_v,
@@ -111,6 +159,8 @@ class GPIOChargingController:
         self.setup()
         decisions: list[dict[str, Any]] = []
         final_pin_state: dict[str, Any] = {}
+        signal.signal(signal.SIGTERM, lambda s, f: self.emergency_shutdown())
+        signal.signal(signal.SIGINT, lambda s, f: self.emergency_shutdown())
         try:
             for _ in range(self.config.cycles):
                 decision = self.run_cycle()

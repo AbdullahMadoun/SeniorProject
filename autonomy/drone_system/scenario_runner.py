@@ -33,8 +33,8 @@ class SafetyScenarioRunner:
             mission_id="baseline-scenario-mission",
             home=self._baseline.home,
             waypoints=(
-                Waypoint(lat=24.689050, lon=50.174000, alt_m=25.0),
-                Waypoint(lat=24.689120, lon=50.174160, alt_m=25.0),
+                Waypoint(lat=26.307150, lon=50.145900, alt_m=25.0),
+                Waypoint(lat=26.307220, lon=50.146060, alt_m=25.0),
             ),
             cruise_speed_mps=self._baseline.speed_band.nominal_mps,
         )

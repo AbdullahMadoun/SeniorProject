@@ -427,7 +427,13 @@ async def validate_mission(body: Any = Body(...)) -> dict[str, Any]:
 
 @app.post("/api/mission/execute")
 async def execute_mission(body: Any = Body(...)) -> dict[str, Any]:
-    spec = _parse_and_validate(body)
+    if PREPARED_SPEC_PATH.exists():
+        spec_dict = json.loads(PREPARED_SPEC_PATH.read_text(encoding="utf-8-sig"))
+        PREPARED_SPEC_PATH.unlink()
+        baseline = load_system_baseline()
+        spec = interactive_mission_spec_from_dict(spec_dict, baseline)
+    else:
+        spec = _parse_and_validate(body)
     try:
         job = job_manager.start_job(spec)
     except RuntimeError as exc:
@@ -439,6 +445,25 @@ async def execute_mission(body: Any = Body(...)) -> dict[str, Any]:
         "target": DEFAULT_TARGET,
         "bridge_status": DEFAULT_BRIDGE_STATUS,
         "spec": job.spec,
+    }
+
+
+PREPARED_SPEC_PATH = JOB_CACHE_DIR / "_prepared_mission.json"
+
+
+@app.post("/api/mission/prepare")
+async def prepare_mission(body: Any = Body(...)) -> dict[str, Any]:
+    spec = _parse_and_validate(body)
+    PREPARED_SPEC_PATH.parent.mkdir(parents=True, exist_ok=True)
+    PREPARED_SPEC_PATH.write_text(
+        json.dumps(interactive_mission_spec_to_dict(spec), indent=2),
+        encoding="utf-8",
+    )
+    return {
+        "job_id": "prepared",
+        "status": "prepared",
+        "message": "Simulation prepared. Click Launch to execute.",
+        "spec": interactive_mission_spec_to_dict(spec),
     }
 
 

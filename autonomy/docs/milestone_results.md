@@ -1659,3 +1659,159 @@ Objective:
 Validation:
 - autonomy regression status: `Ran 82 tests ... OK`
 - dashboard rebuild succeeded
+
+---
+
+## Milestone 26 - Dashboard Enhancement & Home Position Update
+
+Date: 2026-04-02
+
+Objective:
+- Update home position to user's dock station
+- Add Battery Drain Rate control
+- Add Simulation Phase indicator
+- Fix PX4 SITL home position
+- Rename "Reload" to "View Last Simulation"
+
+### Changes Made
+
+**PX4 SITL Home Position Fixed:**
+- Added `PX4_SIM_HOME` environment variable to run_live_interactive_mission.py
+- PX4 SITL now uses dock station coordinates (lat=26.307114, lon=50.145884, alt=584.0)
+
+**Home Position Updated:**
+- Updated `config/system.toml` to use dock station coordinates
+- Updated all test fixtures to use waypoints relative to new home
+- Updated `scenario_runner.py` and `weather_scenario_runner.py` default missions
+
+**Dashboard Features:**
+- "Launch Simulation" button - single button, no dummy prepare
+- "View Last Simulation" button - reloads existing evidence without re-running simulation
+- Battery Drain Rate slider (0.1x to 5.0x) - set to 0.1x for no battery failures
+- Simulation Phase indicator showing current stage
+- Event Timeline with markers for safety events
+
+**Validation:**
+- All 82 tests pass
+- Dashboard rebuilt successfully
+
+### Run Commands
+
+**Start Dashboard:**
+```powershell
+cd D:\downloads\SeniorProject\Skylink2\autonomy\scripts ; python mission_api.py --port 8626 --cpu-core 0
+```
+
+**Workflow:**
+1. Open http://127.0.0.1:8626
+2. Click map to place waypoints near dock station
+3. Set Battery Drain to **0.1** for no battery failures
+4. Click **"Launch Simulation"** - runs full PX4 SITL simulation
+
+---
+
+## Milestone 27 - NASA-Grade Robustness Improvements
+
+Date: 2026-04-02
+
+Objective:
+- Implement aerospace-level robustness for hardware safety, precision landing, and mission reliability
+- Add comprehensive preflight assurance system
+- Create pytest-based test infrastructure with pre/post integration tests
+
+### Changes Made
+
+**Iteration 1: GPIO Emergency Shutdown + I2C Retry**
+- File: `autonomy/companion/gpio_charging.py`
+- Added `emergency_shutdown()` method with atomic MOSFET OFF
+- Added SIGTERM/SIGINT handlers
+- Added I2C retry with exponential backoff (3 retries, 100ms base, 2x backoff)
+- Added voltage sanity checks (0-24V range)
+
+**Iteration 2: Camera Calibration Enforcement**
+- Files: `autonomy/companion/aruco_detector.py`, `autonomy/companion/calibrate_camera.py`
+- Added `load_camera_calibration()` with fail-fast validation
+- RMS error threshold: fail > 2.0 always, fail > 1.0 in STRICT mode
+- Placeholder intrinsics now rejected with clear error message
+- Added `_compute_detection_quality()` from detection metrics
+
+**Iteration 3: MAVSDK Retry Logic**
+- File: `autonomy/drone_system/vehicle_interface.py`
+- Connection: 5 retries, 100ms base, 2x backoff (~3.1s max)
+- Mission upload: 3 retries, 500ms base, 2x backoff, 30s timeout
+- Arm: 3 retries, 500ms base, 1.5x backoff
+
+**Iteration 4: Precision Landing Guards**
+- File: `autonomy/drone_system/precision_landing.py`
+- Added `HORIZONTAL_ERROR_EPSILON = 1e-6` for division guard
+- Added `MAX_VELOCITY_RATIO = 10.0` for velocity bounding
+- Added `clamp_angle()` for angle clamping (60° max)
+- Added `validate_observation()` for NaN/Inf/range checks
+
+**Iteration 5: Preflight Assurance System**
+- File: `autonomy/drone_system/preflight_assurance.py`
+- Comprehensive preflight checks: camera, GPIO, MAVSDK, precision landing, system config
+- Mode detection: SIMULATION (relaxed) vs PHYSICAL (strict)
+- Environment variable: `SKYLINK_PREFLIGHT_STRICT=1` for physical flights
+
+**Test Infrastructure**
+- New pytest fixtures in `autonomy/tests/conftest.py`
+- 53 new robustness tests across 5 test files
+- All tests pass alongside existing 82 tests
+
+### New Test Files
+
+```
+autonomy/tests/
+├── conftest.py                              # pytest fixtures
+├── test_gpio_charging_post.py               # 8 tests - GPIO emergency
+├── test_camera_calibration_post.py          # 9 tests - calibration enforcement
+├── test_mavsdk_retry_post.py               # 9 tests - MAVSDK retry
+├── test_precision_landing_post.py           # 14 tests - landing guards
+└── test_preflight_assurance.py             # 13 tests - preflight system
+```
+
+### Validation Results
+
+```
+# All 53 new robustness tests pass
+$ python -m pytest autonomy/tests/test_*_post.py autonomy/tests/test_preflight_assurance.py -v
+============================= 53 passed in 0.72s ==============================
+
+# All 82 existing regression tests pass
+$ python -m unittest discover -s autonomy/tests -p "test_*.py"
+Ran 82 tests in 0.952s
+OK
+
+# Preflight assurance passes in simulation mode
+$ python drone_system/preflight_assurance.py
+============================================================
+SKYLINK2 PREFLIGHT ASSURANCE (SIMULATION)
+============================================================
+Results: 5 checks
+  [PASS] [WARNING] camera_calibration: Using placeholder intrinsics (simulation mode)
+  [PASS] [CRITICAL] gpio_emergency_shutdown: GPIO emergency shutdown implemented
+  [PASS] [CRITICAL] mavsdk_retry: MAVSDK retry implemented (5 max retries)
+  [PASS] [CRITICAL] precision_landing_guards: Precision landing guards implemented (epsilon=1e-06)
+  [PASS] [CRITICAL] system_config: System config valid
+============================================================
+ALL CHECKS PASSED
+```
+
+### Configuration
+
+```bash
+# Preflight strictness (0=simulation relaxed, 1=physical flight strict)
+SKYLINK_PREFLIGHT_STRICT=0  # Default: relaxed for simulation
+SKYLINK_PREFLIGHT_STRICT=1  # Physical flight: full validation
+
+# Camera calibration (required when STRICT=1)
+SKYLINK_CAMERA_CALIBRATION=/path/to/calibration.json
+```
+
+### Next Steps
+
+1. Run physical flight validation: `SKYLINK_PREFLIGHT_STRICT=1 python preflight_assurance.py`
+2. Generate camera calibration: `python autonomy/companion/calibrate_camera.py --image-glob "*.jpg" --output calibration.json`
+3. Run full integration tests with PX4 SITL
+5. Click **"View Last Simulation"** - loads existing evidence without re-running

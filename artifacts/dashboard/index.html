@@ -641,6 +641,7 @@
           <div class="field"><label>Warn Threshold</label><input id="warn" type="range" min="12" max="50" step="1" value="25"><div class="meta"><span>PX4 low threshold</span><strong id="warn-v">25%</strong></div></div>
           <div class="field"><label>RTL Battery Threshold</label><input id="rtl" type="range" min="5" max="50" step="1" value="20"><div class="meta"><span>PX4 critical threshold</span><strong id="rtl-v">20%</strong></div></div>
           <div class="field"><label>Emergency Threshold</label><input id="emergency" type="range" min="3" max="50" step="1" value="18"><div class="meta"><span>PX4 land threshold</span><strong id="emergency-v">18%</strong></div></div>
+          <div class="field"><label>Battery Drain Rate</label><input id="battery-drain" type="range" min="0.1" max="5" step="0.1" value="1.0"><div class="meta"><span>1x = nominal</span><strong id="battery-drain-v">1.0x</strong></div></div>
         </div>
         <div class="card">
           <label>Low Battery Action</label>
@@ -650,7 +651,7 @@
             <button class="battery-action active" data-battery-action="return">RTL</button>
           </div>
         </div>
-        <div class="actions action-strip"><button id="launch" class="primary" disabled>Launch Live Simulator</button><button id="reload">Reload Latest Evidence</button></div>
+        <div class="actions action-strip"><button id="launch" class="primary" disabled>Launch Simulation</button><button id="reload">View Last Simulation</button></div>
         <div class="grid2"><div class="chip"><span>FPV Mode</span><strong id="fpv-mode-summary">simulation</strong></div><div class="chip"><span>Load State</span><strong id="load-state">Nominal</strong></div></div>
         <div class="terminal"><div class="terminal-head"><div class="terminal-meta"><label>Target</label><strong id="target">udpin://0.0.0.0:14540</strong></div><div class="terminal-meta"><label>Status</label><strong id="status">Bridge Active</strong></div></div><div id="term" class="terminal-body"></div></div>
         <div id="media" class="list"></div>
@@ -659,7 +660,7 @@
     <main class="right">
       <section class="panel">
         <div class="head"><div><div class="eyebrow">Top Right</div><h2>2D GPS Mission Map</h2></div><div class="grid4" style="min-width:420px"><div class="card"><label>Mode</label><strong id="map-mode">idle</strong></div><div class="card"><label>Battery</label><strong id="map-battery">n/a</strong></div><div class="card"><label>Satellites</label><strong id="map-sats">n/a</strong></div><div class="card"><label>Wind Load</label><strong id="map-load">0%</strong></div></div></div>
-        <div class="map-shell"><div id="map"></div><div class="overlay"><div class="card"><label>Map Controls</label><div id="map-text">Click inside the geofence to place mission waypoints.</div></div><div class="card"><label>Live Telemetry</label><div id="map-live">Awaiting live mission start.</div></div></div></div>
+        <div class="map-shell"><div id="map"></div><div class="overlay"><div class="card"><label>Simulation Phase</label><div id="sim-phase" style="color:var(--accent)">Ready</div></div><div class="card"><label>Map Controls</label><div id="map-text">Click inside the geofence to place mission waypoints.</div></div><div class="card"><label>Live Telemetry</label><div id="map-live">Awaiting live mission start.</div></div></div></div>
       </section>
       <section class="panel">
         <div class="toolbar"><div><div class="eyebrow">Bottom Right</div><h2>Live 3D Telemetry Viewer</h2></div><div class="seg"><button class="cam active" data-cam="follow">Follow</button><button class="cam" data-cam="top">Top-down</button><button class="cam" data-cam="side">Side</button><button class="cam" data-cam="free">Free</button><button id="cinematic-toggle">Cinematic Mode</button></div></div>
@@ -700,8 +701,8 @@
   <script>window.DASHBOARD_DATA = {
   "baseline": {
     "home": {
-      "lat": 24.689,
-      "lon": 50.174,
+      "lat": 26.307114,
+      "lon": 50.145884,
       "alt_m": 584.0
     },
     "mission_limits": {
@@ -734,12 +735,12 @@
   "latest_replay": {
     "bundle_name": "latest_live_px4_replay_bundle",
     "summary": {
-      "mission_waypoint_count": 4,
+      "mission_waypoint_count": 5,
       "execution_after_rtl_mode": "return_to_launch",
       "dock_proof_status": "consumed_from_live_telemetry_projection",
-      "dock_stream_record_count": 3,
-      "dock_receiver_count": 3,
-      "dock_final_horizontal_distance_m": 0.061667857159894694,
+      "dock_stream_record_count": 5,
+      "dock_receiver_count": 5,
+      "dock_final_horizontal_distance_m": 0.09933330109296704,
       "dock_final_in_air": false,
       "precision_profile_rtl_pld_md": 2,
       "landing_target_consumption_count": 50,
@@ -765,133 +766,169 @@
         "index": 0,
         "source": "mission_entry",
         "source_index": 0,
-        "t_s": 1674070.875,
-        "north_m": 0.13060958683490753,
-        "east_m": 0.05360516160726547,
-        "down_m": -4.584095478057861,
-        "yaw_deg": 96.94371032714844,
-        "roll_deg": -7.649145603179932,
-        "pitch_deg": -5.7282185554504395,
+        "t_s": 1702333.609,
+        "north_m": 0.06491577625274658,
+        "east_m": 0.1634340137243271,
+        "down_m": -4.66571044921875,
+        "yaw_deg": 96.26071166992188,
+        "roll_deg": -14.766514778137207,
+        "pitch_deg": -8.120755195617676,
         "mode": "mission",
         "battery_percent": 100.0,
-        "in_air": true,
-        "horizontal_distance_to_dock_m": 0.14118207224759913,
-        "altitude_agl_m": 4.584095478057861,
+        "in_air": false,
+        "horizontal_distance_to_dock_m": 0.17585430005700797,
+        "altitude_agl_m": 4.66571044921875,
         "speed_mps": 0.0
       },
       {
         "index": 1,
-        "source": "departure",
-        "source_index": 0,
-        "t_s": 1674076.187,
-        "north_m": 0.21509981155395508,
-        "east_m": 0.12483321875333786,
-        "down_m": -4.690706253051758,
-        "yaw_deg": 94.97073364257812,
-        "roll_deg": -13.173674583435059,
-        "pitch_deg": -7.527492046356201,
+        "source": "mission_entry",
+        "source_index": 1,
+        "t_s": 1702343.953,
+        "north_m": 14.742555618286133,
+        "east_m": -5.215632915496826,
+        "down_m": -4.9888916015625,
+        "yaw_deg": -99.18782043457031,
+        "roll_deg": -1.0294424295425415,
+        "pitch_deg": -3.9613263607025146,
         "mode": "mission",
         "battery_percent": 100.0,
         "in_air": true,
-        "horizontal_distance_to_dock_m": 0.2486991383878635,
-        "altitude_agl_m": 4.690706253051758,
-        "speed_mps": 0.028906427183735078
+        "horizontal_distance_to_dock_m": 15.63795935752085,
+        "altitude_agl_m": 4.9888916015625,
+        "speed_mps": 1.5115620451771519
       },
       {
         "index": 2,
         "source": "departure",
-        "source_index": 1,
-        "t_s": 1674087.859,
-        "north_m": 25.538837432861328,
-        "east_m": -3.162835121154785,
-        "down_m": -4.9460859298706055,
-        "yaw_deg": -62.41250991821289,
-        "roll_deg": -2.8358073234558105,
-        "pitch_deg": 4.7691121101379395,
+        "source_index": 0,
+        "t_s": 1702348.656,
+        "north_m": 14.663378715515137,
+        "east_m": -6.133838176727295,
+        "down_m": -4.9991455078125,
+        "yaw_deg": -99.87129974365234,
+        "roll_deg": -1.9486323595046997,
+        "pitch_deg": -4.625491142272949,
         "mode": "mission",
         "battery_percent": 100.0,
         "in_air": true,
-        "horizontal_distance_to_dock_m": 25.733941466975658,
-        "altitude_agl_m": 4.9460859298706055,
-        "speed_mps": 2.18793133250586
+        "horizontal_distance_to_dock_m": 15.894610600228607,
+        "altitude_agl_m": 4.9991455078125,
+        "speed_mps": 0.19597484473414664
       },
       {
         "index": 3,
         "source": "rtl_approach",
         "source_index": 0,
-        "t_s": 1674141.406,
-        "north_m": 0.021845344454050064,
-        "east_m": -0.06454361975193024,
-        "down_m": -3.0908701419830322,
-        "yaw_deg": 97.84162902832031,
-        "roll_deg": 1.843485713005066,
-        "pitch_deg": 0.7286874651908875,
+        "t_s": 1702388.453,
+        "north_m": -0.35406816005706787,
+        "east_m": -0.23298759758472443,
+        "down_m": -25.44927978515625,
+        "yaw_deg": 99.18519592285156,
+        "roll_deg": 0.3369598984718323,
+        "pitch_deg": -0.32028698921203613,
         "mode": "return_to_launch",
         "battery_percent": 100.0,
         "in_air": true,
-        "horizontal_distance_to_dock_m": 0.06814028122188706,
-        "altitude_agl_m": 3.0908701419830322,
-        "speed_mps": 25.77126541493708
+        "horizontal_distance_to_dock_m": 0.42384841936062345,
+        "altitude_agl_m": 25.44927978515625,
+        "speed_mps": 26.049025704993085
       },
       {
         "index": 4,
         "source": "dock_stream",
         "source_index": 0,
-        "t_s": 1775101517.413499,
-        "north_m": 0.03140128403902054,
-        "east_m": -0.04133303835988045,
-        "down_m": 0.004936292767524719,
-        "yaw_deg": 97.42495727539062,
-        "roll_deg": 0.3395320475101471,
-        "pitch_deg": -0.8265519142150879,
-        "mode": "mission",
+        "t_s": 1775129760.459185,
+        "north_m": -0.048019830137491226,
+        "east_m": -0.023093851283192635,
+        "down_m": -11.159423828125,
+        "yaw_deg": 98.30828857421875,
+        "roll_deg": 1.0710899829864502,
+        "pitch_deg": 0.051262225955724716,
+        "mode": "return_to_launch",
         "battery_percent": 100.0,
-        "in_air": false,
-        "horizontal_distance_to_dock_m": 0.05190819491524045,
-        "altitude_agl_m": 0.0,
-        "speed_mps": 3.095908191228038
+        "in_air": true,
+        "horizontal_distance_to_dock_m": 0.053284425994128234,
+        "altitude_agl_m": 11.159423828125,
+        "speed_mps": 14.294673981510895
       },
       {
         "index": 5,
         "source": "dock_stream",
         "source_index": 1,
-        "t_s": 1775101524.806398,
-        "north_m": 0.05939663574099541,
-        "east_m": 0.012617120519280434,
-        "down_m": -0.1413526087999344,
-        "yaw_deg": 97.23429107666016,
-        "roll_deg": 0.5192542672157288,
-        "pitch_deg": -0.8822923302650452,
-        "mode": "mission",
+        "t_s": 1775129765.511974,
+        "north_m": -0.03630461543798447,
+        "east_m": -0.04082261025905609,
+        "down_m": -4.32086181640625,
+        "yaw_deg": 98.31159210205078,
+        "roll_deg": 1.1749273538589478,
+        "pitch_deg": 0.0041017415933310986,
+        "mode": "return_to_launch",
         "battery_percent": 100.0,
-        "in_air": false,
-        "horizontal_distance_to_dock_m": 0.06072192410939018,
-        "altitude_agl_m": 0.1413526087999344,
-        "speed_mps": 0.021427777408090265
+        "in_air": true,
+        "horizontal_distance_to_dock_m": 0.054630674629394166,
+        "altitude_agl_m": 4.32086181640625,
+        "speed_mps": 1.3534297080392528
       },
       {
         "index": 6,
         "source": "dock_stream",
         "source_index": 2,
-        "t_s": 1775101537.362605,
-        "north_m": 0.0602632611989975,
-        "east_m": -0.013086785562336445,
-        "down_m": -0.018820852041244507,
-        "yaw_deg": 97.2448501586914,
-        "roll_deg": 0.626463770866394,
-        "pitch_deg": -0.875244677066803,
+        "t_s": 1775129775.599213,
+        "north_m": -0.0921696349978447,
+        "east_m": -0.02543679252266884,
+        "down_m": 0.016845703125,
+        "yaw_deg": 97.44622039794922,
+        "roll_deg": 0.22439363598823547,
+        "pitch_deg": -0.6268606185913086,
         "mode": "mission",
         "battery_percent": 100.0,
         "in_air": false,
-        "horizontal_distance_to_dock_m": 0.061667857159894694,
-        "altitude_agl_m": 0.018820852041244507,
-        "speed_mps": 0.00997130171494398
+        "horizontal_distance_to_dock_m": 0.09561522906669846,
+        "altitude_agl_m": 0.0,
+        "speed_mps": 0.4300576818526078
+      },
+      {
+        "index": 7,
+        "source": "dock_stream",
+        "source_index": 3,
+        "t_s": 1775129780.697547,
+        "north_m": -0.07955142110586166,
+        "east_m": -0.006058368366211653,
+        "down_m": -0.0198974609375,
+        "yaw_deg": 97.5117416381836,
+        "roll_deg": 0.21853090822696686,
+        "pitch_deg": -0.6390916705131531,
+        "mode": "mission",
+        "battery_percent": 100.0,
+        "in_air": false,
+        "horizontal_distance_to_dock_m": 0.07978178004546431,
+        "altitude_agl_m": 0.0198974609375,
+        "speed_mps": 0.008515392362372108
+      },
+      {
+        "index": 8,
+        "source": "dock_stream",
+        "source_index": 4,
+        "t_s": 1775129790.71758,
+        "north_m": -0.0985625684261322,
+        "east_m": 0.012350093573331833,
+        "down_m": 0.0255126953125,
+        "yaw_deg": 97.6597900390625,
+        "roll_deg": 0.2254030555486679,
+        "pitch_deg": -0.641976535320282,
+        "mode": "mission",
+        "battery_percent": 100.0,
+        "in_air": false,
+        "horizontal_distance_to_dock_m": 0.09933330109296704,
+        "altitude_agl_m": 0.0,
+        "speed_mps": 0.005245324437366042
       }
     ],
     "mission": {
       "mission_id": "dashboard-live-mission",
-      "waypoint_count": 4,
-      "cruise_speed_mps": 4.9,
+      "waypoint_count": 5,
+      "cruise_speed_mps": 5.7,
       "geofence_radius_m": 100.0,
       "area_m2": null,
       "north_span_m": null,
@@ -904,7 +941,7 @@
           "armed": false,
           "in_air": false,
           "battery_percent": 100.0,
-          "alt_m": -0.0020000000949949026,
+          "alt_m": 0.01100000087171793,
           "mission_current": 0,
           "mission_total": 0
         },
@@ -914,7 +951,7 @@
           "armed": false,
           "in_air": false,
           "battery_percent": 100.0,
-          "alt_m": 0.13199999928474426,
+          "alt_m": 0.03800000250339508,
           "mission_current": 0,
           "mission_total": 0
         },
@@ -924,7 +961,7 @@
           "armed": false,
           "in_air": false,
           "battery_percent": 100.0,
-          "alt_m": -0.0020000000949949026,
+          "alt_m": 0.01100000087171793,
           "mission_current": 0,
           "mission_total": 0
         },
@@ -932,9 +969,9 @@
           "label": "Mission Entry",
           "mode": "mission",
           "armed": true,
-          "in_air": true,
+          "in_air": false,
           "battery_percent": 100.0,
-          "alt_m": -0.0020000000949949026,
+          "alt_m": 0.0010000000474974513,
           "mission_current": 0,
           "mission_total": 0
         },
@@ -944,17 +981,17 @@
           "armed": true,
           "in_air": true,
           "battery_percent": 100.0,
-          "alt_m": 17.17300033569336,
+          "alt_m": 29.76300048828125,
           "mission_current": 0,
           "mission_total": 0
         },
         {
           "label": "Dock Approach",
-          "mode": "mission",
-          "armed": false,
-          "in_air": false,
+          "mode": "return_to_launch",
+          "armed": true,
+          "in_air": true,
           "battery_percent": 100.0,
-          "alt_m": -0.0430000014603138,
+          "alt_m": 10.598000526428223,
           "mission_current": 0,
           "mission_total": 0
         },
@@ -964,7 +1001,7 @@
           "armed": false,
           "in_air": false,
           "battery_percent": 100.0,
-          "alt_m": -0.02200000174343586,
+          "alt_m": -0.08400000631809235,
           "mission_current": 0,
           "mission_total": 0
         }
@@ -984,14 +1021,20 @@
         },
         {
           "index": 2,
-          "north_m": 28.0,
-          "east_m": -8.0,
+          "north_m": 14.160794526617195,
+          "east_m": -8.727958050769216,
           "altitude_m": 5.0
         },
         {
           "index": 3,
-          "north_m": -11.534920993813387,
-          "east_m": -8.684784960527011,
+          "north_m": -8.857929339673234,
+          "east_m": -32.81732518603844,
+          "altitude_m": 5.0
+        },
+        {
+          "index": 4,
+          "north_m": -28.12945067106469,
+          "east_m": -26.928813219103564,
           "altitude_m": 5.0
         }
       ]
@@ -1011,45 +1054,69 @@
     "dock": {
       "proof_status": "consumed_from_live_telemetry_projection",
       "activation_radius_m": 12.0,
-      "final_horizontal_distance_m": 0.061667857159894694,
+      "final_horizontal_distance_m": 0.09933330109296704,
       "final_in_air": false,
-      "telemetry_frame_count": 7,
+      "telemetry_frame_count": 9,
       "records": [
         {
           "index": 0,
-          "mode": "mission",
-          "in_air": false,
+          "mode": "return_to_launch",
+          "in_air": true,
           "battery_percent": 100.0,
-          "altitude_agl_m": 0.0,
-          "horizontal_distance_to_dock_m": 0.05190819491524045,
-          "north_m": 0.03140128403902054,
-          "east_m": -0.04133303835988045,
-          "down_m": 0.004936292767524719,
-          "yaw_deg": 97.42495727539062
+          "altitude_agl_m": 11.159423828125,
+          "horizontal_distance_to_dock_m": 0.053284425994128234,
+          "north_m": -0.048019830137491226,
+          "east_m": -0.023093851283192635,
+          "down_m": -11.159423828125,
+          "yaw_deg": 98.30828857421875
         },
         {
           "index": 1,
-          "mode": "mission",
-          "in_air": false,
+          "mode": "return_to_launch",
+          "in_air": true,
           "battery_percent": 100.0,
-          "altitude_agl_m": 0.1413526087999344,
-          "horizontal_distance_to_dock_m": 0.06072192410939018,
-          "north_m": 0.05939663574099541,
-          "east_m": 0.012617120519280434,
-          "down_m": -0.1413526087999344,
-          "yaw_deg": 97.23429107666016
+          "altitude_agl_m": 4.32086181640625,
+          "horizontal_distance_to_dock_m": 0.054630674629394166,
+          "north_m": -0.03630461543798447,
+          "east_m": -0.04082261025905609,
+          "down_m": -4.32086181640625,
+          "yaw_deg": 98.31159210205078
         },
         {
           "index": 2,
           "mode": "mission",
           "in_air": false,
           "battery_percent": 100.0,
-          "altitude_agl_m": 0.018820852041244507,
-          "horizontal_distance_to_dock_m": 0.061667857159894694,
-          "north_m": 0.0602632611989975,
-          "east_m": -0.013086785562336445,
-          "down_m": -0.018820852041244507,
-          "yaw_deg": 97.2448501586914
+          "altitude_agl_m": 0.0,
+          "horizontal_distance_to_dock_m": 0.09561522906669846,
+          "north_m": -0.0921696349978447,
+          "east_m": -0.02543679252266884,
+          "down_m": 0.016845703125,
+          "yaw_deg": 97.44622039794922
+        },
+        {
+          "index": 3,
+          "mode": "mission",
+          "in_air": false,
+          "battery_percent": 100.0,
+          "altitude_agl_m": 0.0198974609375,
+          "horizontal_distance_to_dock_m": 0.07978178004546431,
+          "north_m": -0.07955142110586166,
+          "east_m": -0.006058368366211653,
+          "down_m": -0.0198974609375,
+          "yaw_deg": 97.5117416381836
+        },
+        {
+          "index": 4,
+          "mode": "mission",
+          "in_air": false,
+          "battery_percent": 100.0,
+          "altitude_agl_m": 0.0,
+          "horizontal_distance_to_dock_m": 0.09933330109296704,
+          "north_m": -0.0985625684261322,
+          "east_m": 0.012350093573331833,
+          "down_m": 0.0255126953125,
+          "yaw_deg": 97.6597900390625
         }
       ]
     },
@@ -1382,16 +1449,16 @@
       "live_validation": {
         "proof_status": "rtl_triggered_by_live_weather_injection",
         "triggered_action": "return_to_launch",
-        "triggered_at_s": 26.516,
-        "dock_recovered_at_s": 59.5,
+        "triggered_at_s": 24.969,
+        "dock_recovered_at_s": 49.859,
         "observations": [
           {
-            "elapsed_s": 26.516,
+            "elapsed_s": 24.969,
             "weather": {
               "steady_wind_mps": 7.8,
-              "gust_wind_mps": 10.2,
+              "gust_wind_mps": 9.3,
               "source": "profile@12.0s",
-              "effective_wind_mps": 10.2
+              "effective_wind_mps": 9.3
             },
             "gate_decision": {
               "launch_allowed": false,
@@ -1401,7 +1468,7 @@
                 "wind_limit_exceeded"
               ],
               "details": [
-                "Effective wind 10.2 m/s exceeds configured limit 7.0 m/s."
+                "Effective wind 9.3 m/s exceeds configured limit 7.0 m/s."
               ]
             },
             "inflight_decision": {
@@ -1410,7 +1477,7 @@
                 "wind_limit_exceeded"
               ],
               "details": [
-                "Wind 10.2 m/s exceeds 7.0 m/s."
+                "Wind 9.3 m/s exceeds 7.0 m/s."
               ]
             },
             "snapshot_before": {
@@ -1420,22 +1487,22 @@
               "mode": "mission",
               "battery_percent": 100.0,
               "position": {
-                "lat": 47.3980703,
-                "lon": 8.5460595,
-                "alt_m": 5.0
+                "lat": 26.3070368,
+                "lon": 50.1455596,
+                "alt_m": 4.932000160217285
               },
               "mission_progress": {
-                "current": 4,
-                "total": 4
+                "current": 5,
+                "total": 5
               }
             },
             "local_pose_before": {
-              "north_m": -9.196399688720703,
-              "east_m": -8.750411033630371,
-              "down_m": -19.28188133239746,
-              "yaw_deg": 179.32916259765625,
-              "roll_deg": 1.6011532545089722,
-              "pitch_deg": -2.361459970474243
+              "north_m": -25.92599105834961,
+              "east_m": -28.198678970336914,
+              "down_m": -4.99896240234375,
+              "yaw_deg": 152.4196014404297,
+              "roll_deg": -2.739320755004883,
+              "pitch_deg": 2.916222333908081
             },
             "snapshot_after": {
               "connected": true,
@@ -1444,9 +1511,9 @@
               "mode": "return_to_launch",
               "battery_percent": 100.0,
               "position": {
-                "lat": 47.3979694,
-                "lon": 8.5461587,
-                "alt_m": 27.459001541137695
+                "lat": 26.3068843,
+                "lon": 50.145601199999994,
+                "alt_m": 27.96200180053711
               },
               "mission_progress": {
                 "current": 0,
@@ -1454,27 +1521,27 @@
               }
             },
             "local_pose_after": {
-              "north_m": -0.08997971564531326,
-              "east_m": -0.16588227450847626,
-              "down_m": -18.15044403076172,
-              "yaw_deg": 97.83804321289062,
-              "roll_deg": 2.034815788269043,
-              "pitch_deg": 0.7769979238510132
+              "north_m": -18.62529945373535,
+              "east_m": -20.901355743408203,
+              "down_m": -29.79486083984375,
+              "yaw_deg": 63.66735076904297,
+              "roll_deg": 0.2646411061286926,
+              "pitch_deg": -2.9455621242523193
             }
           }
         ],
         "dock_weather_observations": [
           {
-            "elapsed_s": 59.5,
+            "elapsed_s": 49.859,
             "weather": {
               "steady_wind_mps": 4.2,
-              "gust_wind_mps": 5.5,
+              "gust_wind_mps": 5.0,
               "source": "profile@36.0s",
-              "effective_wind_mps": 5.5
+              "effective_wind_mps": 5.0
             },
             "dock_allowed": true,
             "details": [
-              "Effective wind 5.5 m/s is within configured limit 7.0 m/s."
+              "Effective wind 5.0 m/s is within configured limit 7.0 m/s."
             ]
           }
         ]
@@ -1499,13 +1566,15 @@
     const cinematicCfg = base.visualization?.cinematic || { redline_pitch_deg: 15.0, redline_roll_deg: 15.0 };
     const S = { waypoints: [], valid: false, locked: false, cam: "follow", cinematic: false, job: null, log: null, tel: null, logTimeout: null, telTimeout: null, last: null, liveFrames: [], liveFrameLimit: 1200, potholePulse: null, weatherMode: "proof", lowBatteryAction: "return", events: [], missionStartTime: null, lastBattery: null, lastMode: null, windThreshold: 7.0 };
     const $ = (id) => document.getElementById(id);
-    const E = {
+const E = {
       timelineTrack: $("timeline-track"),
       timelineProgress: $("timeline-progress"),
       eventCount: $("event-count"),
       eventDetailPopup: $("event-detail-popup"),
       popupTime: $("popup-time"),
       popupMessage: $("popup-message"),
+      simPhase: $("sim-phase"),
+      batteryDrain: $("battery-drain"),
       alt: $("alt"), speed: $("speed"), wind: $("wind"), dir: $("dir"), gust: $("gust"), battery: $("battery"), warn: $("warn"), rtl: $("rtl"), emergency: $("emergency"), launch: $("launch"), reload: $("reload"), undo: $("undo"), clear: $("clear"), term: $("term"), waypoints: $("waypoints"), banner: $("banner"), bannerT: $("banner-t"), bannerD: $("banner-d"), cGeo: $("c-geofence"), cWp: $("c-waypoints"), cAlt: $("c-altitude"), mapText: $("map-text"), mapLive: $("map-live"), target: $("target"), status: $("status"), mGeo: $("m-geofence"), mHome: $("m-home"), mDock: $("m-dock"), mProof: $("m-proof"), mapMode: $("map-mode"), mapBattery: $("map-battery"), mapSats: $("map-sats"), mapLoad: $("map-load"), hAlt: $("h-alt"), hSpeed: $("h-speed"), hMode: $("h-mode"), hBattery: $("h-battery"), hDock: $("h-dock"), hLoad: $("h-load"), media: $("media"), fpvModeSummary: $("fpv-mode-summary"), loadState: $("load-state"), cinematicToggle: $("cinematic-toggle"), fpvShell: $("fpv-shell"), fpvFeed: $("fpv-feed"), fpvStatus: $("fpv-status"), fpvPlaceholderText: $("fpv-placeholder-text"), headingTrack: $("heading-track"), horizonRoll: $("horizon-roll"), horizonPitch: $("horizon-pitch"), pitchLadder: $("pitch-ladder"), fpvHeading: $("fpv-heading"), fpvAttitude: $("fpv-attitude"), fpvStress: $("fpv-stress"), fpvFlag: $("fpv-flag"), stressFlag: $("stress-flag"), loadFlag: $("load-flag") };
     const fmt = (value, digits = 1) => Number(value || 0).toFixed(digits);
     const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
@@ -1514,14 +1583,27 @@
     const ned = (lat, lon) => ({ north_m: (lat - home.lat) * 111320, east_m: (lon - home.lon) * 111320 * Math.cos(home.lat * Math.PI / 180) });
     function normalizeHeading(heading) { const raw = Number(heading || 0); return ((raw % 360) + 360) % 360; }
     function modeColor(mode) { if (mode === "return_to_launch") return 0xffb454; if (mode === "land" || mode === "dock") return 0x00d4aa; return 0x53b7ff; }
-    function sliderText() { $("alt-v").textContent = `${fmt(E.alt.value, 0)} m`; $("speed-v").textContent = `${fmt(E.speed.value)} m/s`; $("wind-v").textContent = `${fmt(E.wind.value)} m/s`; $("dir-v").textContent = `${fmt(E.dir.value, 0)} deg`; $("gust-v").textContent = `${fmt(E.gust.value, 2)}x`; $("battery-v").textContent = `${fmt(E.battery.value, 0)}%`; $("warn-v").textContent = `${fmt(E.warn.value, 0)}%`; $("rtl-v").textContent = `${fmt(E.rtl.value, 0)}%`; $("emergency-v").textContent = `${fmt(E.emergency.value, 0)}%`; }
+    function sliderText() { $("alt-v").textContent = `${fmt(E.alt.value, 0)} m`; $("speed-v").textContent = `${fmt(E.speed.value)} m/s`; $("wind-v").textContent = `${fmt(E.wind.value)} m/s`; $("dir-v").textContent = `${fmt(E.dir.value, 0)} deg`; $("gust-v").textContent = `${fmt(E.gust.value, 2)}x`; $("battery-v").textContent = `${fmt(E.battery.value, 0)}%`; $("warn-v").textContent = `${fmt(E.warn.value, 0)}%`; $("rtl-v").textContent = `${fmt(E.rtl.value, 0)}%`; $("emergency-v").textContent = `${fmt(E.emergency.value, 0)}%`; $("battery-drain-v").textContent = `${fmt(E.batteryDrain.value, 1)}x`; }
     function setSegmentValue(selector, dataName, value) { document.querySelectorAll(selector).forEach((button) => button.classList.toggle("active", button.dataset[dataName] === value)); }
     function setWeatherMode(mode) { S.weatherMode = mode; setSegmentValue(".weather-mode", "weatherMode", mode); }
     function setLowBatteryAction(action) { S.lowBatteryAction = action; setSegmentValue(".battery-action", "batteryAction", action); }
-    function buildPayload() {
-      return { mission_id: "dashboard-live-mission", cruise_speed_mps: Number(E.speed.value), weather_profile_mode: S.weatherMode, waypoints: S.waypoints.map((waypoint) => ({ north_m: waypoint.north_m, east_m: waypoint.east_m, altitude_m: waypoint.altitude_m })), environment: { wind_speed_mps: Number(E.wind.value), wind_direction_deg: Number(E.dir.value), gust_multiplier: Number(E.gust.value) }, battery: { initial_battery_percent: Number(E.battery.value), warn_battery_threshold_percent: Number(E.warn.value), rtl_battery_threshold_percent: Number(E.rtl.value), emergency_battery_threshold_percent: Number(E.emergency.value), low_battery_action: S.lowBatteryAction } };
+function buildPayload() {
+      return { mission_id: "dashboard-live-mission", cruise_speed_mps: Number(E.speed.value), weather_profile_mode: S.weatherMode, waypoints: S.waypoints.map((waypoint) => ({ north_m: waypoint.north_m, east_m: waypoint.east_m, altitude_m: waypoint.altitude_m })), environment: { wind_speed_mps: Number(E.wind.value), wind_direction_deg: Number(E.dir.value), gust_multiplier: Number(E.gust.value) }, battery: { initial_battery_percent: Number(E.battery.value), warn_battery_threshold_percent: Number(E.warn.value), rtl_battery_threshold_percent: Number(E.rtl.value), emergency_battery_threshold_percent: Number(E.emergency.value), low_battery_action: S.lowBatteryAction, battery_drain_multiplier: Number(E.batteryDrain.value) } };
     }
-    function log(message, className = "") { const node = document.createElement("div"); node.className = className; node.textContent = message; E.term.appendChild(node); E.term.scrollTop = E.term.scrollHeight; }
+    function log(message, className = "") { const node = document.createElement("div"); node.className = className; node.textContent = message; E.term.appendChild(node); E.term.scrollTop = E.term.scrollHeight; updateSimPhase(message); }
+    const PHASE_PATTERNS = [
+      { pattern: /launching generated Gazebo world/i, phase: "Starting Gazebo" },
+      { pattern: /Gazebo world ready/i, phase: "Gazebo Ready" },
+      { pattern: /launching PX4 SITL/i, phase: "Starting PX4" },
+      { pattern: /PX4 SITL ready/i, phase: "PX4 Ready" },
+      { pattern: /starting validator/i, phase: "Running Validator" },
+      { pattern: /building replay bundle/i, phase: "Building Replay" },
+      { pattern: /building showcase/i, phase: "Building Showcase" },
+      { pattern: /building dashboard/i, phase: "Building Dashboard" },
+      { pattern: /completed/i, phase: "Complete!" },
+      { pattern: /error|fail|exception/i, phase: "Error!" },
+    ];
+    function updateSimPhase(message) { if (!E.simPhase || !S.locked) return; for (const { pattern, phase } of PHASE_PATTERNS) { if (pattern.test(message)) { E.simPhase.textContent = phase; E.simPhase.style.color = phase.includes("Error") ? "var(--danger)" : "var(--accent)"; break; } } }
     function setBanner(ok, title, detail, geofenceState, waypointState, altitudeState) { E.banner.className = `banner ${ok ? "ok" : "bad"}`; E.bannerT.textContent = title; E.bannerD.textContent = detail; E.cGeo.textContent = geofenceState; E.cWp.textContent = waypointState; E.cAlt.textContent = altitudeState; S.valid = ok; E.launch.disabled = !ok || S.locked; }
     function renderWaypointList() {
       E.waypoints.innerHTML = "";
@@ -1613,11 +1695,22 @@
       S.waypoints.push({ north_m: projected.north_m, east_m: projected.east_m, altitude_m: Number(E.alt.value) });
       await validateMission();
     });
-    function syncMapWaypoints() {
+function syncMapWaypoints() {
       waypointMarkers.forEach((marker) => marker.remove());
-      waypointMarkers = S.waypoints.map((waypoint) => L.marker(ll(waypoint.north_m, waypoint.east_m), { icon: waypointIcon }).addTo(map));
+      waypointMarkers = S.waypoints.map((waypoint, index) => {
+        const marker = L.marker(ll(waypoint.north_m, waypoint.east_m), { icon: waypointIcon, draggable: !S.locked }).addTo(map);
+        if (!S.locked) {
+          marker.on("dragend", async (e) => {
+            const projected = ned(e.target.getLatLng().lat, e.target.getLatLng().lng);
+            S.waypoints[index] = { north_m: projected.north_m, east_m: projected.east_m, altitude_m: waypoint.altitude_m };
+            sync3DWaypoints();
+            await validateMission();
+          });
+        }
+        return marker;
+      });
       missionPolyline.setLatLngs(S.waypoints.map((waypoint) => ll(waypoint.north_m, waypoint.east_m)));
-      E.mapText.textContent = S.locked ? "Mission is locked during live execution." : "Click inside the geofence to place mission waypoints.";
+      E.mapText.textContent = S.locked ? "Mission is locked during live execution. Waypoints can be edited before preparation." : "Click inside the geofence to place or drag waypoints.";
     }
     const sceneEl = $("scene");
     const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -1904,7 +1997,7 @@ E.mapMode.textContent = modeText(telemetryMode(frame));
       updateDrone(syntheticFrame);
       updateAttitudeHud(syntheticFrame);
     }
-    function resetLiveState() { S.liveFrames = []; S.events = []; S.missionStartTime = Date.now(); S.lastBattery = null; S.lastMode = null; livePolyline.setLatLngs([]); updateRibbon(); updateTimeline(); E.mapLive.textContent = "Awaiting live mission start."; log("[META] Live telemetry stream armed", "info"); }
+    function resetLiveState() { S.liveFrames = []; S.events = []; S.missionStartTime = Date.now(); S.lastBattery = null; S.lastMode = null; livePolyline.setLatLngs([]); updateRibbon(); updateTimeline(); E.mapLive.textContent = "Awaiting live mission start."; E.simPhase.textContent = "Starting..."; E.simPhase.style.color = "var(--warn)"; log("[META] Live telemetry stream armed", "info"); }
     function detectEvents(frame, previous, batteryPercent) {
       const currentMode = telemetryMode(frame);
       const elapsed = (Date.now() - S.missionStartTime) / 1000;
@@ -2010,8 +2103,10 @@ function streamTelemetry(jobId) {
       if (S.telTimeout) clearTimeout(S.telTimeout);
       S.tel = new EventSource(`/api/telemetry/live?job_id=${encodeURIComponent(jobId)}`);
       S.tel.addEventListener("telemetry", (event) => liveFrame(JSON.parse(event.data)));
-      S.tel.onerror = () => { if (S.tel) S.tel.close(); };
+S.tel.onerror = () => { if (S.tel) S.tel.close(); };
     }
+    function undoLastWaypoint() { if (S.locked || S.waypoints.length === 0) return; S.waypoints.pop(); syncMapWaypoints(); sync3DWaypoints(); validateMission(); }
+    function clearWaypoints() { if (S.locked) return; S.waypoints = []; syncMapWaypoints(); sync3DWaypoints(); validateMission(); }
     async function launchMission() {
       if (!S.valid || S.locked) return;
       S.locked = true;
@@ -2067,12 +2162,14 @@ function streamTelemetry(jobId) {
       });
     });
     E.cinematicToggle.addEventListener("click", () => { S.cinematic = !S.cinematic; E.cinematicToggle.classList.toggle("active", S.cinematic); E.cinematicToggle.dataset.active = String(S.cinematic); });
-    [E.alt, E.speed, E.wind, E.dir, E.gust, E.battery, E.warn, E.rtl, E.emergency].forEach((element) => element.addEventListener("input", sliderText));
+    [E.alt, E.speed, E.wind, E.dir, E.gust, E.battery, E.warn, E.rtl, E.emergency, E.batteryDrain].forEach((element) => element.addEventListener("input", sliderText));
     document.querySelectorAll(".weather-mode").forEach((button) => button.addEventListener("click", async () => { if (S.locked) return; setWeatherMode(button.dataset.weatherMode || "proof"); await validateMission(); }));
     document.querySelectorAll(".battery-action").forEach((button) => button.addEventListener("click", async () => { if (S.locked) return; setLowBatteryAction(button.dataset.batteryAction || "return"); await validateMission(); }));
     E.alt.addEventListener("input", async () => { S.waypoints = S.waypoints.map((waypoint) => ({ ...waypoint, altitude_m: Number(E.alt.value) })); await validateMission(); });
     [E.wind, E.dir, E.gust, E.battery, E.warn, E.rtl, E.emergency].forEach((element) => element.addEventListener("change", validateMission));
     E.launch.addEventListener("click", launchMission);
+    E.undo.addEventListener("click", undoLastWaypoint);
+    E.clear.addEventListener("click", clearWaypoints);
     E.reload.addEventListener("click", refreshArtifacts);
     E.undo.addEventListener("click", async () => { if (S.locked) return; S.waypoints.pop(); await validateMission(); });
     E.clear.addEventListener("click", async () => { if (S.locked) return; S.waypoints = []; await validateMission(); });
