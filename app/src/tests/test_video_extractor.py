@@ -110,9 +110,18 @@ class TestDroneParams(unittest.TestCase):
             DroneParams(overlap_fraction=1.0)
 
     def test_extreme_valid_overlap(self) -> None:
-        # 90 % overlap is valid
-        p = DroneParams(overlap_fraction=0.9)
-        self.assertAlmostEqual(p.overlap_fraction, 0.9)
+        # 80 % overlap is valid (below the 0.9 cap)
+        p = DroneParams(overlap_fraction=0.80)
+        self.assertAlmostEqual(p.overlap_fraction, 0.80)
+
+    def test_overlap_at_cap_raises(self) -> None:
+        # Exactly 0.9 is NOT allowed (cap is exclusive)
+        with self.assertRaises(ValueError):
+            DroneParams(overlap_fraction=0.9)
+
+    def test_overlap_above_cap_raises(self) -> None:
+        with self.assertRaises(ValueError):
+            DroneParams(overlap_fraction=0.95)
 
 
 class TestKinematics(unittest.TestCase):
@@ -220,10 +229,24 @@ class TestExtractFrames(unittest.TestCase):
         out_no_overlap = Path(self._tmp.name) / "frames_no_ov"
         out_with_overlap = Path(self._tmp.name) / "frames_50ov"
         p_no = self._params(overlap_fraction=0.0)
-        p_50 = self._params(overlap_fraction=0.50)
+        p_50 = self._params(overlap_fraction=0.50)   # still below the 0.9 cap
         n_no = extract_frames(self.video_path, out_no_overlap, p_no, verbose=False)
         n_50 = extract_frames(self.video_path, out_with_overlap, p_50, verbose=False)
         self.assertGreaterEqual(len(n_50), len(n_no))
+
+    def test_invalid_jpeg_quality_raises(self) -> None:
+        """jpeg_quality outside 1-100 must raise ValueError before any I/O."""
+        out = Path(self._tmp.name) / "frames_bad_quality"
+        with self.assertRaises(ValueError):
+            extract_frames(
+                self.video_path, out, self._params(),
+                jpeg_quality=0, verbose=False,
+            )
+        with self.assertRaises(ValueError):
+            extract_frames(
+                self.video_path, out, self._params(),
+                jpeg_quality=101, verbose=False,
+            )
 
     def test_missing_video_raises(self) -> None:
         with self.assertRaises(FileNotFoundError):

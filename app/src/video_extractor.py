@@ -71,13 +71,18 @@ class DroneParams:
           • Generic narrow:   60°
     overlap_fraction : float
         Fraction of the ground patch that *intentionally* overlaps with the
-        next frame. Default 0.10 (10 %). Must be in [0.0, 0.9).
+        next frame. Default 0.10 (10 %). Must be in [0.0, 0.9) — values at
+        or above 0.9 would reduce the unique ground step to less than 10 % of
+        the footprint, producing an excessive number of nearly-identical frames.
     """
 
     speed_mps: float = 5.0
     altitude_m: float = 10.0
     hfov_deg: float = 82.6
     overlap_fraction: float = 0.10
+
+    # Maximum sensible overlap — enforced consistently in validation AND tests.
+    _MAX_OVERLAP: float = 0.9  # class-level constant (not a field)
 
     def __post_init__(self) -> None:
         if self.speed_mps <= 0:
@@ -86,9 +91,11 @@ class DroneParams:
             raise ValueError(f"altitude_m must be > 0, got {self.altitude_m}")
         if not (0 < self.hfov_deg < 180):
             raise ValueError(f"hfov_deg must be in (0, 180), got {self.hfov_deg}")
-        if not (0.0 <= self.overlap_fraction < 1.0):
+        # Cap at 0.9 — consistent with docstring and test expectations.
+        if not (0.0 <= self.overlap_fraction < 0.9):
             raise ValueError(
-                f"overlap_fraction must be in [0, 1), got {self.overlap_fraction}"
+                f"overlap_fraction must be in [0.0, 0.9), got {self.overlap_fraction}. "
+                "Values >= 0.9 produce excessive near-duplicate frames."
             )
 
 
@@ -161,6 +168,9 @@ def extract_frames(
     max_frames: int | None = None,
     verbose: bool = True,
 ) -> List[Path]:
+    # Validate jpeg_quality early so the error is clear before we open the video.
+    if not (1 <= jpeg_quality <= 100):
+        raise ValueError(f"jpeg_quality must be 1–100, got {jpeg_quality}")
     """Extract non-overlapping frames from a drone video.
 
     Parameters
@@ -244,33 +254,46 @@ def extract_frames(
 
     t_start = time.perf_counter()
 
-    while True:
-        # Seek directly to the target frame (much faster than reading every frame)
-        cap.set(cv2.CAP_PROP_POS_FRAMES, float(frame_idx))
-        ret, frame = cap.read()
+    # Wrap the loop in try/finally so cap.release() is ALWAYS called,
+    # even if cv2.imwrite raises an OSError (e.g. disk full).
+    try:
+        while True:
+            # Seek directly to the target frame (much faster than reading every frame)
+            cap.set(cv2.CAP_PROP_POS_FRAMES, float(frame_idx))
+            ret, frame = cap.read()
 
-        if not ret:
-            # End of video or read error
-            break
+            if not ret:
+                # End of video or read error — clean exit
+                break
 
-        filename = f"{stem}_frame{capture_count:05d}.{ext}"
-        dest = output_dir / filename
-        cv2.imwrite(str(dest), frame, encode_params)
-        saved_paths.append(dest)
-        capture_count += 1
+            filename = f"{stem}_frame{capture_count:05d}.{ext}"
+            dest = output_dir / filename
 
-        if verbose:
-            timestamp_s = frame_idx / video_fps
-            _print_frame_progress(capture_count, estimated_count, timestamp_s, dest.name)
+            success = cv2.imwrite(str(dest), frame, encode_params)
+            if not success:
+                # imwrite returns False when it cannot write (bad path, wrong codec, etc.)
+                raise RuntimeError(
+                    f"cv2.imwrite failed for {dest}. "
+                    "Check that the output directory is writable and the format is supported."
+                )
 
-        if max_frames is not None and capture_count >= max_frames:
+            saved_paths.append(dest)
+            capture_count += 1
+
             if verbose:
-                print(f"\n  [LIMIT] Reached max_frames={max_frames}, stopping early.")
-            break
+                timestamp_s = frame_idx / video_fps
+                _print_frame_progress(capture_count, estimated_count, timestamp_s, dest.name)
 
-        frame_idx += interval_frames
+            if max_frames is not None and capture_count >= max_frames:
+                if verbose:
+                    print(f"\n  [LIMIT] Reached max_frames={max_frames}, stopping early.")
+                break
 
-    cap.release()
+            frame_idx += interval_frames
+
+    finally:
+        # Always release the VideoCapture, regardless of exceptions.
+        cap.release()
 
     elapsed = time.perf_counter() - t_start
 
