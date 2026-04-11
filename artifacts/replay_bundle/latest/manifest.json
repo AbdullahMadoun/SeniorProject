@@ -1,16 +1,16 @@
 {
   "bundle_name": "latest_live_px4_replay_bundle",
   "sources": {
-    "mission_validation": "D:\\downloads\\SeniorProject\\Skylink2\\artifacts\\live_px4\\latest_mission_validation.json",
-    "execution_validation": "D:\\downloads\\SeniorProject\\Skylink2\\artifacts\\live_px4\\latest_execution_validation.json",
-    "precision_profile": "D:\\downloads\\SeniorProject\\Skylink2\\artifacts\\live_px4\\latest_precision_landing_profile.json",
-    "landing_target_consumption": "D:\\downloads\\SeniorProject\\Skylink2\\artifacts\\live_px4\\latest_landing_target_consumption.json",
-    "dock_approach_validation": "D:\\downloads\\SeniorProject\\Skylink2\\artifacts\\live_px4\\latest_dock_approach_validation.json",
-    "live_weather_validation": "D:\\downloads\\SeniorProject\\Skylink2\\artifacts\\live_px4\\latest_live_weather_validation.json",
-    "precision_landing_manifest": "D:\\downloads\\SeniorProject\\Skylink2\\artifacts\\precision_landing\\latest\\manifest.json",
-    "weather_scenario_manifest": "D:\\downloads\\SeniorProject\\Skylink2\\artifacts\\weather_scenarios\\latest\\manifest.json",
-    "media_manifest": "D:\\downloads\\SeniorProject\\Skylink2\\artifacts\\media\\latest\\manifest.json",
-    "dock_approach_timeline": "D:\\downloads\\SeniorProject\\Skylink2\\artifacts\\replay_bundle\\latest\\dock_approach_timeline.csv"
+    "mission_validation": "C:\\Users\\sa239\\OneDrive\\\u0633\u0637\u062d \u0627\u0644\u0645\u0643\u062a\u0628\\Skylink2\\SeniorProject\\artifacts\\live_px4\\latest_mission_validation.json",
+    "execution_validation": "C:\\Users\\sa239\\OneDrive\\\u0633\u0637\u062d \u0627\u0644\u0645\u0643\u062a\u0628\\Skylink2\\SeniorProject\\artifacts\\live_px4\\latest_execution_validation.json",
+    "precision_profile": "C:\\Users\\sa239\\OneDrive\\\u0633\u0637\u062d \u0627\u0644\u0645\u0643\u062a\u0628\\Skylink2\\SeniorProject\\artifacts\\live_px4\\latest_precision_landing_profile.json",
+    "landing_target_consumption": "C:\\Users\\sa239\\OneDrive\\\u0633\u0637\u062d \u0627\u0644\u0645\u0643\u062a\u0628\\Skylink2\\SeniorProject\\artifacts\\live_px4\\latest_landing_target_consumption.json",
+    "dock_approach_validation": "C:\\Users\\sa239\\OneDrive\\\u0633\u0637\u062d \u0627\u0644\u0645\u0643\u062a\u0628\\Skylink2\\SeniorProject\\artifacts\\live_px4\\latest_dock_approach_validation.json",
+    "live_weather_validation": "C:\\Users\\sa239\\OneDrive\\\u0633\u0637\u062d \u0627\u0644\u0645\u0643\u062a\u0628\\Skylink2\\SeniorProject\\artifacts\\live_px4\\latest_live_weather_validation.json",
+    "precision_landing_manifest": "C:\\Users\\sa239\\OneDrive\\\u0633\u0637\u062d \u0627\u0644\u0645\u0643\u062a\u0628\\Skylink2\\SeniorProject\\artifacts\\precision_landing\\latest\\manifest.json",
+    "weather_scenario_manifest": "C:\\Users\\sa239\\OneDrive\\\u0633\u0637\u062d \u0627\u0644\u0645\u0643\u062a\u0628\\Skylink2\\SeniorProject\\artifacts\\weather_scenarios\\latest\\manifest.json",
+    "media_manifest": "C:\\Users\\sa239\\OneDrive\\\u0633\u0637\u062d \u0627\u0644\u0645\u0643\u062a\u0628\\Skylink2\\SeniorProject\\artifacts\\media\\latest\\manifest.json",
+    "dock_approach_timeline": "C:\\Users\\sa239\\OneDrive\\\u0633\u0637\u062d \u0627\u0644\u0645\u0643\u062a\u0628\\Skylink2\\SeniorProject\\artifacts\\replay_bundle\\latest\\dock_approach_timeline.csv"
   },
   "artifacts": {
     "mission_validation": {
