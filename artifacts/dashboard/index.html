@@ -599,6 +599,67 @@
       background: rgba(255, 255, 255, 0.06);
       border-radius: 999px;
     }
+    .safety-panel {
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      padding-top: 16px;
+      margin-top: 4px;
+    }
+    .safety-status-indicator {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 14px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .safety-status-dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .safety-status-dot.nominal { background: #00d4aa; box-shadow: 0 0 10px rgba(0, 212, 170, 0.5); }
+    .safety-status-dot.warning { background: #ffb454; box-shadow: 0 0 10px rgba(255, 180, 84, 0.5); }
+    .safety-status-dot.danger { background: #ff6b7a; box-shadow: 0 0 10px rgba(255, 107, 122, 0.5); }
+    .safety-scenarios {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+    }
+    .safety-scenario-btn {
+      font-size: 0.78rem;
+      padding: 10px 12px;
+    }
+    .safety-metrics {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+    }
+    .safety-metric {
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .safety-metric label {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-size: 0.66rem;
+    }
+    .safety-metric strong {
+      display: block;
+      font-size: 1rem;
+      color: var(--text);
+    }
+    .safety-event-marker.safety-battery_warning { background: var(--warn); }
+    .safety-event-marker.safety-rtl_triggered { background: var(--danger); }
+    .safety-event-marker.safety-emergency_land { background: var(--danger); }
+    .safety-event-marker.safety-launch_aborted { background: var(--danger); }
+    .safety-event-marker.safety-wind_warning { background: var(--warn); }
   </style>
 </head>
 <body>
@@ -653,6 +714,27 @@
         </div>
         <div class="actions action-strip"><button id="launch" class="primary" disabled>Launch Simulation</button><button id="reload">View Last Simulation</button></div>
         <div class="grid2"><div class="chip"><span>FPV Mode</span><strong id="fpv-mode-summary">simulation</strong></div><div class="chip"><span>Load State</span><strong id="load-state">Nominal</strong></div></div>
+        <div class="safety-panel">
+          <div class="eyebrow" style="margin-bottom: 12px;">Safety Scenario Visualization</div>
+          <div class="safety-status-indicator">
+            <div id="safety-status-dot" class="safety-status-dot nominal"></div>
+            <div><label>Safety State</label><strong id="safety-state-text">Nominal</strong></div>
+          </div>
+          <div class="safety-scenarios" style="margin-top: 12px;">
+            <button class="safety-scenario-btn" data-scenario="battery_warning">Battery Warning</button>
+            <button class="safety-scenario-btn" data-scenario="rtl_triggered">RTL Triggered</button>
+            <button class="safety-scenario-btn" data-scenario="emergency_land">Emergency Land</button>
+            <button class="safety-scenario-btn" data-scenario="launch_aborted">Launch Aborted</button>
+          </div>
+          <button id="safety-start" class="primary" style="width: 100%; margin-top: 12px;">Start Safety Scenario</button>
+          <button id="safety-stop" style="width: 100%; margin-top: 8px;" disabled>Stop Scenario</button>
+          <div class="safety-metrics" style="margin-top: 14px;">
+            <div class="safety-metric"><label>Battery</label><strong id="safety-battery">--%</strong></div>
+            <div class="safety-metric"><label>Wind</label><strong id="safety-wind">-- m/s</strong></div>
+            <div class="safety-metric"><label>Altitude</label><strong id="safety-alt">-- m</strong></div>
+            <div class="safety-metric"><label>Heading</label><strong id="safety-heading">--°</strong></div>
+          </div>
+        </div>
         <div class="terminal"><div class="terminal-head"><div class="terminal-meta"><label>Target</label><strong id="target">udpin://0.0.0.0:14540</strong></div><div class="terminal-meta"><label>Status</label><strong id="status">Bridge Active</strong></div></div><div id="term" class="terminal-body"></div></div>
         <div id="media" class="list"></div>
       </div>
@@ -1564,7 +1646,7 @@
     const dock = replay.simulation?.dock_target || { north_m: 0, east_m: 0, down_m: 0 };
     const fpvCfg = base.visualization?.fpv || { enabled: false, source_url: "", proxy_url: "/api/fpv/stream", mode: "simulation" };
     const cinematicCfg = base.visualization?.cinematic || { redline_pitch_deg: 15.0, redline_roll_deg: 15.0 };
-    const S = { waypoints: [], valid: false, locked: false, cam: "follow", cinematic: false, job: null, log: null, tel: null, logTimeout: null, telTimeout: null, last: null, liveFrames: [], liveFrameLimit: 1200, potholePulse: null, weatherMode: "proof", lowBatteryAction: "return", events: [], missionStartTime: null, lastBattery: null, lastMode: null, windThreshold: 7.0 };
+    const S = { waypoints: [], valid: false, locked: false, cam: "follow", cinematic: false, job: null, log: null, tel: null, logTimeout: null, telTimeout: null, last: null, liveFrames: [], liveFrameLimit: 1200, potholePulse: null, weatherMode: "proof", lowBatteryAction: "return", events: [], missionStartTime: null, lastBattery: null, lastMode: null, windThreshold: 7.0, safetyActive: false, safetyTel: null, safetyScenario: null, safetyEvents: [], safetyStartTime: null, lastSafetyState: "nominal" };
     const $ = (id) => document.getElementById(id);
 const E = {
       timelineTrack: $("timeline-track"),
@@ -1575,7 +1657,7 @@ const E = {
       popupMessage: $("popup-message"),
       simPhase: $("sim-phase"),
       batteryDrain: $("battery-drain"),
-      alt: $("alt"), speed: $("speed"), wind: $("wind"), dir: $("dir"), gust: $("gust"), battery: $("battery"), warn: $("warn"), rtl: $("rtl"), emergency: $("emergency"), launch: $("launch"), reload: $("reload"), undo: $("undo"), clear: $("clear"), term: $("term"), waypoints: $("waypoints"), banner: $("banner"), bannerT: $("banner-t"), bannerD: $("banner-d"), cGeo: $("c-geofence"), cWp: $("c-waypoints"), cAlt: $("c-altitude"), mapText: $("map-text"), mapLive: $("map-live"), target: $("target"), status: $("status"), mGeo: $("m-geofence"), mHome: $("m-home"), mDock: $("m-dock"), mProof: $("m-proof"), mapMode: $("map-mode"), mapBattery: $("map-battery"), mapSats: $("map-sats"), mapLoad: $("map-load"), hAlt: $("h-alt"), hSpeed: $("h-speed"), hMode: $("h-mode"), hBattery: $("h-battery"), hDock: $("h-dock"), hLoad: $("h-load"), media: $("media"), fpvModeSummary: $("fpv-mode-summary"), loadState: $("load-state"), cinematicToggle: $("cinematic-toggle"), fpvShell: $("fpv-shell"), fpvFeed: $("fpv-feed"), fpvStatus: $("fpv-status"), fpvPlaceholderText: $("fpv-placeholder-text"), headingTrack: $("heading-track"), horizonRoll: $("horizon-roll"), horizonPitch: $("horizon-pitch"), pitchLadder: $("pitch-ladder"), fpvHeading: $("fpv-heading"), fpvAttitude: $("fpv-attitude"), fpvStress: $("fpv-stress"), fpvFlag: $("fpv-flag"), stressFlag: $("stress-flag"), loadFlag: $("load-flag") };
+      alt: $("alt"), speed: $("speed"), wind: $("wind"), dir: $("dir"), gust: $("gust"), battery: $("battery"), warn: $("warn"), rtl: $("rtl"), emergency: $("emergency"), launch: $("launch"), reload: $("reload"), undo: $("undo"), clear: $("clear"), term: $("term"), waypoints: $("waypoints"), banner: $("banner"), bannerT: $("banner-t"), bannerD: $("banner-d"), cGeo: $("c-geofence"), cWp: $("c-waypoints"), cAlt: $("c-altitude"), mapText: $("map-text"), mapLive: $("map-live"), target: $("target"), status: $("status"), mGeo: $("m-geofence"), mHome: $("m-home"), mDock: $("m-dock"), mProof: $("m-proof"), mapMode: $("map-mode"), mapBattery: $("map-battery"), mapSats: $("map-sats"), mapLoad: $("map-load"), hAlt: $("h-alt"), hSpeed: $("h-speed"), hMode: $("h-mode"), hBattery: $("h-battery"), hDock: $("h-dock"), hLoad: $("h-load"), media: $("media"), fpvModeSummary: $("fpv-mode-summary"), loadState: $("load-state"), cinematicToggle: $("cinematic-toggle"), fpvShell: $("fpv-shell"), fpvFeed: $("fpv-feed"), fpvStatus: $("fpv-status"), fpvPlaceholderText: $("fpv-placeholder-text"), headingTrack: $("heading-track"), horizonRoll: $("horizon-roll"), horizonPitch: $("horizon-pitch"), pitchLadder: $("pitch-ladder"), fpvHeading: $("fpv-heading"), fpvAttitude: $("fpv-attitude"), fpvStress: $("fpv-stress"),       fpvFlag: $("fpv-flag"), stressFlag: $("stress-flag"), loadFlag: $("load-flag"), safetyStatusDot: $("safety-status-dot"), safetyStateText: $("safety-state-text"), safetyBattery: $("safety-battery"), safetyWind: $("safety-wind"), safetyAlt: $("safety-alt"), safetyHeading: $("safety-heading"), safetyStart: $("safety-start"), safetyStop: $("safety-stop") };
     const fmt = (value, digits = 1) => Number(value || 0).toFixed(digits);
     const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
     const modeText = (mode) => (mode || "idle").replaceAll("_", " ");
@@ -1583,6 +1665,76 @@ const E = {
     const ned = (lat, lon) => ({ north_m: (lat - home.lat) * 111320, east_m: (lon - home.lon) * 111320 * Math.cos(home.lat * Math.PI / 180) });
     function normalizeHeading(heading) { const raw = Number(heading || 0); return ((raw % 360) + 360) % 360; }
     function modeColor(mode) { if (mode === "return_to_launch") return 0xffb454; if (mode === "land" || mode === "dock") return 0x00d4aa; return 0x53b7ff; }
+    function safetyStateColor(state) { if (state === "nominal") return 0x00d4aa; if (state === "battery_warning" || state === "wind_warning") return 0xffb454; return 0xff6b7a; }
+    function safetyStateFromFrame(frame) { if (frame.battery_percent != null && frame.battery_percent <= 20) return "rtl_triggered"; if (frame.battery_percent != null && frame.battery_percent <= 30) return "battery_warning"; if (frame.wind_speed_mps != null && frame.wind_speed_mps > 7.0) return "wind_warning"; return "nominal"; }
+    function updateSafetyStateUI(state) { E.safetyStatusDot.className = `safety-status-dot ${state}`; const labels = { nominal: "Nominal", battery_warning: "Battery Warning", rtl_triggered: "RTL Triggered", emergency_land: "Emergency Land", launch_aborted: "Launch Aborted", wind_warning: "Wind Warning" }; E.safetyStateText.textContent = labels[state] || state; }
+    function updateDroneSafetyState(state) { const color = safetyStateColor(state); body.material.color.setHex(color); body.material.emissive.setHex(color * 0.15); rotorMaterial.color.setHex(state === "nominal" ? 0x00d4aa : 0xff6b7a); rotorMaterial.emissive.setHex(state === "nominal" ? 0x00362d : 0x4a1a1f); }
+    function updateSafetyMetrics(frame) { E.safetyBattery.textContent = `${fmt(frame.battery_percent, 0)}%`; E.safetyWind.textContent = `${fmt(frame.wind_speed_mps, 1)} m/s`; E.safetyAlt.textContent = `${fmt(frame.alt_m, 1)} m`; E.safetyHeading.textContent = `${fmt(frame.heading_deg, 0)}°`; }
+    function streamSafetyTelemetry(scenario) {
+      if (S.safetyTel) S.safetyTel.close();
+      S.safetyActive = true;
+      S.safetyScenario = scenario;
+      S.safetyEvents = [];
+      S.safetyStartTime = Date.now();
+      E.safetyStart.disabled = true;
+      E.safetyStop.disabled = false;
+      log(`[SAFETY] Starting ${scenario} scenario`, "info");
+      S.safetyTel = new EventSource(`/api/safety/telemetry?scenario=${encodeURIComponent(scenario)}`);
+      S.safetyTel.addEventListener("telemetry", (event) => safetyFrame(JSON.parse(event.data)));
+      S.safetyTel.addEventListener("event", (event) => { const payload = JSON.parse(event.data); S.safetyEvents.push(payload); updateSafetyTimeline(); log(`[SAFETY EVENT] ${payload.type}: ${payload.message}`, "info"); });
+      S.safetyTel.onerror = () => { if (S.safetyTel) S.safetyTel.close(); };
+    }
+    function safetyFrame(frame) {
+      const state = frame.safety_state || safetyStateFromFrame(frame);
+      if (state !== S.lastSafetyState) { updateSafetyStateUI(state); updateDroneSafetyState(state); S.lastSafetyState = state; }
+      updateSafetyMetrics(frame);
+      drone.position.set(frame.east_m || 0, Math.max(0.02, frame.alt_m || 0), frame.north_m || 0);
+      drone.rotation.order = "ZYX";
+      drone.rotation.y = THREE.MathUtils.degToRad(-(frame.heading_deg || 0));
+      E.hAlt.textContent = `${fmt(frame.alt_m)} m`;
+      E.hMode.textContent = modeText(frame.mode || "auto_mission");
+      E.hBattery.textContent = `${fmt(frame.battery_percent, 0)}%`;
+      droneMarker.setLatLng([frame.lat_deg, frame.lon_deg]);
+      livePolyline.setLatLngs([...livePolyline.getLatLngs(), [frame.lat_deg, frame.lon_deg]]);
+      detectSafetyEvents(frame, state);
+      updateSafetyTimeline();
+    }
+    function detectSafetyEvents(frame, state) {
+      const elapsed = (Date.now() - S.safetyStartTime) / 1000;
+      if (state !== "nominal" && S.lastSafetyState === "nominal") { S.safetyEvents.push({ t: elapsed, type: `safety-${state}`, message: `${state.replace("_", " ")} triggered` }); }
+      S.lastSafetyState = state;
+    }
+    function updateSafetyTimeline() {
+      if (!E.timelineTrack) return;
+      const totalTime = S.safetyEvents.length > 0 ? S.safetyEvents[S.safetyEvents.length - 1].t : 1;
+      const progress = Math.min(100, ((Date.now() - S.safetyStartTime) / 1000 / totalTime) * 100);
+      E.timelineProgress.style.width = `${progress}%`;
+      E.timelineTrack.querySelectorAll(".safety-event-marker").forEach(m => m.remove());
+      S.safetyEvents.forEach(event => {
+        const marker = document.createElement("div");
+        marker.className = `event-marker safety-event-marker ${event.type}`;
+        const pct = totalTime > 0 ? (event.t / totalTime) * 100 : 0;
+        marker.style.left = `${Math.min(98, Math.max(2, pct))}%`;
+        marker.title = `[${fmt(event.t, 1)}s] ${event.message}`;
+        marker.addEventListener("click", (e) => { e.stopPropagation(); showEventPopup(event); });
+        E.timelineTrack.appendChild(marker);
+      });
+      E.eventCount.textContent = `${S.safetyEvents.length} safety events`;
+    }
+    function stopSafetyScenario() {
+      if (S.safetyTel) { S.safetyTel.close(); S.safetyTel = null; }
+      S.safetyActive = false;
+      S.lastSafetyState = "nominal";
+      updateSafetyStateUI("nominal");
+      updateDroneSafetyState("nominal");
+      E.safetyStart.disabled = false;
+      E.safetyStop.disabled = true;
+      E.safetyBattery.textContent = "--%";
+      E.safetyWind.textContent = "-- m/s";
+      E.safetyAlt.textContent = "-- m";
+      E.safetyHeading.textContent = "--°";
+      log("[SAFETY] Scenario stopped", "info");
+    }
     function sliderText() { $("alt-v").textContent = `${fmt(E.alt.value, 0)} m`; $("speed-v").textContent = `${fmt(E.speed.value)} m/s`; $("wind-v").textContent = `${fmt(E.wind.value)} m/s`; $("dir-v").textContent = `${fmt(E.dir.value, 0)} deg`; $("gust-v").textContent = `${fmt(E.gust.value, 2)}x`; $("battery-v").textContent = `${fmt(E.battery.value, 0)}%`; $("warn-v").textContent = `${fmt(E.warn.value, 0)}%`; $("rtl-v").textContent = `${fmt(E.rtl.value, 0)}%`; $("emergency-v").textContent = `${fmt(E.emergency.value, 0)}%`; $("battery-drain-v").textContent = `${fmt(E.batteryDrain.value, 1)}x`; }
     function setSegmentValue(selector, dataName, value) { document.querySelectorAll(selector).forEach((button) => button.classList.toggle("active", button.dataset[dataName] === value)); }
     function setWeatherMode(mode) { S.weatherMode = mode; setSegmentValue(".weather-mode", "weatherMode", mode); }
@@ -2173,6 +2325,9 @@ S.tel.onerror = () => { if (S.tel) S.tel.close(); };
     E.reload.addEventListener("click", refreshArtifacts);
     E.undo.addEventListener("click", async () => { if (S.locked) return; S.waypoints.pop(); await validateMission(); });
     E.clear.addEventListener("click", async () => { if (S.locked) return; S.waypoints = []; await validateMission(); });
+    document.querySelectorAll(".safety-scenario-btn").forEach((button) => button.addEventListener("click", () => { document.querySelectorAll(".safety-scenario-btn").forEach((b) => b.classList.remove("active")); button.classList.add("active"); }));
+    E.safetyStart.addEventListener("click", () => { const activeBtn = document.querySelector(".safety-scenario-btn.active"); if (!activeBtn) return; const scenario = activeBtn.dataset.scenario; streamSafetyTelemetry(scenario); });
+    E.safetyStop.addEventListener("click", stopSafetyScenario);
     window.addEventListener("resize", resizeScene);
     buildPitchLadder();
     buildHeadingTape();

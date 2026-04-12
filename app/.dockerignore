@@ -1,0 +1,11 @@
+.env
+.venv
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+data/
+models/
+scripts/
+runtime/
+src/static/history_images/

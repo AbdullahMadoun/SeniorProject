@@ -24,23 +24,38 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import APIKeyHeader
 from PIL import Image
 from pydantic import BaseModel, Field, field_validator
-from qwen_vl_utils import process_vision_info
-from transformers import AutoProcessor
-from vllm import LLM, SamplingParams
 from ultralytics import YOLO
 
 from config import config
+
+try:
+    from qwen_vl_utils import process_vision_info
+except ImportError:
+    process_vision_info = None
+
+try:
+    from transformers import AutoProcessor
+except ImportError:
+    AutoProcessor = None
+
+try:
+    from vllm import LLM, SamplingParams
+except ImportError:
+    LLM = None
+    SamplingParams = None
 
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
 API_KEY = os.environ.get("API_KEY", "road-inspector-secret-key-2024")
-MODEL_NAME = os.environ.get("MODEL_NAME", "Qwen/Qwen2.5-VL-7B-Instruct")
-HOST = os.environ.get("HOST", "0.0.0.0")
-PORT = int(os.environ.get("PORT", "17612"))
-GPU_MEM_UTIL = float(os.environ.get("GPU_MEM_UTIL", "0.90"))
-MAX_MODEL_LEN = int(os.environ.get("MAX_MODEL_LEN", "20480"))
-MAX_OUTPUT_TOKENS = int(os.environ.get("MAX_OUTPUT_TOKENS", "16384"))
+MODEL_NAME = os.environ.get("MODEL_NAME", os.environ.get("VLM_MODEL", config.VLM_MODEL))
+HOST = os.environ.get("HOST", config.HOST)
+PORT = int(os.environ.get("PORT", str(config.PORT)))
+GPU_MEM_UTIL = float(os.environ.get("GPU_MEM_UTIL", str(config.VLM_GPU_UTIL)))
+MAX_MODEL_LEN = int(os.environ.get("MAX_MODEL_LEN", str(config.VLM_MAX_LEN)))
+MAX_OUTPUT_TOKENS = int(os.environ.get("MAX_OUTPUT_TOKENS", str(config.VLM_MAX_OUT)))
+ENABLE_VLM = os.environ.get("ENABLE_VLM", str(config.ENABLE_VLM)).strip().lower() in {"1", "true", "yes", "on"}
+ENABLE_YOLO_V8 = os.environ.get("ENABLE_YOLO_V8", str(config.ENABLE_YOLO_V8)).strip().lower() in {"1", "true", "yes", "on"}
 
 # ---------------------------------------------------------------------------
 # Prompt (loaded from /root/prompt.txt or embedded fallback)
@@ -225,20 +240,31 @@ vlm_processor: Optional[AutoProcessor] = None
 def init_models():
     """Initialize YOLO models and vLLM engine."""
     global yolo_model_v8, yolo_model_v12, vlm_engine, vlm_processor
+
+    if ENABLE_VLM:
+        if AutoProcessor is None or LLM is None or SamplingParams is None or process_vision_info is None:
+            raise RuntimeError("ENABLE_VLM=true but VLM dependencies are not installed on this host.")
+        print(f"[INIT] Loading VLM model: {MODEL_NAME}")
+        vlm_processor = AutoProcessor.from_pretrained(MODEL_NAME, trust_remote_code=True)
+        vlm_engine = LLM(
+            model=MODEL_NAME,
+            gpu_memory_utilization=GPU_MEM_UTIL,
+            max_model_len=MAX_MODEL_LEN,
+            trust_remote_code=True,
+            dtype="auto",
+            max_num_seqs=4,
+        )
+    else:
+        print("[INIT] ENABLE_VLM=false, skipping VLM load and running in YOLO-only mode.")
+        vlm_processor = None
+        vlm_engine = None
     
-    print(f"[INIT] Loading VLM model: {config.VLM_MODEL}")
-    vlm_processor = AutoProcessor.from_pretrained(config.VLM_MODEL, trust_remote_code=True)
-    vlm_engine = LLM(
-        model=config.VLM_MODEL,
-        gpu_memory_utilization=config.VLM_GPU_UTIL,
-        max_model_len=config.VLM_MAX_LEN,
-        trust_remote_code=True,
-        dtype="auto",
-        max_num_seqs=4,
-    )
-    
-    print(f"[INIT] Loading YOLOv8 model: {config.YOLO_MODEL_V8}")
-    yolo_model_v8 = YOLO(config.YOLO_MODEL_V8)
+    if ENABLE_YOLO_V8:
+        print(f"[INIT] Loading YOLOv8 model: {config.YOLO_MODEL_V8}")
+        yolo_model_v8 = YOLO(config.YOLO_MODEL_V8)
+    else:
+        print("[INIT] ENABLE_YOLO_V8=false, skipping YOLOv8 load.")
+        yolo_model_v8 = None
 
     print(f"[INIT] Loading YOLOv12 model: {config.YOLO_MODEL_V12}")
     try:
@@ -259,16 +285,22 @@ def init_models():
 # ---------------------------------------------------------------------------
 def run_hybrid_inference(pil_image: Image.Image, lat: Optional[float] = None, lon: Optional[float] = None) -> tuple[Image.Image, dict, list]:
     """Run BOTH YOLO models for boxes -> NMS merge -> Draw -> Run VLM for report."""
-    if not yolo_model_v8 or not yolo_model_v12 or not vlm_engine or not vlm_processor:
-        raise RuntimeError("Models not initialized")
+    if not yolo_model_v8 and not yolo_model_v12:
+        raise RuntimeError("No YOLO model is initialized")
 
     w, h = pil_image.size
     cv2_img = pil_to_cv2(pil_image)
 
-    # 1. YOLO Detection (Both Models)
-    print("[PIPELINE] Running YOLOv8 and YOLOv12 detection...")
-    res_v8 = yolo_model_v8(cv2_img, conf=config.YOLO_CONF_THRESH, iou=config.YOLO_IOU_THRESH, verbose=False)[0]
-    res_v12 = yolo_model_v12(cv2_img, conf=config.YOLO_CONF_THRESH, iou=config.YOLO_IOU_THRESH, verbose=False)[0]
+    # 1. YOLO Detection
+    print("[PIPELINE] Running YOLO detection...")
+    res_v8 = None
+    res_v12 = None
+    if yolo_model_v8:
+        print("[PIPELINE] Running YOLOv8 detection...")
+        res_v8 = yolo_model_v8(cv2_img, conf=config.YOLO_CONF_THRESH, iou=config.YOLO_IOU_THRESH, verbose=False)[0]
+    if yolo_model_v12:
+        print("[PIPELINE] Running YOLOv12 detection...")
+        res_v12 = yolo_model_v12(cv2_img, conf=config.YOLO_CONF_THRESH, iou=config.YOLO_IOU_THRESH, verbose=False)[0]
     
     all_boxes = []
     all_scores = []
@@ -291,8 +323,10 @@ def run_hybrid_inference(pil_image: Image.Image, lat: Optional[float] = None, lo
             all_scores.append(conf)
             all_labels.append(label)
 
-    extract_res(res_v8)
-    extract_res(res_v12)
+    if res_v8 is not None:
+        extract_res(res_v8)
+    if res_v12 is not None:
+        extract_res(res_v12)
     
     detections = []
     draw_items = []
@@ -311,6 +345,7 @@ def run_hybrid_inference(pil_image: Image.Image, lat: Optional[float] = None, lo
                     "id": box_id,
                     "label": label,
                     "bbox_xyxy": [x1, y1, x2, y2],
+                    "confidence": all_scores[i],
                     "severity": "unknown" 
                 }
                 detections.append(det)
@@ -324,81 +359,106 @@ def run_hybrid_inference(pil_image: Image.Image, lat: Optional[float] = None, lo
                 })
 
     # 2. Draw boxes for VLM (without severity)
-    print(f"[PIPELINE] Drawing {len(detections)} YOLO boxes for VLM...")
-    temp_cv2 = draw_boxes_on_image(cv2_img, draw_items)
-    temp_pil = Image.fromarray(cv2.cvtColor(temp_cv2, cv2.COLOR_BGR2RGB))
+    print(f"[PIPELINE] Drawing {len(detections)} YOLO boxes...")
 
-    # 3. VLM Reporting
-    print("[PIPELINE] Running VLM for report generation...")
-    
-    # Pass explicit coordinate list to VLM
-    box_infos = []
-    for d in detections:
-        x1, y1, x2, y2 = d['bbox_xyxy']
-        w_px = max(1, x2 - x1)
-        h_px = max(1, y2 - y1)
-        area = w_px * h_px
-        conf = round(d.get('confidence', 0.0) * 100, 1)
+    if ENABLE_VLM and vlm_engine and vlm_processor:
+        temp_cv2 = draw_boxes_on_image(cv2_img, draw_items)
+        temp_pil = Image.fromarray(cv2.cvtColor(temp_cv2, cv2.COLOR_BGR2RGB))
+
+        # 3. VLM Reporting
+        print("[PIPELINE] Running VLM for report generation...")
         
-        info = f"- ID: {d['id']}, Type: {d['label']}, YOLO Confidence: {conf}%, Dimensions: {w_px}x{h_px} pixels (Area: {area}), Coords: [x1:{x1}, y1:{y1}, x2:{x2}, y2:{y2}]"
-        box_infos.append(info)
+        box_infos = []
+        for d in detections:
+            x1, y1, x2, y2 = d['bbox_xyxy']
+            w_px = max(1, x2 - x1)
+            h_px = max(1, y2 - y1)
+            area = w_px * h_px
+            conf = round(d.get('confidence', 0.0) * 100, 1)
+            
+            info = f"- ID: {d['id']}, Type: {d['label']}, YOLO Confidence: {conf}%, Dimensions: {w_px}x{h_px} pixels (Area: {area}), Coords: [x1:{x1}, y1:{y1}, x2:{x2}, y2:{y2}]"
+            box_infos.append(info)
+            
+        box_list_str = "\n".join(box_infos)
+        if not box_list_str:
+            box_list_str = "No defects detected by YOLO."
         
-    box_list_str = "\n".join(box_infos)
-    if not box_list_str:
-        box_list_str = "No defects detected by YOLO."
-    
-    gps_str = f"GPS location (lat, lon): {lat}, {lon}." if lat is not None and lon is not None else "GPS location: Not provided."
-    user_prompt = USER_PROMPT_TEMPLATE + f"\n\n{gps_str}\nImage resolution: {w} x {h} pixels.\n\n### DETECTED BOUNDING BOXES (From YOLO):\n{box_list_str}"
+        gps_str = f"GPS location (lat, lon): {lat}, {lon}." if lat is not None and lon is not None else "GPS location: Not provided."
+        user_prompt = USER_PROMPT_TEMPLATE + f"\n\n{gps_str}\nImage resolution: {w} x {h} pixels.\n\n### DETECTED BOUNDING BOXES (From YOLO):\n{box_list_str}"
 
-    messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {
-            "role": "user",
-            "content": [
-                {"type": "image", "image": temp_pil},
-                {"type": "text", "text": user_prompt},
-            ],
-        },
-    ]
+        messages = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "image": temp_pil},
+                    {"type": "text", "text": user_prompt},
+                ],
+            },
+        ]
 
-    image_inputs, _ = process_vision_info(messages)
-    text_prompt = vlm_processor.apply_chat_template(
-        messages, tokenize=False, add_generation_prompt=True
-    )
+        image_inputs, _ = process_vision_info(messages)
+        text_prompt = vlm_processor.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=True
+        )
 
-    sampling_params = SamplingParams(
-        temperature=config.VLM_TEMP,
-        top_p=config.VLM_TOP_P,
-        max_tokens=1500, # Strict cutoff to prevent endless looping
-        repetition_penalty=1.2, # Higher penalty for repeating words
-    )
+        sampling_params = SamplingParams(
+            temperature=config.VLM_TEMP,
+            top_p=config.VLM_TOP_P,
+            max_tokens=1500,
+            repetition_penalty=1.2,
+        )
 
-    outputs = vlm_engine.generate(
-        [{"prompt": text_prompt, "multi_modal_data": {"image": image_inputs}}],
-        sampling_params=sampling_params,
-    )
-    raw_vlm_text = outputs[0].outputs[0].text
+        outputs = vlm_engine.generate(
+            [{"prompt": text_prompt, "multi_modal_data": {"image": image_inputs}}],
+            sampling_params=sampling_params,
+        )
+        raw_vlm_text = outputs[0].outputs[0].text
 
-    # 4. Parse VLM JSON
-    try:
-        report_json = extract_json_from_text(raw_vlm_text)
-    except Exception as e:
-        print(f"[PIPELINE] Failed to parse VLM JSON: {e}")
-        report_json = {"report_markdown": raw_vlm_text, "severities": {}}
+        try:
+            report_json = extract_json_from_text(raw_vlm_text)
+        except Exception as e:
+            print(f"[PIPELINE] Failed to parse VLM JSON: {e}")
+            report_json = {"report_markdown": raw_vlm_text, "severities": {}}
 
-    # Merge severities into detections and draw_items
-    severities = report_json.get("severities", {})
-    for d in detections:
-        d["severity"] = severities.get(d["id"], "unknown")
-        
-    for item in draw_items:
-        item["severity"] = severities.get(item["id"], "unknown")
+        severities = report_json.get("severities", {})
+        for d in detections:
+            d["severity"] = severities.get(d["id"], "unknown")
+            
+        for item in draw_items:
+            item["severity"] = severities.get(item["id"], "unknown")
+        report_markdown = report_json.get("report_markdown", "")
+    else:
+        print("[PIPELINE] ENABLE_VLM=false, producing YOLO-only report.")
+        image_area = max(1, w * h)
+        summary_lines = []
+        for d, item in zip(detections, draw_items):
+            x1, y1, x2, y2 = d["bbox_xyxy"]
+            bbox_area = max(1, (x2 - x1) * (y2 - y1))
+            ratio = bbox_area / image_area
+            severity = "high" if ratio >= 0.08 else "low"
+            d["severity"] = severity
+            item["severity"] = severity
+            summary_lines.append(
+                f"- {d['id']}: {d['label']} at [{x1}, {y1}, {x2}, {y2}] "
+                f"covering {ratio:.1%} of the image, severity={severity}"
+            )
+
+        if not summary_lines:
+            summary_lines.append("- No defects detected by YOLO.")
+
+        report_markdown = (
+            "# YOLO-Only Inspection Report\n\n"
+            "This run skipped the VLM and validated remote startup plus YOLO inference only.\n\n"
+            f"Detected items: {len(detections)}\n\n"
+            + "\n".join(summary_lines)
+        )
 
     # 5. Draw FINAL boxes containing the severity label
     annotated_cv2 = draw_boxes_on_image(cv2_img, draw_items)
     annotated_pil = Image.fromarray(cv2.cvtColor(annotated_cv2, cv2.COLOR_BGR2RGB))
 
-    return annotated_pil, {"report_markdown": report_json.get("report_markdown", "")}, detections
+    return annotated_pil, {"report_markdown": report_markdown}, detections
 
 
 # ---------------------------------------------------------------------------
@@ -663,6 +723,10 @@ async def health():
         "status": "ok",
         "model": MODEL_NAME,
         "vlm_loaded": vlm_engine is not None,
+        "enable_vlm": ENABLE_VLM,
+        "enable_yolo_v8": ENABLE_YOLO_V8,
+        "yolo_v8_loaded": yolo_model_v8 is not None,
+        "yolo_v12_loaded": yolo_model_v12 is not None,
     }
 
 

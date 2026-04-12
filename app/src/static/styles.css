@@ -77,6 +77,66 @@ h1 {
     gap: 0.5rem;
 }
 
+.runtime-card {
+    background: rgba(15, 23, 42, 0.5);
+    border: 1px solid var(--surface-border);
+    border-radius: var(--radius-md);
+    padding: 1rem 1.1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.runtime-card h3 {
+    font-size: 1rem;
+    color: #e2e8f0;
+}
+
+.runtime-row {
+    display: grid;
+    grid-template-columns: 110px 1fr;
+    gap: 0.75rem;
+    align-items: start;
+}
+
+.runtime-label {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.runtime-value {
+    color: var(--text-primary);
+    font-size: 0.92rem;
+    word-break: break-word;
+}
+
+.status-ready,
+.status-configured {
+    color: var(--success);
+    font-weight: 600;
+}
+
+.status-starting,
+.status-unknown {
+    color: var(--warning);
+    font-weight: 600;
+}
+
+.status-failed,
+.status-disabled {
+    color: var(--error);
+    font-weight: 600;
+}
+
+.runtime-error {
+    background: rgba(239, 68, 68, 0.12);
+    border: 1px solid rgba(239, 68, 68, 0.45);
+    border-radius: var(--radius-md);
+    color: #fca5a5;
+    padding: 0.8rem;
+    font-size: 0.9rem;
+}
+
 label {
     font-weight: 500;
     color: var(--text-secondary);

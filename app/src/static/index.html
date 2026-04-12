@@ -59,6 +59,40 @@
                                     </div>
                                 </div>
 
+                                <div class="runtime-card">
+                                    <h3>Runtime Gateway</h3>
+                                    <div class="runtime-row">
+                                        <span class="runtime-label">Mode</span>
+                                        <span class="runtime-value" id="connectionMode">Starting...</span>
+                                    </div>
+                                    <div class="runtime-row">
+                                        <span class="runtime-label">Bridge</span>
+                                        <span class="runtime-value" id="bridgeEndpoint">Starting...</span>
+                                    </div>
+                                    <div class="runtime-row">
+                                        <span class="runtime-label">Public Tunnel</span>
+                                        <span class="runtime-value" id="publicTunnel">Starting...</span>
+                                    </div>
+                                    <div class="runtime-row">
+                                        <span class="runtime-label">Tunnel Status</span>
+                                        <span class="runtime-value" id="tunnelStatus">starting</span>
+                                    </div>
+                                    <div class="runtime-row">
+                                        <span class="runtime-label">Model Endpoint</span>
+                                        <span class="runtime-value" id="modelEndpoint">Starting...</span>
+                                    </div>
+                                    <div class="runtime-row">
+                                        <span class="runtime-label">Model Status</span>
+                                        <span class="runtime-value" id="modelStatus">starting</span>
+                                    </div>
+                                    <div class="runtime-row">
+                                        <span class="runtime-label">Model Key</span>
+                                        <span class="runtime-value" id="modelApiKeyStatus">Starting...</span>
+                                    </div>
+                                    <div id="tunnelError" class="runtime-error hidden"></div>
+                                    <div id="modelError" class="runtime-error hidden"></div>
+                                </div>
+
                                 <div class="input-group file-upload-wrapper">
                                     <input type="file" id="imageInput" accept="image/*" class="file-input" />
                                     <label for="imageInput" class="file-label">
