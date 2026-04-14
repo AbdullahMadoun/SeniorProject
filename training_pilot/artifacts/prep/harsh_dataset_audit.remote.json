@@ -1,0 +1,26 @@
+{
+  "data_yaml": "/root/SeniorProject/training_pilot/configs/dataset.yaml",
+  "splits": {
+    "train": {
+      "image_dir": "/root/SeniorProject/training_pilot/data/train/images",
+      "label_dir": "/root/SeniorProject/training_pilot/data/train/labels",
+      "healthy_images": 1158,
+      "purged_corrupted_images": 0
+    },
+    "val": {
+      "image_dir": "/root/SeniorProject/training_pilot/data/val/images",
+      "label_dir": "/root/SeniorProject/training_pilot/data/val/labels",
+      "healthy_images": 250,
+      "purged_corrupted_images": 0
+    },
+    "test": {
+      "image_dir": "/root/SeniorProject/training_pilot/data/test/images",
+      "label_dir": "/root/SeniorProject/training_pilot/data/test/labels",
+      "healthy_images": 249,
+      "purged_corrupted_images": 0
+    }
+  },
+  "corrupted_purged": [],
+  "failures": [],
+  "status": "pass"
+}

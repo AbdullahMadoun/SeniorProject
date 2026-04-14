@@ -1,0 +1,20 @@
+{
+  "raw_dir": "/root/SeniorProject/training_pilot/data/raw",
+  "source_class_map": {
+    "crack": 1,
+    "manhole": 2,
+    "pothole": 0
+  },
+  "image_count_after_filtering": 1657,
+  "dropped_images_zero_boxes_after_filtering": 352,
+  "dropped_images_manhole_only": 352,
+  "source_class_counts_before_filtering": {
+    "crack": 2519,
+    "manhole": 957,
+    "pothole": 1261
+  },
+  "kept_class_counts_after_filtering": {
+    "crack": 2519,
+    "pothole": 1261
+  }
+}

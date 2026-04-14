@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 import argparse
+import re
 import shutil
 from collections import Counter
 from pathlib import Path
 
 from common import (
+    IMAGE_SUFFIXES,
     dump_json,
     ensure_clean_dir,
     discover_label_image_pairs,
     load_pipeline_config,
+    normalize_class_name,
     read_yolo_rows,
     resolve_class_id_map,
     resolve_project_root,
@@ -37,6 +40,58 @@ def stratify_label(class_names: set[str]) -> str:
     raise RuntimeError(f"Unexpected class combination after filtering: {sorted(class_names)}")
 
 
+def resolve_kaggle_class_id_map(raw_dir: Path) -> dict[str, int]:
+    candidates = sorted(raw_dir.rglob("README.md"))
+    if not candidates:
+        raise FileNotFoundError(
+            "The Kaggle raw package does not include data.yaml here, and no README.md was found to recover the class map."
+        )
+    row_re = re.compile(r"^\|\s*(\d+)\s*\|\s*([A-Za-z0-9 _-]+?)\s*\|")
+    mapping: dict[str, int] = {}
+    for candidate in candidates:
+        for line in candidate.read_text(encoding="utf-8").splitlines():
+            match = row_re.match(line.strip())
+            if not match:
+                continue
+            class_id = int(match.group(1))
+            class_name = normalize_class_name(match.group(2))
+            mapping[class_name] = class_id
+        required = {"pothole", "crack", "manhole"}
+        if required.issubset(mapping):
+            return mapping
+        mapping.clear()
+    raise RuntimeError(
+        "Failed to recover the Kaggle class table from README.md. "
+        "The raw package layout is present, but the class mapping was not parsed successfully."
+    )
+
+
+def find_image_for_label(image_root: Path, label_path: Path) -> Path:
+    for suffix in IMAGE_SUFFIXES:
+        candidate = image_root / f"{label_path.stem}{suffix}"
+        if candidate.exists():
+            return candidate
+    raise FileNotFoundError(f"Could not find an image in {image_root} for label file {label_path}")
+
+
+def resolve_source_pairs_and_classes(raw_dir: Path) -> tuple[list[tuple[Path, Path]], dict[str, int]]:
+    yolo_label_roots = [path for path in sorted(raw_dir.rglob("labels-YOLO")) if path.is_dir()]
+    if yolo_label_roots:
+        if len(yolo_label_roots) != 1:
+            raise RuntimeError(f"Expected exactly one labels-YOLO directory under {raw_dir}, found {yolo_label_roots}")
+        label_root = yolo_label_roots[0]
+        image_root = label_root.parent / "images"
+        if not image_root.exists():
+            raise FileNotFoundError(f"Expected YOLO image directory next to {label_root}, but {image_root} does not exist")
+        pairs = [(find_image_for_label(image_root, label_path), label_path) for label_path in sorted(label_root.glob("*.txt"))]
+        if not pairs:
+            raise RuntimeError(f"No YOLO label/image pairs were found under {label_root}")
+        return pairs, resolve_kaggle_class_id_map(raw_dir)
+
+    data_yaml_path = resolve_source_data_yaml(raw_dir)
+    return discover_label_image_pairs(raw_dir), resolve_class_id_map(data_yaml_path)
+
+
 def main() -> None:
     args = parse_args()
     project_root = resolve_project_root(args.project_root or None)
@@ -52,8 +107,7 @@ def main() -> None:
     filtered_labels.mkdir(parents=True, exist_ok=True)
     artifact_dir.mkdir(parents=True, exist_ok=True)
 
-    data_yaml_path = resolve_source_data_yaml(raw_dir)
-    class_id_map = resolve_class_id_map(data_yaml_path)
+    source_pairs, class_id_map = resolve_source_pairs_and_classes(raw_dir)
     required = {"pothole", "crack", "manhole"}
     missing = sorted(required - set(class_id_map))
     if missing:
@@ -69,7 +123,7 @@ def main() -> None:
     dropped_empty = 0
     dropped_manhole_only = 0
 
-    for image_path, label_path in discover_label_image_pairs(raw_dir):
+    for image_path, label_path in source_pairs:
         rows = read_yolo_rows(label_path)
         original_present: set[str] = set()
         filtered_rows: list[tuple[int, list[float]]] = []
@@ -109,7 +163,7 @@ def main() -> None:
 
     stats = {
         "raw_dir": str(raw_dir.resolve()),
-        "source_data_yaml": str(data_yaml_path.resolve()),
+        "source_class_map": dict(sorted(class_id_map.items())),
         "image_count_after_filtering": len(manifest),
         "dropped_images_zero_boxes_after_filtering": dropped_empty,
         "dropped_images_manhole_only": dropped_manhole_only,

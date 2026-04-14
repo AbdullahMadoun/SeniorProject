@@ -30,10 +30,22 @@ cd /workspace/Skylink2/training_pilot
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
-pip install ultralytics huggingface_hub kaggle pyyaml scikit-learn pandas pillow opencv-python ensemble-boxes albumentations
+pip install -r requirements.txt
 ```
 
 If the base image already has PyTorch with CUDA, keep it. Do not replace it unless it is broken.
+
+This requirements file pins `numpy<2.2` intentionally so `ensemble-boxes` and `numba` stay compatible in a clean training env.
+
+## Instance Checks
+
+Before starting the pipeline, verify the rented box:
+
+```bash
+nvidia-smi
+df -h
+python --version
+```
 
 ## Kaggle Access
 
@@ -62,6 +74,12 @@ These are implemented now:
 python scripts/00_filter_and_remap.py
 python scripts/01_split_dataset.py
 python scripts/02_download_weights.py
+bash scripts/03_train_all.sh
+python scripts/04_hard_negative_mining.py
+bash scripts/05_second_pass_train.sh
+python scripts/06_tune_wbf_threshold.py
+python scripts/07_select_conf_threshold.py
+python scripts/08_final_evaluation.py
 ```
 
 Outputs:
@@ -71,6 +89,10 @@ Outputs:
 - `artifacts/prep/split_summary.json`
 - `configs/dataset.yaml`
 - `weights/pretrained/download_manifest.json`
+- `configs/ensemble.yaml`
+- `artifacts/tuning/wbf_combo_search_val.json`
+- `artifacts/tuning/confidence_sweep_val.json`
+- `artifacts/final_test_evaluation.json` after the one-time test pass
 
 ## Verified Source Reality
 
@@ -79,12 +101,52 @@ Outputs:
 - `oracl4` training material is notebook-based and ultimately uses Ultralytics training
 - `OBC-YOLOv8` does not publish a release asset for the pretrained road-damage checkpoint
 
-## Current Known Gaps Before Training Can Be Declared Final
+## OBC Initializer Rule
 
-The directive is missing a few values that materially affect reproducibility:
+- Use a repo-bundled OBC checkpoint only if the repo documentation explicitly ties that checkpoint to RDD or RDD-China pretraining
+- If no such explicit documentation exists, initialize OBC from `yolov8l.pt`
+- Final ensemble weight for OBC is still the second-pass `runs/obc_yolov8_custom/weights/best.pt`
 
-- exact Albumentations probabilities and any non-default transform magnitudes
-- exact second-pass epoch count inside the allowed `10-15` range
-- exact OBC checkpoint choice if the repo-bundled candidate is not acceptable
+## Locked Values Now Encoded
 
-I am not hardcoding those silently. The pipeline config has explicit placeholders for the unresolved values.
+- Albumentations stack and args are pinned in `configs/max_recall/pipeline.yaml`
+- second-pass hard-negative fine-tune is fixed to `12` epochs
+- confidence sweep is fixed to `0.01..0.50` in `0.01` steps
+- WBF ranking rule is recall-first under `precision >= 0.30`
+
+End-to-end execution is pending dataset download and OBC initializer resolution; all scripts compile and expose CLI help.
+
+## Ordered Vast Flow
+
+Run the pipeline in this exact order after the dataset is present:
+
+```bash
+python scripts/00_filter_and_remap.py
+python scripts/01_split_dataset.py
+python scripts/02_download_weights.py
+bash scripts/03_train_all.sh
+python scripts/04_hard_negative_mining.py
+bash scripts/05_second_pass_train.sh
+python scripts/06_tune_wbf_threshold.py
+python scripts/07_select_conf_threshold.py
+# 08 stays locked until all above finish
+```
+
+Do not run step `08_final_evaluation.py` early.
+
+## Long Runs
+
+Use `tmux` or `screen` for `03_train_all.sh` and the second-pass fine-tune.
+
+Example:
+
+```bash
+tmux new -s training
+bash scripts/03_train_all.sh
+```
+
+Detach with `Ctrl+B` then `D`, and reattach with:
+
+```bash
+tmux attach -t training
+```
