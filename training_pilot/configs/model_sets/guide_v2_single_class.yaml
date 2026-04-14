@@ -1,0 +1,8 @@
+name: guide_v2_single_class
+models:
+  - config: ../models/yolo12s_finetune.yaml
+  - config: ../models/yolov8l_finetune.yaml
+  - config: ../models/yolov8m_finetune.yaml
+  - config: ../models/obc_yolov8_finetune.yaml
+    optional: true
+  - config: ../models/yolov8s_diverse.yaml

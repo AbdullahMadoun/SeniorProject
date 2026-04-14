@@ -172,8 +172,8 @@ class LandingTargetSender:
             "time_usec": int(observation.timestamp_utc * 1_000_000),
             "target_num": 0,
             "frame": mavutil.mavlink.MAV_FRAME_BODY_FRD,
-            "angle_x_rad": 0.0,
-            "angle_y_rad": 0.0,
+            "angle_x_rad": math.atan2(observation.y_m, max(observation.z_m, 0.01)),
+            "angle_y_rad": math.atan2(observation.x_m, max(observation.z_m, 0.01)),
             "distance_m": float(np.linalg.norm([observation.x_m, observation.y_m, observation.z_m])),
             "size_x_rad": 0.0,
             "size_y_rad": 0.0,
@@ -252,14 +252,22 @@ class OpenCVArucoBackend:
             if int(raw_id) != marker_id:
                 continue
             tvec = tvecs[index][0]
+            
+            # Transform from OpenCV Camera frame (Z-forward-out, X-right, Y-down)
+            # to Drone BODY_FRD (X-forward, Y-right, Z-down)
+            # Assuming camera points straight down, top of image = vehicle front
+            drone_x_m = -float(tvec[1])
+            drone_y_m = float(tvec[0])
+            drone_z_m = float(tvec[2])
+            
             observations.append(
                 LandingTargetObservation(
                     timestamp_utc=time.time(),
                     marker_id=int(raw_id),
                     quality=quality,
-                    x_m=float(tvec[0]),
-                    y_m=float(tvec[1]),
-                    z_m=float(tvec[2]),
+                    x_m=drone_x_m,
+                    y_m=drone_y_m,
+                    z_m=drone_z_m,
                     source="cv2.aruco",
                 )
             )

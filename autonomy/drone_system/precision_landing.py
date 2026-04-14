@@ -146,10 +146,19 @@ class PrecisionLandingController:
         self,
         baseline: SystemBaseline,
         tuning: PrecisionLandingTuning | None = None,
+        use_pid: bool = False,
     ) -> None:
         self._baseline = baseline
         self._tuning = tuning or PrecisionLandingTuning()
         self._last_lock_time_s: float | None = None
+        
+        self._use_pid = use_pid
+        if self._use_pid:
+            from .pid_controller import PIDController
+            self._pid_forward = PIDController(p=self._tuning.align_gain, i=0.01, d=0.05)
+            self._pid_right = PIDController(p=self._tuning.align_gain, i=0.01, d=0.05)
+            self._pid_forward.set_windup(min(self._tuning.max_horizontal_speed_mps, 2.0))
+            self._pid_right.set_windup(min(self._tuning.max_horizontal_speed_mps, 2.0))
 
     def reset(self) -> None:
         self._last_lock_time_s = None
@@ -164,29 +173,49 @@ class PrecisionLandingController:
             self._last_lock_time_s = time_s
             observation = validate_observation(observation)
             target = estimate_relative_target(observation)
-            horizontal_velocity_scale = min(
-                target.horizontal_error_m * self._tuning.align_gain,
-                self._tuning.max_horizontal_speed_mps,
-            )
-            if target.horizontal_error_m > HORIZONTAL_ERROR_EPSILON:
-                ratio = np.clip(
-                    target.forward_error_m / target.horizontal_error_m,
-                    -MAX_VELOCITY_RATIO,
-                    MAX_VELOCITY_RATIO,
+            if self._use_pid:
+                self._pid_forward.setpoint = 0.0
+                self._pid_right.setpoint = 0.0
+                
+                # We feed the error directly into the PID and retrieve the velocity output
+                self._pid_forward.update(target.forward_error_m, current_time=time_s)
+                self._pid_right.update(target.right_error_m, current_time=time_s)
+                
+                # The output needs to push the drone towards the target, so we negate if error is positive
+                forward_velocity = np.clip(
+                    -self._pid_forward.output, 
+                    -self._tuning.max_horizontal_speed_mps, 
+                    self._tuning.max_horizontal_speed_mps
                 )
-                forward_velocity = -horizontal_velocity_scale * ratio
-                ratio = np.clip(
-                    target.right_error_m / target.horizontal_error_m,
-                    -MAX_VELOCITY_RATIO,
-                    MAX_VELOCITY_RATIO,
+                right_velocity = np.clip(
+                    -self._pid_right.output, 
+                    -self._tuning.max_horizontal_speed_mps, 
+                    self._tuning.max_horizontal_speed_mps
                 )
-                right_velocity = -horizontal_velocity_scale * ratio
-            elif target.horizontal_error_m > 0.0:
-                forward_velocity = 0.0
-                right_velocity = 0.0
             else:
-                forward_velocity = 0.0
-                right_velocity = 0.0
+                horizontal_velocity_scale = min(
+                    target.horizontal_error_m * self._tuning.align_gain,
+                    self._tuning.max_horizontal_speed_mps,
+                )
+                if target.horizontal_error_m > HORIZONTAL_ERROR_EPSILON:
+                    ratio = np.clip(
+                        target.forward_error_m / target.horizontal_error_m,
+                        -MAX_VELOCITY_RATIO,
+                        MAX_VELOCITY_RATIO,
+                    )
+                    forward_velocity = -horizontal_velocity_scale * ratio
+                    ratio = np.clip(
+                        target.right_error_m / target.horizontal_error_m,
+                        -MAX_VELOCITY_RATIO,
+                        MAX_VELOCITY_RATIO,
+                    )
+                    right_velocity = -horizontal_velocity_scale * ratio
+                elif target.horizontal_error_m > 0.0:
+                    forward_velocity = 0.0
+                    right_velocity = 0.0
+                else:
+                    forward_velocity = 0.0
+                    right_velocity = 0.0
 
             if target.horizontal_error_m > self._baseline.docking.landing_accuracy_target_m:
                 command = PrecisionLandingCommand(
