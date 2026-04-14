@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 from common import dump_json, dump_yaml, ensure_clean_dir, greedy_match, load_boxes_norm, load_json, load_pipeline_config, resolve_project_root
@@ -18,7 +19,7 @@ def parse_args() -> argparse.Namespace:
 def run_predictions(project_root: Path, model_id: str, image_dir: Path, device: str, output: Path, conf: float) -> None:
     subprocess.run(
         [
-            "python",
+            sys.executable,
             str(project_root / "scripts" / "predict_backend.py"),
             "--project-root",
             str(project_root),

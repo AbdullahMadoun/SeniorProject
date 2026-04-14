@@ -1,0 +1,28 @@
+# V4 Slicing-Aided Mastery Training Config: The Recall Doubler
+# Strategy: Native Resolution Tiling (SAFT) to capture 'Invisible Cracks'
+
+trainer: ultralytics
+model: weights/pretrained/yolov8m.pt 
+data: configs/dataset_saft.yaml # Points to data_saft created by 09_prepare_saft.py
+epochs: 300
+imgsz: 640        # 1:1 Pixel Density for the 640px slices
+batch: -1         # Auto-batch on 4090
+optimizer: AdamW
+lr0: 0.0005
+patience: 50
+close_mosaic: 50  # Longer fine-tune without mosaics to lock in textures
+
+# --- Regularization: Balanced for Tiles ---
+mosaic: 0.8
+mixup: 0.1
+erasing: 0.2
+label_smoothing: 0.1
+
+# --- Recall Priority ---
+box: 10.0
+cls: 1.0
+dfl: 1.5
+
+# --- Metadata ---
+project: runs
+name: yolov8m_v4_saft

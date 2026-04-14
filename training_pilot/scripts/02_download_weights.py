@@ -20,12 +20,6 @@ GIT_REPOS = {
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Download pretrained checkpoints and external repos for the max-recall stack.")
     parser.add_argument("--project-root", default="", help="training_pilot root. Defaults to the local repo copy.")
-    parser.add_argument(
-        "--obc-weight-file",
-        default="best.pt",
-        choices=["best.pt", "updated-model.pt", "yolov8n.pt"],
-        help="Repo-bundled OBC weight candidate to promote into weights/pretrained.",
-    )
     return parser.parse_args()
 
 
@@ -42,6 +36,44 @@ def download_oracl4_weight(dest: Path) -> None:
 
     with urllib.request.urlopen(weight_url) as response:
         dest.write_bytes(response.read())
+
+
+def ensure_ultralytics_weight(model_name: str, dest_dir: Path) -> Path:
+    from ultralytics import YOLO
+
+    model = YOLO(model_name)
+    ckpt_path = getattr(model, "ckpt_path", None)
+    if not ckpt_path:
+        raise RuntimeError(f"Unable to resolve downloaded path for {model_name}")
+    source = Path(ckpt_path).resolve()
+    dest = dest_dir / model_name
+    if not dest.exists():
+        shutil.copy2(source, dest)
+    return dest
+
+
+def documented_obc_repo_checkpoint(obc_root: Path) -> tuple[Path | None, str]:
+    readme_path = obc_root / "README.md"
+    if not readme_path.exists():
+        return None, "README.md missing"
+
+    lines = readme_path.read_text(encoding="utf-8", errors="ignore").splitlines()
+    candidate_names = ("best.pt", "updated-model.pt")
+    context_hits: list[tuple[str, int]] = []
+    for index, line in enumerate(lines):
+        lowered = line.lower()
+        for candidate in candidate_names:
+            if candidate.lower() not in lowered:
+                continue
+            window = " ".join(lines[max(0, index - 2) : min(len(lines), index + 3)]).lower()
+            if "rdd" in window or "road damage" in window or "rddchina" in window or "rdd2022" in window:
+                context_hits.append((candidate, index))
+
+    for candidate, _ in context_hits:
+        repo_file = obc_root / "ultralytics10.24" / candidate
+        if repo_file.exists():
+            return repo_file, f"README explicitly documents {candidate} with RDD context"
+    return None, "No repo-bundled checkpoint is explicitly documented in README as RDD/RDD-China pretrained"
 
 
 def main() -> None:
@@ -79,10 +111,13 @@ def main() -> None:
     shutil.copy2(ozair_hf, pretrained_dir / "ozair_yolov8_rdd.pt")
 
     download_oracl4_weight(pretrained_dir / "oracl4_yolov8_rdd.pt")
+    yolov8l_path = ensure_ultralytics_weight("yolov8l.pt", pretrained_dir)
 
-    obc_source = obc_dest / "ultralytics10.24" / args.obc_weight_file
-    if not obc_source.exists():
-        raise FileNotFoundError(f"Selected OBC weight candidate does not exist: {obc_source}")
+    obc_source, obc_resolution_note = documented_obc_repo_checkpoint(obc_dest)
+    obc_strategy = "repo_documented_rdd_checkpoint"
+    if obc_source is None:
+        obc_source = yolov8l_path
+        obc_strategy = "fallback_ultralytics_yolov8l_base"
     shutil.copy2(obc_source, pretrained_dir / "obc_yolov8_rdd.pt")
 
     manifest = {
@@ -103,14 +138,16 @@ def main() -> None:
                 "repo": "oracl4/RoadDamageDetection",
                 "path": "models/YOLOv8_Small_RDD.pt",
             },
+            "yolov8l.pt": {
+                "source": "ultralytics",
+                "model_name": "yolov8l.pt",
+            },
             "obc_yolov8_rdd.pt": {
-                "source": "repo_bundle",
-                "repo": "wulihuge/OBC-YOLOv8",
-                "path": f"ultralytics10.24/{args.obc_weight_file}",
-                "warning": (
-                    "The OBC repo does not expose a machine-readable release asset for the road-damage checkpoint. "
-                    "This pipeline currently promotes the selected repo-bundled candidate file."
-                ),
+                "source": "repo_bundle" if obc_strategy == "repo_documented_rdd_checkpoint" else "ultralytics",
+                "repo": "wulihuge/OBC-YOLOv8" if obc_strategy == "repo_documented_rdd_checkpoint" else None,
+                "path": str(obc_source.resolve()),
+                "resolution_strategy": obc_strategy,
+                "resolution_note": obc_resolution_note,
             },
         },
         "repos": {

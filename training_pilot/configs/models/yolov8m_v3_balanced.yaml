@@ -1,0 +1,43 @@
+﻿# V3 Balanced Mastery Training Config: The Goldilocks Zone
+# Target: Final Submission Peak Accuracy
+# Strategy: 1024px + Micro-Regularization to solve Box Loss Overfitting
+
+trainer: ultralytics
+model: weights/pretrained/yolov8m.pt
+data: configs/dataset.yaml
+epochs: 500
+imgsz: 1024
+batch: -1
+optimizer: AdamW  # Explicitly locked
+lr0: 0.0005       # Lower LR for more stable convergence
+lrf: 0.01
+warmup_epochs: 5
+momentum: 0.937
+weight_decay: 0.0005
+freeze: 10
+single_cls: true
+deterministic: true
+seed: 42
+
+# --- Augmentation: The Micro-Regularization Balance ---
+# V1 was too noisy (0.4). V2 was too clean (0.0). V3 is the 'Goldilocks' zone.
+mosaic: 0.8        # Increased from 0.5 to force scale invariance
+mixup: 0.05        # Subtle blending to prevent strict memorization
+erasing: 0.1       # Prevents overfitting on specific road textures
+copy_paste: 0.0
+close_mosaic: 30   # Longer fine-tune on clean images
+
+# --- Optimization Priority ---
+label_smoothing: 0.1 # Soften targets to reduce localization overconfidence
+box: 10.0            # Keep the high localization weight from V2
+cls: 1.0
+dfl: 1.5
+
+# --- Lifecycle Management ---
+patience: 50
+save: true
+save_period: 10
+plots: true
+project: runs
+name: yolov8m_v3_balanced
+

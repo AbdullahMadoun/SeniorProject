@@ -86,17 +86,9 @@ def inject_backend_path(project_root: Path, model_entry: dict[str, Any]) -> None
 
 
 def install_custom_albumentations(project_root: Path, pipeline: dict[str, Any]) -> None:
-    aug_cfg = pipeline.get("augmentations", {})
-    transforms_cfg = aug_cfg.get("transforms", [])
+    transforms_cfg = pipeline.get("albumentations", [])
     if not transforms_cfg:
         return
-    unresolved = [item["name"] for item in transforms_cfg if item.get("p") is None]
-    if aug_cfg.get("require_explicit_probabilities", False) and unresolved:
-        raise RuntimeError(
-            "Albumentations probabilities are not locked yet for: "
-            + ", ".join(unresolved)
-            + ". Update configs/max_recall/pipeline.yaml before training."
-        )
 
     augment = importlib.import_module("ultralytics.data.augment")
     import albumentations as A
@@ -113,7 +105,7 @@ def install_custom_albumentations(project_root: Path, pipeline: dict[str, Any]) 
                 augment.check_version(A.__version__, "1.0.3", hard=True)
                 transform_list = []
                 for item in transforms_cfg:
-                    kwargs = dict(item.get("kwargs", {}))
+                    kwargs = dict(item.get("args", {}))
                     kwargs["p"] = float(item["p"])
                     transform_cls = getattr(A, item["name"])
                     transform_list.append(transform_cls(**kwargs))
@@ -179,7 +171,8 @@ def build_train_kwargs(
     if not data_yaml.exists():
         raise FileNotFoundError(f"Missing dataset yaml for stage '{stage}': {data_yaml}")
 
-    run_name = model_entry["id"] if stage == "initial" else f"{model_entry['id']}_hard_negative"
+    base_run_name = str(model_entry.get("run_name", model_entry["id"]))
+    run_name = base_run_name if stage == "initial" else f"{base_run_name}_hard_negative"
     epochs = int(model_entry["epochs"])
     lr0 = float(model_entry["lr0"])
     freeze = int(model_entry["freeze"])
@@ -253,7 +246,7 @@ def main() -> None:
     results = model.train(**kwargs)
     save_dir = Path(getattr(model.trainer, "save_dir"))
     finetuned_dir = (project_root / pipeline["weights"]["finetuned_dir"]).resolve()
-    copied = copy_finetuned_weights(save_dir, finetuned_dir, run_name)
+    copied = copy_finetuned_weights(save_dir, finetuned_dir, args.model_id)
 
     record = {
         "model_id": args.model_id,
