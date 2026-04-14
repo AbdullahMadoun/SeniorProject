@@ -18,6 +18,7 @@ pip-wheel-metadata/
 
 # Virtual environments
 .venv/
+.venv-training/
 .venv-wsl/
 venv/
 env/
@@ -28,9 +29,14 @@ env/
 !.env.example
 .tokens/
 .streamlit/secrets.toml
+deploy/backend/ssh/id_ed25519
+deploy/backend/ssh/id_ed25519.pub
 
 # Logs
 *.log
+companion_video_logger/*.npy
+companion_video_logger/*.csv
+diff_check_utf8.patch
 
 # IDE/OS
 .idea/

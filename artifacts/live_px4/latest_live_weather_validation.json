@@ -1,37 +1,38 @@
 {
   "mission_id": "dashboard-live-mission",
+  "weather_profile_mode": "proof",
   "weather_profile": [
     {
       "t_s": 0.0,
-      "steady_wind_mps": 3.2,
-      "gust_wind_mps": 4.2
+      "steady_wind_mps": 1.4,
+      "gust_wind_mps": 1.7
     },
     {
       "t_s": 5.0,
-      "steady_wind_mps": 4.0,
-      "gust_wind_mps": 5.2
+      "steady_wind_mps": 2.2,
+      "gust_wind_mps": 2.6
     },
     {
       "t_s": 12.0,
       "steady_wind_mps": 7.8,
-      "gust_wind_mps": 10.2
+      "gust_wind_mps": 9.3
     },
     {
       "t_s": 36.0,
       "steady_wind_mps": 4.2,
-      "gust_wind_mps": 5.5
+      "gust_wind_mps": 5.0
     }
   ],
   "trigger_timeout_s": 45.0,
   "dock_wait_timeout_s": 30.0,
   "observations": [
     {
-      "elapsed_s": 26.516,
+      "elapsed_s": 24.969,
       "weather": {
         "steady_wind_mps": 7.8,
-        "gust_wind_mps": 10.2,
+        "gust_wind_mps": 9.3,
         "source": "profile@12.0s",
-        "effective_wind_mps": 10.2
+        "effective_wind_mps": 9.3
       },
       "gate_decision": {
         "launch_allowed": false,
@@ -41,7 +42,7 @@
           "wind_limit_exceeded"
         ],
         "details": [
-          "Effective wind 10.2 m/s exceeds configured limit 7.0 m/s."
+          "Effective wind 9.3 m/s exceeds configured limit 7.0 m/s."
         ]
       },
       "inflight_decision": {
@@ -50,7 +51,7 @@
           "wind_limit_exceeded"
         ],
         "details": [
-          "Wind 10.2 m/s exceeds 7.0 m/s."
+          "Wind 9.3 m/s exceeds 7.0 m/s."
         ]
       },
       "snapshot_before": {
@@ -60,22 +61,22 @@
         "mode": "mission",
         "battery_percent": 100.0,
         "position": {
-          "lat": 47.3980703,
-          "lon": 8.5460595,
-          "alt_m": 5.0
+          "lat": 26.3070368,
+          "lon": 50.1455596,
+          "alt_m": 4.932000160217285
         },
         "mission_progress": {
-          "current": 4,
-          "total": 4
+          "current": 5,
+          "total": 5
         }
       },
       "local_pose_before": {
-        "north_m": -9.196399688720703,
-        "east_m": -8.750411033630371,
-        "down_m": -19.28188133239746,
-        "yaw_deg": 179.32916259765625,
-        "roll_deg": 1.6011532545089722,
-        "pitch_deg": -2.361459970474243
+        "north_m": -25.92599105834961,
+        "east_m": -28.198678970336914,
+        "down_m": -4.99896240234375,
+        "yaw_deg": 152.4196014404297,
+        "roll_deg": -2.739320755004883,
+        "pitch_deg": 2.916222333908081
       },
       "snapshot_after": {
         "connected": true,
@@ -84,9 +85,9 @@
         "mode": "return_to_launch",
         "battery_percent": 100.0,
         "position": {
-          "lat": 47.3979694,
-          "lon": 8.5461587,
-          "alt_m": 27.459001541137695
+          "lat": 26.3068843,
+          "lon": 50.145601199999994,
+          "alt_m": 27.96200180053711
         },
         "mission_progress": {
           "current": 0,
@@ -94,32 +95,32 @@
         }
       },
       "local_pose_after": {
-        "north_m": -0.08997971564531326,
-        "east_m": -0.16588227450847626,
-        "down_m": -18.15044403076172,
-        "yaw_deg": 97.83804321289062,
-        "roll_deg": 2.034815788269043,
-        "pitch_deg": 0.7769979238510132
+        "north_m": -18.62529945373535,
+        "east_m": -20.901355743408203,
+        "down_m": -29.79486083984375,
+        "yaw_deg": 63.66735076904297,
+        "roll_deg": 0.2646411061286926,
+        "pitch_deg": -2.9455621242523193
       }
     }
   ],
   "dock_weather_observations": [
     {
-      "elapsed_s": 59.5,
+      "elapsed_s": 49.859,
       "weather": {
         "steady_wind_mps": 4.2,
-        "gust_wind_mps": 5.5,
+        "gust_wind_mps": 5.0,
         "source": "profile@36.0s",
-        "effective_wind_mps": 5.5
+        "effective_wind_mps": 5.0
       },
       "dock_allowed": true,
       "details": [
-        "Effective wind 5.5 m/s is within configured limit 7.0 m/s."
+        "Effective wind 5.0 m/s is within configured limit 7.0 m/s."
       ]
     }
   ],
   "triggered_action": "return_to_launch",
-  "triggered_at_s": 26.516,
-  "dock_recovered_at_s": 59.5,
+  "triggered_at_s": 24.969,
+  "dock_recovered_at_s": 49.859,
   "proof_status": "rtl_triggered_by_live_weather_injection"
 }

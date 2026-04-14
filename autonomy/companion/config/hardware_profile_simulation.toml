@@ -1,0 +1,83 @@
+name = "simulation"
+description = "Hardware profile for simulation/testing environment"
+
+[health_monitor]
+enabled = true
+check_interval = 5.0
+offline_threshold = 30.0
+degraded_threshold = 3
+
+[watchdog]
+enabled = true
+timeout = 10.0
+tick_interval = 1.0
+
+[[devices]]
+device_id = "gps_m9n"
+device_type = "gps"
+enabled = true
+use_mock = true
+i2c_address = 0x42
+i2c_bus = 1
+
+[[devices]]
+device_id = "rangefinder_tfmini_1"
+device_type = "rangefinder"
+enabled = true
+use_mock = true
+i2c_address = 0x10
+i2c_bus = 1
+model = "tfmini"
+min_distance = 0.0
+max_distance = 100.0
+
+[[devices]]
+device_id = "rangefinder_mtf01_1"
+device_type = "rangefinder"
+enabled = true
+use_mock = true
+i2c_address = 0x10
+i2c_bus = 1
+model = "mtf01"
+min_distance = 0.0
+max_distance = 50.0
+
+[[devices]]
+device_id = "adc_ads1115"
+device_type = "adc"
+enabled = true
+use_mock = true
+i2c_address = 0x48
+i2c_bus = 1
+
+[[devices]]
+device_id = "camera_downlink"
+device_type = "camera"
+enabled = true
+use_mock = true
+camera_index = 0
+width = 640
+height = 480
+
+[[devices]]
+device_id = "mavlink_pixhawk"
+device_type = "mavlink"
+enabled = true
+use_mock = true
+connection_string = "tcp:localhost:5760"
+
+[[devices]]
+device_id = "gpio_emergency"
+device_type = "gpio"
+enabled = true
+use_mock = true
+gpio_pin = 17
+gpio_direction = "in"
+
+[[devices]]
+device_id = "gpio_charging"
+device_type = "gpio"
+enabled = true
+use_mock = true
+gpio_pin = 27
+gpio_direction = "out"

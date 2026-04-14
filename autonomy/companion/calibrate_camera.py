@@ -14,8 +14,10 @@ if __package__ in {None, ""}:
     if str(REPO_ROOT) not in sys.path:
         sys.path.insert(0, str(REPO_ROOT))
     from autonomy.companion.mock_rpi import load_cv2_module
-else:
-    from .mock_rpi import load_cv2_module
+
+
+RMS_FAIL_THRESHOLD = 2.0
+RMS_WARN_THRESHOLD = 1.0
 
 
 def _template_payload(
@@ -99,6 +101,20 @@ def calibrate_camera(
         None,
         None,
     )
+    
+    if rms_error > RMS_FAIL_THRESHOLD:
+        raise ValueError(
+            f"Camera calibration RMS error {rms_error:.2f} exceeds fail threshold {RMS_FAIL_THRESHOLD:.2f}. "
+            f"Recalibrate with more images or adjust checkerboard setup."
+        )
+    if rms_error > RMS_WARN_THRESHOLD:
+        import warnings
+        warnings.warn(
+            f"Camera calibration RMS error {rms_error:.2f} exceeds warn threshold {RMS_WARN_THRESHOLD:.2f}. "
+            f"Physical flight requires RMS < 1.0 for precision landing.",
+            stacklevel=2,
+        )
+    
     payload = {
         "status": "calibrated",
         "image_glob": image_glob,

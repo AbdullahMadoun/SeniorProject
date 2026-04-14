@@ -1,6 +1,4 @@
 document.addEventListener('DOMContentLoaded', () => {
-    const apiKeyInput = document.getElementById('apiKey');
-    const apiUrlInput = document.getElementById('apiUrl');
     const imageInput = document.getElementById('imageInput');
     const analyzeBtn = document.getElementById('analyzeBtn');
     const imagePreviewContainer = document.getElementById('imagePreviewContainer');
@@ -14,15 +12,143 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentImageBase64 = null;
     let currentImageDataUrl = null;
     const appConfig = window.APP_CONFIG || {};
-    const bridgeBase = String(appConfig.BRIDGE_BASE_URL || '').trim().replace(/\/+$/, '');
+    const AL_KHOBAR_LAT = 26.2833;
+    const AL_KHOBAR_LON = 50.1983;
     const historyStorageKey = 'skylink_history_v1';
+    let runtimeConfig = {
+        BRIDGE_BASE_URL: String(appConfig.BRIDGE_BASE_URL || '').trim().replace(/\/+$/, ''),
+        PUBLIC_BRIDGE_URL: String(appConfig.PUBLIC_BRIDGE_URL || '').trim().replace(/\/+$/, ''),
+        ANALYZE_VIA_BRIDGE: appConfig.ANALYZE_VIA_BRIDGE !== false,
+        DIRECT_MODEL_ENABLED: Boolean(appConfig.DIRECT_MODEL_ENABLED),
+        TUNNEL_STATUS: String(appConfig.TUNNEL_STATUS || '').trim() || 'unknown',
+        TUNNEL_ERROR: String(appConfig.TUNNEL_ERROR || '').trim(),
+        MODEL_API_CONFIGURED: Boolean(appConfig.MODEL_API_CONFIGURED),
+        ACTIVE_MODEL_API_URL: String(appConfig.ACTIVE_MODEL_API_URL || '').trim(),
+        DEFAULT_MODEL_API_URL: String(appConfig.DEFAULT_MODEL_API_URL || '').trim(),
+        DEFAULT_MODEL_API_KEY: String(appConfig.DEFAULT_MODEL_API_KEY || '').trim(),
+        SERVER_SIDE_MODEL_KEY_CONFIGURED: Boolean(appConfig.SERVER_SIDE_MODEL_KEY_CONFIGURED),
+        SERVER_SIDE_MODEL_KEY_MASKED: String(appConfig.SERVER_SIDE_MODEL_KEY_MASKED || '').trim(),
+        MODEL_SERVER_STATUS: String(appConfig.MODEL_SERVER_STATUS || '').trim() || 'unknown',
+        MODEL_SERVER_ERROR: String(appConfig.MODEL_SERVER_ERROR || '').trim(),
+        MODEL_SERVER_PROVIDER: String(appConfig.MODEL_SERVER_PROVIDER || '').trim(),
+        MODEL_SERVER_PUBLIC_URL: String(appConfig.MODEL_SERVER_PUBLIC_URL || '').trim(),
+        MODEL_SERVER_REMOTE_HOST: String(appConfig.MODEL_SERVER_REMOTE_HOST || '').trim()
+    };
 
-    function hasBridge() {
-        return bridgeBase.length > 0;
+    const connectionMode = document.getElementById('connectionMode');
+    const bridgeEndpoint = document.getElementById('bridgeEndpoint');
+    const publicTunnel = document.getElementById('publicTunnel');
+    const modelEndpoint = document.getElementById('modelEndpoint');
+    const modelStatus = document.getElementById('modelStatus');
+    const modelApiKeyStatus = document.getElementById('modelApiKeyStatus');
+    const tunnelStatus = document.getElementById('tunnelStatus');
+    const tunnelError = document.getElementById('tunnelError');
+    const modelError = document.getElementById('modelError');
+
+    function bridgeAvailable() {
+        return runtimeConfig.BRIDGE_BASE_URL.length > 0;
+    }
+
+    function analyzeViaBridge() {
+        return bridgeAvailable() && Boolean(runtimeConfig.ANALYZE_VIA_BRIDGE);
     }
 
     function bridgeUrl(path) {
-        return `${bridgeBase}${path}`;
+        return `${runtimeConfig.BRIDGE_BASE_URL}${path}`;
+    }
+
+    function directApiUrl() {
+        return runtimeConfig.DEFAULT_MODEL_API_URL;
+    }
+
+    function directApiKey() {
+        return runtimeConfig.DEFAULT_MODEL_API_KEY;
+    }
+
+    function updateConnectionPanel() {
+        if (connectionMode) {
+            if (runtimeConfig.DIRECT_MODEL_ENABLED && runtimeConfig.MODEL_API_CONFIGURED) {
+                connectionMode.textContent = 'Direct model link active';
+            } else if (analyzeViaBridge() && runtimeConfig.MODEL_API_CONFIGURED) {
+                connectionMode.textContent = 'Bridge proxy active';
+            } else if (runtimeConfig.MODEL_SERVER_STATUS && runtimeConfig.MODEL_SERVER_STATUS !== 'disabled') {
+                connectionMode.textContent = 'Bridge bootstrapping remote model';
+            } else {
+                connectionMode.textContent = 'Waiting for model route';
+            }
+        }
+        if (bridgeEndpoint) {
+            bridgeEndpoint.textContent = runtimeConfig.BRIDGE_BASE_URL || 'Unavailable';
+        }
+        if (publicTunnel) {
+            publicTunnel.textContent = runtimeConfig.PUBLIC_BRIDGE_URL || 'Starting quick tunnel...';
+        }
+        if (modelEndpoint) {
+            modelEndpoint.textContent = runtimeConfig.ACTIVE_MODEL_API_URL || directApiUrl() || 'Not configured';
+        }
+        if (modelStatus) {
+            const provider = runtimeConfig.MODEL_SERVER_PROVIDER ? ` (${runtimeConfig.MODEL_SERVER_PROVIDER})` : '';
+            modelStatus.textContent = `${runtimeConfig.MODEL_SERVER_STATUS || 'unknown'}${provider}`;
+            modelStatus.className = `runtime-value status-${String(runtimeConfig.MODEL_SERVER_STATUS || 'unknown').toLowerCase()}`;
+        }
+        if (modelApiKeyStatus) {
+            modelApiKeyStatus.textContent = runtimeConfig.DIRECT_MODEL_ENABLED && directApiKey()
+                ? `Loaded into frontend (${runtimeConfig.SERVER_SIDE_MODEL_KEY_MASKED || 'configured'})`
+                : (runtimeConfig.SERVER_SIDE_MODEL_KEY_CONFIGURED
+                    ? `Server-managed (${runtimeConfig.SERVER_SIDE_MODEL_KEY_MASKED || 'configured'})`
+                    : (directApiKey() ? 'Loaded into frontend runtime' : 'Not configured'));
+        }
+        if (tunnelStatus) {
+            tunnelStatus.textContent = runtimeConfig.TUNNEL_STATUS || 'unknown';
+            tunnelStatus.className = `runtime-value status-${String(runtimeConfig.TUNNEL_STATUS || 'unknown').toLowerCase()}`;
+        }
+        if (tunnelError) {
+            if (runtimeConfig.TUNNEL_ERROR) {
+                tunnelError.textContent = runtimeConfig.TUNNEL_ERROR;
+                tunnelError.classList.remove('hidden');
+            } else {
+                tunnelError.textContent = '';
+                tunnelError.classList.add('hidden');
+            }
+        }
+        if (modelError) {
+            if (runtimeConfig.MODEL_SERVER_ERROR) {
+                modelError.textContent = runtimeConfig.MODEL_SERVER_ERROR;
+                modelError.classList.remove('hidden');
+            } else {
+                modelError.textContent = '';
+                modelError.classList.add('hidden');
+            }
+        }
+    }
+
+    async function refreshRuntimeConfig() {
+        if (!bridgeAvailable()) {
+            updateConnectionPanel();
+            return;
+        }
+        try {
+            const response = await fetch(bridgeUrl('/api/runtime-config'));
+            if (!response.ok) {
+                throw new Error(`Runtime config request failed with ${response.status}`);
+            }
+            const payload = await response.json();
+            runtimeConfig = {
+                ...runtimeConfig,
+                ...payload,
+                BRIDGE_BASE_URL: String(payload.BRIDGE_BASE_URL || runtimeConfig.BRIDGE_BASE_URL || '').trim().replace(/\/+$/, ''),
+                PUBLIC_BRIDGE_URL: String(payload.PUBLIC_BRIDGE_URL || runtimeConfig.PUBLIC_BRIDGE_URL || '').trim().replace(/\/+$/, ''),
+                ACTIVE_MODEL_API_URL: String(payload.ACTIVE_MODEL_API_URL || '').trim(),
+                DEFAULT_MODEL_API_URL: String(payload.DEFAULT_MODEL_API_URL || '').trim(),
+                DEFAULT_MODEL_API_KEY: String(payload.DEFAULT_MODEL_API_KEY || '').trim(),
+                TUNNEL_ERROR: String(payload.TUNNEL_ERROR || '').trim(),
+                MODEL_SERVER_ERROR: String(payload.MODEL_SERVER_ERROR || '').trim()
+            };
+        } catch (error) {
+            console.error('Failed to refresh runtime config', error);
+        }
+        updateConnectionPanel();
+        checkInputs();
     }
 
     // Handle drag and drop styling
@@ -81,16 +207,12 @@ document.addEventListener('DOMContentLoaded', () => {
         reader.readAsDataURL(file);
     }
 
-    [apiKeyInput, apiUrlInput].forEach(input => {
-        input.addEventListener('input', checkInputs);
-    });
-
     function checkInputs() {
-        if (apiKeyInput.value.trim() && currentImageBase64 && apiUrlInput.value.trim()) {
-            analyzeBtn.disabled = false;
-        } else {
-            analyzeBtn.disabled = true;
-        }
+        const canAnalyze = currentImageBase64 && (
+            (analyzeViaBridge() && runtimeConfig.MODEL_API_CONFIGURED) ||
+            Boolean(directApiUrl())
+        );
+        analyzeBtn.disabled = !canAnalyze;
     }
 
     analyzeBtn.addEventListener('click', async () => {
@@ -100,14 +222,14 @@ document.addEventListener('DOMContentLoaded', () => {
         loadingIndicator.classList.remove('hidden');
         analyzeBtn.disabled = true;
 
-        const apiKey = apiKeyInput.value.trim();
-        const apiUrl = apiUrlInput.value.trim();
+        const apiKey = directApiKey();
+        const apiUrl = directApiUrl();
 
         const payload = {
             image_b64: currentImageBase64,
             location: [26.305, 50.146],
             api_key: apiKey,
-            api_url: apiUrl
+            api_url: apiUrl,
         };
 
         // Start Timer
@@ -123,7 +245,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         try {
             let response;
-            if (hasBridge()) {
+            if (analyzeViaBridge()) {
                 response = await fetch(bridgeUrl('/api/analyze'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -133,7 +255,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 response = await fetch(apiUrl, {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json'
+                        'Content-Type': 'application/json',
+                        ...(apiKey ? { 'X-API-Key': apiKey } : {})
                     },
                     body: JSON.stringify({
                         image_b64: currentImageBase64,
@@ -287,6 +410,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         resultSection.classList.remove('hidden');
+        void trackHistoricalAnalysis(boxes, report.summary || "Analysis successful", currentImageDataUrl);
 
         // Scroll to results
         resultSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -329,10 +453,27 @@ document.addEventListener('DOMContentLoaded', () => {
     let dashboardMarkers = [];
 
     async function loadHistoricalAnalysis() {
-        try {
-            localHistory = JSON.parse(localStorage.getItem(historyStorageKey) || '[]');
-        } catch (_) {
-            localHistory = [];
+        if (hasBridge()) {
+            try {
+                const response = await fetch(bridgeUrl('/api/history'));
+                if (!response.ok) {
+                    throw new Error(`History request failed with ${response.status}`);
+                }
+                localHistory = await response.json();
+            } catch (error) {
+                console.error('Failed to load bridge history, falling back to local storage', error);
+                try {
+                    localHistory = JSON.parse(localStorage.getItem(historyStorageKey) || '[]');
+                } catch (_) {
+                    localHistory = [];
+                }
+            }
+        } else {
+            try {
+                localHistory = JSON.parse(localStorage.getItem(historyStorageKey) || '[]');
+            } catch (_) {
+                localHistory = [];
+            }
         }
         updateDashboardKPI();
     }
@@ -425,10 +566,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function initDashboardMap() {
-        // Center on Al Khobar region
-        const AL_KHOBAR_LAT = 26.2833;
-        const AL_KHOBAR_LON = 50.1983;
-
         window.dashboardMap = L.map('kpiMap').setView([AL_KHOBAR_LAT, AL_KHOBAR_LON], 12);
         L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
             attribution: '&copy; OpenStreetMap &copy; CARTO'
@@ -594,5 +731,11 @@ document.addEventListener('DOMContentLoaded', () => {
             initDashboardMap();
         }
     }, 500);
+
+    updateConnectionPanel();
+    void refreshRuntimeConfig();
+    setInterval(() => {
+        void refreshRuntimeConfig();
+    }, 5000);
 
 });

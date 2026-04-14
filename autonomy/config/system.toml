@@ -10,8 +10,8 @@ operator_station = "QGroundControl"
 mission_api = "MAVSDK-Python"
 
 [home]
-lat = 24.689000
-lon = 50.174000
+lat = 26.307114
+lon = 50.145884
 alt_m = 584.0
 
 [mission]

@@ -14,12 +14,12 @@
 
 ## Key Results
 
-- mission waypoint count: `4`
+- mission waypoint count: `5`
 - post-RTL execution mode: `return_to_launch`
 - dock proof status: `consumed_from_live_telemetry_projection`
-- dock stream record count: `3`
-- dock receiver count: `3`
-- dock final horizontal distance: `0.061667857159894694` m
+- dock stream record count: `5`
+- dock receiver count: `5`
+- dock final horizontal distance: `0.09933330109296704` m
 - dock final in_air: `False`
 - precision profile `RTL_PLD_MD`: `2`
 - landing-target consumption count: `50`

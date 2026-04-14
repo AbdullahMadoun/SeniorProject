@@ -18,11 +18,13 @@ def build_dashboard_data(replay_bundle_manifest: dict[str, Any]) -> dict[str, An
     latest_replay = build_showcase_data(replay_bundle_manifest)
     fpv_source_url = os.environ.get("SKYLINK_FPV_SOURCE_URL", "http://127.0.0.1:5050/stream")
     fpv_enabled = os.environ.get("SKYLINK_FPV_ENABLED", "1").strip().lower() in {"1", "true", "yes", "on"}
+    home_lat = float(os.environ.get("SKYLINK_HOME_LAT", str(baseline.home.lat)))
+    home_lon = float(os.environ.get("SKYLINK_HOME_LON", str(baseline.home.lon)))
     return {
         "baseline": {
             "home": {
-                "lat": baseline.home.lat,
-                "lon": baseline.home.lon,
+                "lat": home_lat,
+                "lon": home_lon,
                 "alt_m": baseline.home.alt_m,
             },
             "mission_limits": {

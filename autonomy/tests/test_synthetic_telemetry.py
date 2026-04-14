@@ -20,7 +20,7 @@ class SyntheticTelemetryTests(unittest.TestCase):
             output = Path(tmp_dir) / "telemetry.csv"
             generated = generate_synthetic_telemetry_csv(
                 output_csv=output,
-                home=Waypoint(lat=24.689000, lon=50.174000, alt_m=25.0),
+                home=Waypoint(lat=26.307114, lon=50.145884, alt_m=25.0),
                 width_m=44.0,
                 height_m=44.0,
                 row_spacing_m=5.0,

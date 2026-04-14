@@ -15,7 +15,7 @@ from autonomy.drone_system.config import load_system_baseline
 class SystemConfigTests(unittest.TestCase):
     def test_load_system_baseline(self) -> None:
         baseline = load_system_baseline()
-        self.assertEqual(baseline.home.lat, 24.689000)
+        self.assertEqual(baseline.home.lat, 26.307114)
         self.assertEqual(baseline.mission_limits.max_radius_m, 100.0)
         self.assertEqual(baseline.speed_band.max_mps, 7.0)
         self.assertEqual(baseline.safety.battery_rtl_percent, 20.0)

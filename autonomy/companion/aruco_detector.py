@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 from dataclasses import asdict, dataclass
 import json
+import math
 import os
 from pathlib import Path
 import sys
@@ -23,17 +24,88 @@ else:
 
 DEFAULT_OUTPUT_DIR = Path(os.environ.get("SKYLINK_ARUCO_OUTPUT", Path.cwd() / "companion_aruco"))
 
-# Placeholder intrinsics for bench bring-up only.
-# Replace these with calibrated intrinsics from the real downward-facing camera before flight.
-CAMERA_MATRIX = np.array(
-    [
-        [615.0, 0.0, 320.0],
-        [0.0, 615.0, 240.0],
-        [0.0, 0.0, 1.0],
-    ],
-    dtype=np.float32,
-)
-DIST_COEFFS = np.zeros((5, 1), dtype=np.float32)
+CALIBRATION_FILE_ENV = "SKYLINK_CAMERA_CALIBRATION"
+CALIBRATION_STATUS_CALIBRATED = "calibrated"
+RMS_THRESHOLD_STRICT = 1.0
+RMS_THRESHOLD_SIM = 2.0
+
+MIN_CORNER_REJECT_RATIO = 0.5
+QUALITY_FROM_DISTANCE = {
+    (0.0, 0.3): 1.0,
+    (0.3, 0.6): 0.8,
+    (0.6, 0.8): 0.6,
+    (0.8, 1.0): 0.3,
+}
+
+
+def _compute_detection_quality(
+    corners: Any,
+    ids: Any,
+    rejected: Any,
+    image_shape: tuple[int, ...],
+    marker_id: int,
+) -> float:
+    if ids is None or len(ids) == 0:
+        return 0.0
+    total_corners = len(corners) + len(rejected)
+    if total_corners > 0 and len(rejected) / total_corners > MIN_CORNER_REJECT_RATIO:
+        return 0.3
+    for idx, raw_id in enumerate(ids.flatten()):
+        if int(raw_id) != marker_id:
+            continue
+        corner_pts = corners[idx][0]
+        centroid = corner_pts.mean(axis=0)
+        h, w = image_shape[:2]
+        cx, cy = w / 2, h / 2
+        dist_from_center = math.hypot(centroid[0] - cx, centroid[1] - cy) / math.hypot(cx, cy)
+        for (low, high), mult in QUALITY_FROM_DISTANCE.items():
+            if low <= dist_from_center < high:
+                return mult
+        return 0.5
+    return 0.0
+
+
+def load_camera_calibration(calibration_path: str | Path, strict: bool = False) -> tuple[np.ndarray, np.ndarray, bool]:
+    """Load and validate camera calibration.
+    
+    Returns:
+        (camera_matrix, dist_coeffs, is_valid)
+    
+    Raises:
+        FileNotFoundError: Calibration file does not exist
+        ValueError: Calibration invalid or status != "calibrated"
+    """
+    path = Path(calibration_path)
+    if not path.exists():
+        raise FileNotFoundError(f"Camera calibration file not found: {path}")
+    
+    with open(path) as f:
+        calib = json.load(f)
+    
+    status = calib.get("status", "unknown")
+    if status != CALIBRATION_STATUS_CALIBRATED:
+        raise ValueError(
+            f"Camera calibration status is '{status}', not 'calibrated'. "
+            f"Run calibrate_camera.py to generate valid calibration."
+        )
+    
+    rms_error = calib.get("rms_error", 0.0)
+    threshold = RMS_THRESHOLD_STRICT if strict else RMS_THRESHOLD_SIM
+    if rms_error > threshold:
+        raise ValueError(
+            f"Camera calibration RMS error {rms_error:.2f} exceeds threshold {threshold:.2f}. "
+            f"Recalibrate camera with more images."
+        )
+    
+    cm = np.array(calib["camera_matrix"], dtype=np.float32)
+    dc = np.array(calib["dist_coeffs"], dtype=np.float32).reshape(-1, 1)
+    
+    if cm[0, 0] <= 0 or cm[1, 1] <= 0:
+        raise ValueError(f"Invalid focal lengths: fx={cm[0, 0]}, fy={cm[1, 1]}")
+    if cm[0, 2] < 0 or cm[1, 2] < 0:
+        raise ValueError(f"Invalid principal point: cx={cm[0, 2]}, cy={cm[1, 2]}")
+    
+    return cm, dc, True
 
 
 @dataclass(frozen=True)
@@ -54,6 +126,7 @@ class ArucoDetectorConfig:
 class LandingTargetObservation:
     timestamp_utc: float
     marker_id: int
+    quality: float
     x_m: float
     y_m: float
     z_m: float
@@ -99,8 +172,8 @@ class LandingTargetSender:
             "time_usec": int(observation.timestamp_utc * 1_000_000),
             "target_num": 0,
             "frame": mavutil.mavlink.MAV_FRAME_BODY_FRD,
-            "angle_x_rad": 0.0,
-            "angle_y_rad": 0.0,
+            "angle_x_rad": math.atan2(observation.y_m, max(observation.z_m, 0.01)),
+            "angle_y_rad": math.atan2(observation.x_m, max(observation.z_m, 0.01)),
             "distance_m": float(np.linalg.norm([observation.x_m, observation.y_m, observation.z_m])),
             "size_x_rad": 0.0,
             "size_y_rad": 0.0,
@@ -135,11 +208,28 @@ class LandingTargetSender:
 
 
 class OpenCVArucoBackend:
-    def __init__(self, cv2_module: Any) -> None:
+    def __init__(
+        self,
+        cv2_module: Any,
+        calibration_path: str | None = None,
+        strict: bool = False,
+    ) -> None:
         self._cv2 = cv2_module
         self._aruco = cv2_module.aruco
         self._dictionary = self._aruco.getPredefinedDictionary(self._aruco.DICT_4X4_50)
         self._parameters = self._aruco.DetectorParameters()
+        
+        if calibration_path is None:
+            calibration_path = os.environ.get(CALIBRATION_FILE_ENV)
+        
+        if calibration_path:
+            self._camera_matrix, self._dist_coeffs, _ = load_camera_calibration(calibration_path, strict=strict)
+        else:
+            raise RuntimeError(
+                f"Camera calibration not configured. Set {CALIBRATION_FILE_ENV} environment variable "
+                "or pass calibration_path to ArUco detector. Placeholder intrinsics will cause "
+                "10-50cm landing error and are NOT permitted for flight."
+            )
 
     def detect(self, frame: Any, *, marker_size_m: float, marker_id: int) -> list[LandingTargetObservation]:
         corners, ids, _rejected = self._aruco.detectMarkers(
@@ -147,26 +237,37 @@ class OpenCVArucoBackend:
             self._dictionary,
             parameters=self._parameters,
         )
+        image_shape = frame.shape
+        quality = _compute_detection_quality(corners, ids, _rejected, image_shape, marker_id)
         if ids is None or len(ids) == 0:
             return []
         rvecs, tvecs, _ = self._aruco.estimatePoseSingleMarkers(
             corners,
             marker_size_m,
-            CAMERA_MATRIX,
-            DIST_COEFFS,
+            self._camera_matrix,
+            self._dist_coeffs,
         )
         observations: list[LandingTargetObservation] = []
         for index, raw_id in enumerate(ids.flatten().tolist()):
             if int(raw_id) != marker_id:
                 continue
             tvec = tvecs[index][0]
+            
+            # Transform from OpenCV Camera frame (Z-forward-out, X-right, Y-down)
+            # to Drone BODY_FRD (X-forward, Y-right, Z-down)
+            # Assuming camera points straight down, top of image = vehicle front
+            drone_x_m = -float(tvec[1])
+            drone_y_m = float(tvec[0])
+            drone_z_m = float(tvec[2])
+            
             observations.append(
                 LandingTargetObservation(
                     timestamp_utc=time.time(),
                     marker_id=int(raw_id),
-                    x_m=float(tvec[0]),
-                    y_m=float(tvec[1]),
-                    z_m=float(tvec[2]),
+                    quality=quality,
+                    x_m=drone_x_m,
+                    y_m=drone_y_m,
+                    z_m=drone_z_m,
                     source="cv2.aruco",
                 )
             )

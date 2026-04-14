@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import dataclass
 from datetime import datetime
 import json
 import os
 from pathlib import Path
+import signal
 import subprocess
 import sys
 import threading
@@ -40,6 +42,143 @@ READY_MARKERS = (
     "INFO  [tone_alarm] home set",
     "INFO  [mavlink] mode: Normal",
 )
+
+
+@dataclass
+class ProcessInfo:
+    process: subprocess.Popen
+    name: str
+    ready_event: threading.Event | None = None
+    ready_markers: tuple[str, ...] | None = None
+
+
+class ProcessManager:
+    """Manages child processes with health monitoring and graceful shutdown."""
+
+    def __init__(self) -> None:
+        self._processes: dict[int, ProcessInfo] = {}
+        self._process_names: dict[int, str] = {}
+        self._shutdown_event = threading.Event()
+        self._shutdown_requested = False
+        self._monitor_running = False
+        self._monitor_thread: threading.Thread | None = None
+
+    def _on_signal(self, signum: int, frame) -> None:
+        """Handle shutdown signals gracefully."""
+        sig_name = signal.Signals(signum).name
+        print(f"\n[SIGNAL] Received {sig_name}, initiating graceful shutdown...", flush=True)
+        self._shutdown_requested = True
+        self.shutdown()
+        sys.exit(128 + signum)
+
+    def register(
+        self,
+        process: subprocess.Popen,
+        name: str,
+        ready_event: threading.Event | None = None,
+        ready_markers: tuple[str, ...] | None = None,
+    ) -> None:
+        """Register a child process for monitoring."""
+        info = ProcessInfo(
+            process=process,
+            name=name,
+            ready_event=ready_event,
+            ready_markers=ready_markers,
+        )
+        self._processes[process.pid] = info
+        self._process_names[process.pid] = name
+
+        if ready_event and ready_markers:
+            t = threading.Thread(
+                target=self._wait_for_ready,
+                args=(process.pid, ready_event, ready_markers),
+                daemon=True,
+            )
+            t.start()
+
+    def _wait_for_ready(
+        self,
+        pid: int,
+        ready_event: threading.Event,
+        ready_markers: tuple[str, ...],
+    ) -> None:
+        """Wait for process to output ready markers."""
+        proc_info = self._processes.get(pid)
+        if not proc_info:
+            return
+
+        deadline = time.time() + 300
+
+        while not ready_event.is_set() and time.time() < deadline:
+            if proc_info.process.poll() is not None:
+                return
+            time.sleep(0.5)
+
+    def _monitor_loop(self) -> None:
+        """Background loop monitoring process health."""
+        while self._monitor_running:
+            for pid, proc_info in list(self._processes.items()):
+                if proc_info.process.poll() is not None:
+                    if not self._shutdown_requested:
+                        print(
+                            f"[MONITOR] CRITICAL: {proc_info.name} (pid={pid}) "
+                            f"exited unexpectedly with code {proc_info.process.returncode}",
+                            flush=True
+                        )
+            time.sleep(1.0)
+
+    def start_monitoring(self) -> None:
+        """Start background health monitoring."""
+        self._monitor_running = True
+        self._monitor_thread = threading.Thread(target=self._monitor_loop, daemon=True)
+        self._monitor_thread.start()
+        signal.signal(signal.SIGTERM, self._on_signal)
+        signal.signal(signal.SIGINT, self._on_signal)
+
+    def stop_monitoring(self) -> None:
+        """Stop background health monitoring."""
+        self._monitor_running = False
+        if self._monitor_thread:
+            self._monitor_thread.join(timeout=5.0)
+
+    def shutdown(self) -> None:
+        """Graceful shutdown of all processes."""
+        print(f"[CLEANUP] Shutting down {len(self._processes)} processes...", flush=True)
+
+        for pid, proc_info in self._processes.items():
+            if proc_info.process.poll() is None:
+                try:
+                    proc_info.process.terminate()
+                    print(f"[CLEANUP] Sent SIGTERM to {proc_info.name} (pid={pid})", flush=True)
+                except Exception as exc:
+                    print(f"[CLEANUP] Error terminating {proc_info.name}: {exc}", flush=True)
+
+        time.sleep(2.0)
+
+        for pid, proc_info in self._processes.items():
+            if proc_info.process.poll() is None:
+                try:
+                    proc_info.process.kill()
+                    print(f"[CLEANUP] Killed {proc_info.name} (pid={pid})", flush=True)
+                except Exception as exc:
+                    print(f"[CLEANUP] Error killing {proc_info.name}: {exc}", flush=True)
+
+        _wsl_cleanup_px4()
+
+        self._processes.clear()
+        self._shutdown_event.set()
+
+
+_global_process_manager: ProcessManager | None = None
+
+
+def get_process_manager() -> ProcessManager:
+    """Get or create global ProcessManager instance."""
+    global _global_process_manager
+    if _global_process_manager is None:
+        _global_process_manager = ProcessManager()
+        _global_process_manager.start_monitoring()
+    return _global_process_manager
 
 
 def _windows_to_wsl_path(path: Path) -> str:
@@ -180,7 +319,11 @@ def main() -> None:
     parser.add_argument("--world", default="")
     parser.add_argument("--cpu-cores", default=os.environ.get("SKYLINK_EXECUTION_CPU_CORES", "2,3"))
     args = parser.parse_args()
+    max_resources = os.environ.get("SKYLINK_MAX_RESOURCES", "0").strip().lower() in {"1", "true", "yes", "on", "max"}
     execution_cpu_cores = parse_cpu_cores(args.cpu_cores, default=[2, 3])
+    if max_resources:
+        execution_cpu_cores = []
+        print("[RUNNER] MAX RESOURCES MODE: Simulation will use all available CPU cores", flush=True)
 
     if not VENV_PYTHON.exists():
         raise RuntimeError(f"Expected Windows autonomy venv python at {VENV_PYTHON}")
@@ -219,12 +362,13 @@ def main() -> None:
     gz_env_wsl = _windows_to_wsl_path(GZ_ENV_PATH)
     wsl_command = f"cd {px4_repo_wsl}; . {gz_env_wsl}; "
     if args.world:
-        wsl_command += f"env HEADLESS=1 PX4_GZ_WORLD={args.world} make px4_sitl {args.model}"
+        wsl_command += f"env HEADLESS=1 PX4_GZ_WORLD={args.world} PX4_HOME_LAT={baseline.home.lat} PX4_HOME_LON={baseline.home.lon} PX4_HOME_ALT={baseline.home.alt_m} make px4_sitl {args.model}"
     else:
-        wsl_command += f"env HEADLESS=1 PX4_GZ_STANDALONE=1 PX4_GZ_WORLD={world_name} make px4_sitl {args.model}"
+        wsl_command += f"env HEADLESS=1 PX4_GZ_STANDALONE=1 PX4_GZ_WORLD={world_name} PX4_HOME_LAT={baseline.home.lat} PX4_HOME_LON={baseline.home.lon} PX4_HOME_ALT={baseline.home.alt_m} make px4_sitl {args.model}"
 
     print(
         "[RUNNER] simulator overrides "
+        f"home={baseline.home.lat},{baseline.home.lon},{baseline.home.alt_m} "
         f"weather_profile_mode={override_plan.weather_profile_mode} "
         f"wind_speed_mps={override_plan.wind_speed_mps:.1f} "
         f"wind_direction_deg={override_plan.wind_direction_deg:.1f} "
@@ -236,6 +380,7 @@ def main() -> None:
 
     world_process = None
     world_thread = None
+    manager = get_process_manager()
     if not args.world:
         print("[RUNNER] launching generated Gazebo world", flush=True)
         world_process = subprocess.Popen(
@@ -251,6 +396,7 @@ def main() -> None:
             bufsize=1,
             cwd=str(REPO_ROOT),
         )
+        manager.register(world_process, "GAZEBO_WORLD")
         enforce_cpu_affinity(execution_cpu_cores, pid=world_process.pid, label="world")
         world_thread = _stream_process_output(
             world_process,
@@ -270,6 +416,7 @@ def main() -> None:
         bufsize=1,
         cwd=str(REPO_ROOT),
     )
+    manager.register(sitl_process, "PX4_SITL", ready_event=sitl_ready_event, ready_markers=READY_MARKERS)
     enforce_cpu_affinity(execution_cpu_cores, pid=sitl_process.pid, label="sitl")
     sitl_thread = _stream_process_output(
         sitl_process,
@@ -287,6 +434,7 @@ def main() -> None:
         bufsize=1,
         cwd=str(REPO_ROOT),
     )
+    manager.register(bridge_process, "MAVLINK_BRIDGE")
     enforce_cpu_affinity(execution_cpu_cores, pid=bridge_process.pid, label="bridge")
     bridge_thread = _stream_process_output(
         bridge_process,
@@ -307,6 +455,10 @@ def main() -> None:
         env = os.environ.copy()
         env["LIVE_PX4_SITL_LOG_PATH"] = str(sitl_log_path)
         env["LIVE_PX4_BRIDGE_LOG_PATH"] = str(bridge_log_path)
+        if max_resources:
+            env["OMP_NUM_THREADS"] = "0"
+            env["OMP_PROVIDER"] = "nest"
+            env["GZ_IGNORE_PROVIDER_STATE"] = "1"
         _run_step(
             [
                 str(VENV_PYTHON),
@@ -334,10 +486,8 @@ def main() -> None:
             flush=True,
         )
     finally:
-        _cleanup_process(bridge_process, name="BRIDGE")
-        _cleanup_process(sitl_process, name="SITL")
-        _cleanup_process(world_process, name="WORLD")
-        _wsl_cleanup_px4()
+        manager = get_process_manager()
+        manager.shutdown()
         sitl_thread.join(timeout=2)
         bridge_thread.join(timeout=2)
         if world_thread is not None:

@@ -1,0 +1,36 @@
+trainer: external_command
+optional: true
+name: obc_yolov8_custom
+workdir: external/OBC-YOLOv8
+data: configs/dataset.yaml
+weights: weights/pretrained/yolov8l.pt
+project: runs
+epochs: 80
+imgsz: 640
+batch_size: 16
+freeze: 10
+required_paths:
+  - external/OBC-YOLOv8
+  - weights/pretrained/yolov8l.pt
+command:
+  - python
+  - train.py
+  - --data
+  - "{data}"
+  - --weights
+  - "{weights}"
+  - --epochs
+  - "{epochs}"
+  - --imgsz
+  - "{imgsz}"
+  - --batch-size
+  - "{batch_size}"
+  - --freeze
+  - "{freeze}"
+  - --device
+  - "{device}"
+  - --project
+  - "{project}"
+  - --name
+  - "{name}"
+notes: Optional external OBC-YOLOv8 trainer hook from the guide.

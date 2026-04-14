@@ -86,7 +86,7 @@ class DashboardBuilderTests(unittest.TestCase):
         self.assertIn("server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile", html)
         self.assertIn("/api/telemetry/live", html)
         self.assertIn("/api/fpv/stream", html)
-        self.assertIn("Launch Live Simulator", html)
+        self.assertIn("Launch Simulation", html)
         self.assertIn("Cinematic Mode", html)
         self.assertIn("fpv-feed", html)
         self.assertIn("fpv-media", html)

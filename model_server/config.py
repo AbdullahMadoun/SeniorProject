@@ -1,15 +1,22 @@
 import os
 from pydantic_settings import BaseSettings
 
+
+def _env_flag(name: str, default: bool = False) -> bool:
+    return os.getenv(name, str(default)).strip().lower() in {"1", "true", "yes", "on"}
+
+
 class Settings(BaseSettings):
     # API Settings
     API_KEY: str = os.getenv("API_KEY", "road-inspector-secret-key-2024")
-    HOST: str = "0.0.0.0"
+    HOST: str = os.getenv("HOST", "0.0.0.0")
     PORT: int = int(os.getenv("PORT", 17612))
+    ENABLE_VLM: bool = _env_flag("ENABLE_VLM", True)
+    ENABLE_YOLO_V8: bool = _env_flag("ENABLE_YOLO_V8", _env_flag("ENABLE_VLM", True))
 
     # YOLO Model Settings
-    YOLO_MODEL_V8: str = "/root/oracl4_rdd/models/YOLOv8_Small_RDD.pt"
-    YOLO_MODEL_V12: str = "rezzzq/yolo12s-road-damage-rdd2022"
+    YOLO_MODEL_V8: str = os.getenv("YOLO_MODEL_V8", "/root/oracl4_rdd/models/YOLOv8_Small_RDD.pt")
+    YOLO_MODEL_V12: str = os.getenv("YOLO_MODEL_V12", "rezzzq/yolo12s-road-damage-rdd2022")
     YOLO_CONF_THRESH: float = 0.12                  # Lowered to capture more subtle cracks
     YOLO_IOU_THRESH: float = 0.05                   # NMS threshold (lower = aggressively merge overlapping boxes)
     

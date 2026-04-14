@@ -1,0 +1,26 @@
+models:
+  - name: yolo12s_custom
+    path: runs/yolo12s_custom/weights/best.pt
+    weight: 1.0
+    conf_threshold: 0.05
+  - name: yolov8l_custom
+    path: runs/yolov8l_custom/weights/best.pt
+    weight: 1.0
+    conf_threshold: 0.05
+  - name: yolov8m_custom
+    path: runs/yolov8m_custom/weights/best.pt
+    weight: 1.0
+    conf_threshold: 0.05
+  - name: obc_yolov8_custom
+    path: runs/obc_yolov8_custom/weights/best.pt
+    weight: 1.0
+    conf_threshold: 0.05
+  - name: yolov8s_diverse
+    path: runs/yolov8s_diverse/weights/best.pt
+    weight: 1.0
+    conf_threshold: 0.05
+wbf:
+  iou_thr: 0.5
+  skip_box_thr: 0.04
+  conf_type: avg
+  allows_overflow: false
