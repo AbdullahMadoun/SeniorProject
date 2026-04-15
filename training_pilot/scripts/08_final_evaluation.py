@@ -4,6 +4,7 @@ import argparse
 
 from ensemble_core import compute_ap50, ensure_prediction_cache, fuse_ensemble_outputs, load_ground_truth
 from common import dump_json, load_pipeline_config, load_yaml, resolve_project_root
+from ensemble_tensorboard import log_ensemble_metrics
 
 
 def parse_args() -> argparse.Namespace:
@@ -59,6 +60,12 @@ def main() -> None:
     metrics["model_weights"] = ensemble_cfg["model_weights"]
 
     dump_json(result_path, metrics)
+    log_ensemble_metrics(
+        project_root,
+        run_name="test_final",
+        split="test",
+        metrics=metrics,
+    )
     print({key: value for key, value in metrics.items() if key != "per_image"})
 
 

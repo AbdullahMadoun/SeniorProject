@@ -36,6 +36,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--poll-seconds", type=float, default=60.0)
     parser.add_argument("--stop-stable-polls", type=int, default=3)
     parser.add_argument(
+        "--gpu-idle-seconds",
+        type=float,
+        default=0.0,
+        help="Optional extra stop condition: if GPU utilization stays at or below the threshold for this many seconds, snapshot and destroy.",
+    )
+    parser.add_argument(
+        "--gpu-idle-util-threshold",
+        type=float,
+        default=0.0,
+        help="Treat GPU utilization values at or below this threshold as idle.",
+    )
+    parser.add_argument(
         "--quiesce-seconds",
         type=float,
         default=120.0,
@@ -92,15 +104,46 @@ def ensure_local_tools() -> None:
         raise SystemExit(f"Missing required local tool(s): {', '.join(missing)}")
 
 
-def tmux_session_alive(args: argparse.Namespace) -> bool:
+def tmux_session_alive(args: argparse.Namespace) -> bool | None:
     if not args.train_session.strip():
-        return True
+        return None
     remote_cmd = (
         f"if tmux has-session -t {json.dumps(args.train_session)} 2>/dev/null; "
         "then echo alive; else echo gone; fi"
     )
     completed = run_ssh(args, remote_cmd)
     return completed.stdout.strip().splitlines()[-1].strip() == "alive"
+
+
+def remote_gpu_state(args: argparse.Namespace) -> dict[str, float | None]:
+    remote_cmd = (
+        "nvidia-smi --query-gpu=utilization.gpu,memory.used,memory.total,temperature.gpu "
+        "--format=csv,noheader,nounits | head -n 1"
+    )
+    completed = run_ssh(args, remote_cmd)
+    lines = [line.strip() for line in completed.stdout.splitlines() if line.strip()]
+    if not lines:
+        return {
+            "utilization_gpu": None,
+            "memory_used_mib": None,
+            "memory_total_mib": None,
+            "temperature_c": None,
+        }
+    parts = [part.strip() for part in lines[-1].split(",")]
+    values: list[float | None] = []
+    for part in parts[:4]:
+        try:
+            values.append(float(part))
+        except ValueError:
+            values.append(None)
+    while len(values) < 4:
+        values.append(None)
+    return {
+        "utilization_gpu": values[0],
+        "memory_used_mib": values[1],
+        "memory_total_mib": values[2],
+        "temperature_c": values[3],
+    }
 
 
 def remote_sha256_map(args: argparse.Namespace, remote_paths: list[str]) -> dict[str, dict[str, str | int]]:
@@ -438,6 +481,7 @@ def main() -> None:
             "remote_run_dir": args.remote_run_dir,
             "train_session": args.train_session,
             "session_alive": session_alive,
+            "gpu_state": remote_gpu_state(args),
             "remote_state": remote_state,
             "snapshot_paths": inventory,
             "destroy_armed": args.arm_destroy,
@@ -450,9 +494,16 @@ def main() -> None:
     previous_epoch = state.get("latest_epoch_seen")
     stable_polls = 0
     last_progress_time = time.time()
+    previous_signature = None
+    signature_unchanged_since = time.time()
+    gpu_idle_since = state.get("gpu_idle_since")
 
     while True:
         remote_state = fetch_remote_state(args)
+        signature = remote_state_signature(remote_state)
+        if previous_signature is None or signature != previous_signature:
+            previous_signature = signature
+            signature_unchanged_since = time.time()
         latest_epoch = remote_state.get("latest_epoch")
         state_changed = sync_live_checkpoints(args, local_live_cache, state, remote_state)
         if state_changed:
@@ -468,13 +519,30 @@ def main() -> None:
             stable_polls += 1
 
         session_alive = tmux_session_alive(args)
+        gpu_state = remote_gpu_state(args)
+        gpu_util = gpu_state.get("utilization_gpu")
+        if args.gpu_idle_seconds > 0 and gpu_util is not None and gpu_util <= args.gpu_idle_util_threshold:
+            if gpu_idle_since is None:
+                gpu_idle_since = time.time()
+        else:
+            gpu_idle_since = None
+        state["gpu_idle_since"] = gpu_idle_since
+        state["last_gpu_state"] = gpu_state
+        save_state(state_path, state)
         terminal_names = {str(entry["name"]) for entry in remote_state.get("terminal_files", [])}
         has_terminal_files = {"best.pt", "last.pt"}.issubset(terminal_names)
-        stopped = (not session_alive) and has_terminal_files and stable_polls >= args.stop_stable_polls
+        session_stopped = session_alive is False
+        gpu_idle_triggered = (
+            args.gpu_idle_seconds > 0
+            and gpu_idle_since is not None
+            and (time.time() - float(gpu_idle_since)) >= args.gpu_idle_seconds
+            and (time.time() - signature_unchanged_since) >= args.gpu_idle_seconds
+        )
+        stopped = has_terminal_files and stable_polls >= args.stop_stable_polls and (session_stopped or gpu_idle_triggered)
         if stopped:
             print(
                 f"[watchdog] training appears finished: session_alive={session_alive}, "
-                f"latest_epoch={latest_epoch}, stable_polls={stable_polls}",
+                f"gpu_idle_triggered={gpu_idle_triggered}, latest_epoch={latest_epoch}, stable_polls={stable_polls}",
                 flush=True,
             )
             break

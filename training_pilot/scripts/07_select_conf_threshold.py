@@ -12,6 +12,7 @@ from ensemble_core import (
     select_best_threshold,
 )
 from common import dump_json, load_pipeline_config, load_yaml, resolve_project_root
+from ensemble_tensorboard import log_ensemble_metrics
 
 
 def parse_args() -> argparse.Namespace:
@@ -71,6 +72,21 @@ def main() -> None:
     dump_json(
         project_root / "artifacts" / "tuning" / "confidence_sweep_val.json",
         {"selected": selected, "rows": sweep_rows},
+    )
+    log_ensemble_metrics(
+        project_root,
+        run_name="val_selected",
+        split="val",
+        metrics={
+            "precision": selected["precision"],
+            "recall": selected["recall"],
+            "f2": selected["f2"],
+            "all_damage_found_rate": selected["all_damage_found_rate"],
+            "selected_conf_threshold": selected["threshold"],
+            "total_gt": selected["total_gt"],
+            "total_predictions": selected["total_predictions"],
+            "matched_gt": selected["matched_gt"],
+        },
     )
     print(selected)
 

@@ -45,6 +45,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--yolo-model", action="append", default=[], help="Repeat for each YOLO checkpoint path.")
     parser.add_argument("--yolo-weight", action="append", type=float, default=[], help="Repeat for each YOLO model.")
     parser.add_argument("--yolo-conf", type=float, default=0.05)
+    parser.add_argument("--yolo-iou", type=float, default=0.6, help="YOLO NMS IoU threshold at prediction time.")
+    parser.add_argument("--yolo-max-det", type=int, default=300, help="YOLO max_det at prediction time.")
     parser.add_argument("--tta", action="store_true")
     parser.add_argument("--tta-imgsz", action="append", type=int, default=[], help="Repeat for explicit multi-scale TTA.")
     parser.add_argument("--tta-flip", action="store_true", help="Enable horizontal-flip TTA when using --tta-imgsz.")
@@ -179,16 +181,25 @@ def load_frozen_components(args: argparse.Namespace):
     }
 
 
-def predict_yolo(model: YOLO, image_path: Path, device: str, conf: float, tta: bool) -> tuple[list[list[float]], list[float]]:
+def predict_yolo(
+    model: YOLO,
+    image_path: Path,
+    device: str,
+    conf: float,
+    iou_thr: float,
+    max_det: int,
+    tta: bool,
+) -> tuple[list[list[float]], list[float]]:
     with Image.open(image_path) as img:
         width, height = img.size
 
     result = model.predict(
         source=str(image_path),
         conf=conf,
-        iou=0.6,
+        iou=iou_thr,
         verbose=False,
         device=device,
+        max_det=max_det,
         augment=tta,
     )[0]
 
@@ -209,6 +220,8 @@ def predict_yolo_explicit_tta(
     image_path: Path,
     device: str,
     conf: float,
+    iou_thr: float,
+    max_det: int,
     tta_imgsz: list[int],
     tta_flip: bool,
 ) -> tuple[list[list[list[float]]], list[list[float]]]:
@@ -226,10 +239,11 @@ def predict_yolo_explicit_tta(
             result = model.predict(
                 source=source,
                 conf=conf,
-                iou=0.6,
+                iou=iou_thr,
                 verbose=False,
                 device=device,
                 imgsz=imgsz,
+                max_det=max_det,
             )[0]
 
             pass_boxes: list[list[float]] = []
@@ -335,6 +349,8 @@ def main() -> None:
                     image_path,
                     args.device,
                     args.yolo_conf,
+                    args.yolo_iou,
+                    args.yolo_max_det,
                     args.tta_imgsz,
                     args.tta_flip,
                 )
@@ -344,7 +360,15 @@ def main() -> None:
                     labels_list.append([0] * len(pred_boxes))
                     weights.append(weight)
             else:
-                pred_boxes, pred_scores = predict_yolo(model, image_path, args.device, args.yolo_conf, args.tta)
+                pred_boxes, pred_scores = predict_yolo(
+                    model,
+                    image_path,
+                    args.device,
+                    args.yolo_conf,
+                    args.yolo_iou,
+                    args.yolo_max_det,
+                    args.tta,
+                )
                 boxes_list.append(pred_boxes)
                 scores_list.append(pred_scores)
                 labels_list.append([0] * len(pred_boxes))
@@ -396,9 +420,15 @@ def main() -> None:
                 "matched_gt": matched,
                 "all_found": all_found,
                 "exact_match": exact_match,
+                "gt_boxes": gt_boxes,
+                "fused_boxes": pred_boxes,
                 "fused_scores": pred_scores,
             }
         )
+
+    precision = (total_matched / total_pred) if total_pred else 1.0
+    recall = (total_matched / total_gt) if total_gt else 1.0
+    f2 = (5.0 * precision * recall / (4.0 * precision + recall)) if (4.0 * precision + recall) > 0.0 else 0.0
 
     metrics = {
         "model": "wbf_ensemble",
@@ -406,6 +436,8 @@ def main() -> None:
         "ensemble_members": args.yolo_model + (["frozen_groundingdino_clip_vitl14"] if frozen is not None else []),
         "ensemble_weights": yolo_weights + ([args.frozen_weight] if frozen is not None else []),
         "yolo_conf": args.yolo_conf,
+        "yolo_iou": args.yolo_iou,
+        "yolo_max_det": args.yolo_max_det,
         "wbf_iou": args.wbf_iou,
         "wbf_skip_box_thr": args.wbf_skip_box_thr,
         "tta_enabled": args.tta,
@@ -417,7 +449,9 @@ def main() -> None:
         "total_gt": total_gt,
         "total_predictions": total_pred,
         "matched_gt": total_matched,
-        "damage_coverage_recall": (total_matched / total_gt) if total_gt else 1.0,
+        "precision": precision,
+        "damage_coverage_recall": recall,
+        "f2": f2,
         "all_damages_found_image_rate": all_found_images / len(image_paths) if image_paths else 0.0,
         "exact_image_match_rate": exact_match_images / len(image_paths) if image_paths else 0.0,
         "negative_image_exact_count": negative_correct,

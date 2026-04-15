@@ -9,6 +9,14 @@ from typing import Any
 
 from common import dump_json, load_pipeline_config, resolve_project_root
 
+try:
+    import torch
+except Exception:  # noqa: BLE001
+    torch = None
+
+if torch is not None and not hasattr(torch, "OutOfMemoryError"):
+    cuda_oom = getattr(getattr(torch, "cuda", None), "OutOfMemoryError", RuntimeError)
+    torch.OutOfMemoryError = cuda_oom
 
 SPATIAL_TRANSFORMS = {
     "Affine",
@@ -166,7 +174,11 @@ def build_train_kwargs(
     if args.data_yaml:
         data_yaml = Path(args.data_yaml).resolve()
     else:
-        data_yaml = project_root / "configs" / ("dataset_hard_negatives.yaml" if stage == "hard_negative" else "dataset.yaml")
+        if stage == "hard_negative":
+            data_yaml = project_root / "configs" / "dataset_hard_negatives.yaml"
+        else:
+            configured_data_yaml = training.get("data_yaml") or pipeline.get("dataset", {}).get("data_yaml", "")
+            data_yaml = (project_root / configured_data_yaml).resolve() if configured_data_yaml else (project_root / "configs" / "dataset.yaml")
 
     if not data_yaml.exists():
         raise FileNotFoundError(f"Missing dataset yaml for stage '{stage}': {data_yaml}")
@@ -187,11 +199,18 @@ def build_train_kwargs(
         lr0 = float(model_entry["lr0"]) * float(second_pass["lr_scale"])
         freeze = int(second_pass["freeze"])
 
+    batch_value = model_entry["batch"]
+    if isinstance(batch_value, str):
+        numeric = float(batch_value)
+        batch_value = int(numeric) if numeric.is_integer() else numeric
+    elif isinstance(batch_value, float) and batch_value.is_integer():
+        batch_value = int(batch_value)
+
     kwargs = {
         "data": str(data_yaml),
         "epochs": epochs,
         "imgsz": int(training["imgsz"]),
-        "batch": int(model_entry["batch"]),
+        "batch": batch_value,
         "lr0": lr0,
         "freeze": freeze,
         "patience": int(model_entry["patience"]),
@@ -203,7 +222,6 @@ def build_train_kwargs(
         "deterministic": bool(training["deterministic"]),
         "box": float(training["box"]),
         "cls": float(training["cls"]),
-        "conf": float(training["val_conf"]),
         "device": args.device,
         "workers": args.workers,
         "project": str((project_root / "runs").resolve()),
@@ -212,9 +230,31 @@ def build_train_kwargs(
         "val": True,
         "plots": True,
         "exist_ok": False,
-        "close_mosaic": 10,
-        "seed": 42,
     }
+
+    optional_training_fields: dict[str, Any] = {
+        "conf": training.get("val_conf"),
+        "dfl": training.get("dfl"),
+        "lrf": training.get("lrf"),
+        "momentum": training.get("momentum"),
+        "warmup_epochs": training.get("warmup_epochs"),
+        "warmup_momentum": training.get("warmup_momentum"),
+        "close_mosaic": training.get("close_mosaic"),
+        "mosaic": training.get("mosaic"),
+        "mixup": training.get("mixup"),
+        "copy_paste": training.get("copy_paste"),
+        "erasing": training.get("erasing"),
+        "label_smoothing": training.get("label_smoothing"),
+        "degrees": training.get("degrees"),
+        "translate": training.get("translate"),
+        "scale": training.get("scale"),
+        "flipud": training.get("flipud"),
+        "fliplr": training.get("fliplr"),
+        "cache": training.get("cache"),
+        "save_period": training.get("save_period"),
+        "seed": training.get("seed"),
+    }
+    kwargs.update({key: value for key, value in optional_training_fields.items() if value is not None})
     return kwargs, run_name
 
 

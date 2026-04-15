@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -30,11 +31,26 @@ def remote_target(args: argparse.Namespace) -> str:
     return f"{args.ssh_user}@{args.ssh_host}"
 
 
-def run_ssh(args: argparse.Namespace, remote_command: str) -> subprocess.CompletedProcess[str]:
+def host_key_options() -> list[str]:
+    null_path = "NUL" if os.name == "nt" else "/dev/null"
+    return [
+        "-o",
+        "StrictHostKeyChecking=no",
+        "-o",
+        f"UserKnownHostsFile={null_path}",
+    ]
+
+
+def run_ssh(args: argparse.Namespace, remote_command: str, retries: int = 5, delay: float = 10.0) -> subprocess.CompletedProcess[str]:
     command = [
         "ssh",
+        *host_key_options(),
         "-o",
         f"ConnectTimeout={args.connect_timeout_seconds}",
+        "-o",
+        "ServerAliveInterval=30",
+        "-o",
+        "ServerAliveCountMax=3",
         "-i",
         args.ssh_key,
         "-p",
@@ -42,7 +58,19 @@ def run_ssh(args: argparse.Namespace, remote_command: str) -> subprocess.Complet
         remote_target(args),
         remote_command,
     ]
-    return subprocess.run(command, check=True, capture_output=True, text=True)
+    last_error: Exception | None = None
+    for attempt in range(1, retries + 1):
+        try:
+            return subprocess.run(command, check=True, capture_output=True, text=True)
+        except subprocess.CalledProcessError as exc:
+            last_error = exc
+            if attempt == retries:
+                break
+            print(f"[ssh-retry] attempt {attempt}/{retries} failed (code {exc.returncode}). Retrying in {delay}s...", flush=True)
+            time.sleep(delay)
+    if last_error:
+        raise last_error
+    raise RuntimeError("run_ssh reached unreachable state")
 
 
 def fetch_remote_state(args: argparse.Namespace) -> dict:
@@ -91,6 +119,7 @@ def scp_pull(args: argparse.Namespace, remote_file: str, local_file: Path) -> No
         temp_file.unlink()
     command = [
         "scp",
+        *host_key_options(),
         "-o",
         f"ConnectTimeout={args.connect_timeout_seconds}",
         "-o",
