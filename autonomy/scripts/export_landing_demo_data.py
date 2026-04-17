@@ -5,6 +5,7 @@ import math
 import re
 import sys
 from pathlib import Path
+from typing import Any
 
 AUTONOMY_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = AUTONOMY_ROOT.parent
@@ -34,6 +35,111 @@ EMBEDDED_DATA_PATTERN = re.compile(
     re.DOTALL,
 )
 
+PROOF_SOURCE_LIVE_PX4_SITL = "live_px4_sitl"
+PROOF_SOURCE_SYNTHETIC_REPLAY = "synthetic_controller_replay"
+PROOF_SOURCE_FALLBACK_PREVIEW = "fallback_preview"
+HARDWARE_LINK_DESCRIPTION = "/dev/ttyAMA0 @ 57600 baud"
+HARDWARE_NOTE = (
+    "Same PrecisionLandingController and MAVSDK command path; only the vehicle transport "
+    "changes when moving from SITL to Pixhawk hardware."
+)
+
+
+def _round(value: float, *, digits: int = 6) -> float:
+    return round(float(value), digits)
+
+
+def build_demo_proof(
+    *,
+    source: str,
+    live_pixhawk: bool,
+    vehicle_link: str,
+    command_rate_hz: float,
+    modes_seen: list[str] | None = None,
+    parameter_count: int | None = None,
+    landing_target_mode: str = "qr_precision_landing",
+) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "trajectory_source": source,
+        "live_pixhawk": live_pixhawk,
+        "autopilot": "PX4",
+        "autopilot_interface": "MAVSDK",
+        "vehicle_link": vehicle_link,
+        "landing_target_mode": landing_target_mode,
+        "command_rate_hz": _round(command_rate_hz, digits=3),
+        "hardware_link": HARDWARE_LINK_DESCRIPTION,
+        "hardware_note": HARDWARE_NOTE,
+    }
+    if modes_seen:
+        payload["modes_seen"] = sorted({mode for mode in modes_seen if mode})
+    if parameter_count is not None:
+        payload["precision_parameter_count"] = int(parameter_count)
+    return payload
+
+
+def build_event_entry(
+    t_s: float,
+    *,
+    kind: str,
+    message: str,
+    level: str = "info",
+    summary: str | None = None,
+    context: dict[str, object] | None = None,
+) -> dict[str, object]:
+    event: dict[str, object] = {
+        "t": _round(max(0.0, t_s), digits=3),
+        "kind": kind,
+        "level": level,
+        "message": message,
+    }
+    if summary:
+        event["summary"] = summary
+    if context:
+        event["context"] = context
+    return event
+
+
+def build_command_entry(
+    t_s: float,
+    *,
+    phase: str,
+    command_type: str,
+    source: str,
+    forward_velocity_mps: float | None = None,
+    right_velocity_mps: float | None = None,
+    down_velocity_mps: float | None = None,
+    north_velocity_mps: float | None = None,
+    east_velocity_mps: float | None = None,
+    target_north_m: float | None = None,
+    target_east_m: float | None = None,
+    target_down_m: float | None = None,
+    yaw_deg: float | None = None,
+    note: str | None = None,
+) -> dict[str, object]:
+    entry: dict[str, object] = {
+        "t": _round(max(0.0, t_s), digits=3),
+        "phase": phase,
+        "command_type": command_type,
+        "source": source,
+    }
+    optional_values = {
+        "forward_velocity_mps": forward_velocity_mps,
+        "right_velocity_mps": right_velocity_mps,
+        "down_velocity_mps": down_velocity_mps,
+        "north_velocity_mps": north_velocity_mps,
+        "east_velocity_mps": east_velocity_mps,
+        "target_north_m": target_north_m,
+        "target_east_m": target_east_m,
+        "target_down_m": target_down_m,
+        "yaw_deg": yaw_deg,
+    }
+    for key, value in optional_values.items():
+        if value is not None:
+            entry[key] = _round(value)
+    if note:
+        entry["note"] = note
+    return entry
+
 
 def build_observation_from_pose(
     vehicle_pose: VehicleLocalPose,
@@ -52,8 +158,12 @@ def integrate_vehicle_pose(
     dt_s: float,
 ) -> VehicleLocalPose:
     yaw_rad = math.radians(vehicle_pose.yaw_deg)
-    north_delta_m = (-forward_velocity_mps * math.cos(yaw_rad)) + (right_velocity_mps * math.sin(yaw_rad))
-    east_delta_m = (-forward_velocity_mps * math.sin(yaw_rad)) - (right_velocity_mps * math.cos(yaw_rad))
+    north_delta_m = (-forward_velocity_mps * math.cos(yaw_rad)) + (
+        right_velocity_mps * math.sin(yaw_rad)
+    )
+    east_delta_m = (-forward_velocity_mps * math.sin(yaw_rad)) - (
+        right_velocity_mps * math.cos(yaw_rad)
+    )
     altitude_m = max(0.0, -vehicle_pose.down_m - (descent_rate_mps * dt_s))
     return VehicleLocalPose(
         north_m=vehicle_pose.north_m + (north_delta_m * dt_s),
@@ -94,6 +204,17 @@ def simulate_landing_trajectory() -> dict[str, object]:
     dt_s = 1.0 / rate_hz
     frame_count = len(reference_frames)
     exported_frames: list[dict[str, float | str]] = []
+    events = [
+        build_event_entry(
+            0.0,
+            kind="proof",
+            message="Synthetic controller replay loaded",
+            level="warning",
+            summary="Preview only. No live Pixhawk or SITL connection is embedded in this payload.",
+        )
+    ]
+    commands: list[dict[str, object]] = []
+    last_phase: str | None = None
 
     for index in range(frame_count):
         t_s = round(index * dt_s, 3)
@@ -121,6 +242,52 @@ def simulate_landing_trajectory() -> dict[str, object]:
             }
         )
 
+        commands.append(
+            build_command_entry(
+                t_s,
+                phase=state.phase.name,
+                command_type="controller_velocity_body",
+                source="precision_landing_controller",
+                forward_velocity_mps=float(state.command.forward_velocity_mps),
+                right_velocity_mps=float(state.command.right_velocity_mps),
+                down_velocity_mps=float(state.command.descent_rate_mps),
+                north_velocity_mps=(
+                    (-float(state.command.forward_velocity_mps) * math.cos(math.radians(current_pose.yaw_deg)))
+                    + (float(state.command.right_velocity_mps) * math.sin(math.radians(current_pose.yaw_deg)))
+                ),
+                east_velocity_mps=(
+                    (-float(state.command.forward_velocity_mps) * math.sin(math.radians(current_pose.yaw_deg)))
+                    - (float(state.command.right_velocity_mps) * math.cos(math.radians(current_pose.yaw_deg)))
+                ),
+                yaw_deg=current_pose.yaw_deg,
+                note="Synthetic replay of controller output only",
+            )
+        )
+
+        if state.phase.name != last_phase:
+            events.append(
+                build_event_entry(
+                    t_s,
+                    kind="phase",
+                    message=f"Controller phase changed to {state.phase.name}",
+                    summary=(
+                        f"horizontal_error={target.horizontal_error_m:.3f} m "
+                        f"altitude={altitude_m:.2f} m"
+                    ),
+                )
+            )
+            last_phase = state.phase.name
+
+        if observation.acquired and index == 0:
+            events.append(
+                build_event_entry(
+                    t_s,
+                    kind="target",
+                    message="Landing target visible in simulated camera cone",
+                    summary=f"range={observation.range_m:.2f} m quality={observation.quality:.2f}",
+                )
+            )
+
         if state.phase not in {PrecisionLandingPhase.TOUCHDOWN, PrecisionLandingPhase.ABORT}:
             current_pose = integrate_vehicle_pose(
                 current_pose,
@@ -131,11 +298,29 @@ def simulate_landing_trajectory() -> dict[str, object]:
             )
 
     accuracy_m = float(exported_frames[-1]["horizontal_error_m"])
+    events.append(
+        build_event_entry(
+            float(exported_frames[-1]["t"]),
+            kind="summary",
+            message="Synthetic replay completed",
+            summary=f"final_accuracy={accuracy_m:.4f} m",
+        )
+    )
     return {
+        "schema_version": 2,
         "frames": exported_frames,
         "dock_north_m": round(dock_target.north_m, 6),
         "dock_east_m": round(dock_target.east_m, 6),
         "accuracy_m": round(accuracy_m, 6),
+        "proof": build_demo_proof(
+            source=PROOF_SOURCE_SYNTHETIC_REPLAY,
+            live_pixhawk=False,
+            vehicle_link="offline preview payload",
+            command_rate_hz=rate_hz,
+            modes_seen=[frame["phase"] for frame in exported_frames],
+        ),
+        "events": events,
+        "commands": commands,
     }
 
 

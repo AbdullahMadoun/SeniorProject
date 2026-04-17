@@ -34,6 +34,10 @@ from autonomy.drone_system.precision_landing_px4 import configure_px4_precision_
 from autonomy.scripts.export_landing_demo_data import (
     OUTPUT_DIR,
     OUTPUT_JSON_PATH,
+    PROOF_SOURCE_LIVE_PX4_SITL,
+    build_command_entry,
+    build_demo_proof,
+    build_event_entry,
     sync_embedded_payload,
 )
 
@@ -86,6 +90,34 @@ class LiveTelemetryState:
 def log_stage(message: str) -> None:
     timestamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     print(f"[{timestamp}] {message}", flush=True)
+
+
+def current_recording_time_s(recording_start_s: float | None) -> float:
+    if recording_start_s is None:
+        return 0.0
+    return max(0.0, time.monotonic() - recording_start_s)
+
+
+def record_event(
+    events: list[dict[str, object]],
+    *,
+    recording_start_s: float | None,
+    kind: str,
+    message: str,
+    level: str = "info",
+    summary: str | None = None,
+    context: dict[str, object] | None = None,
+) -> None:
+    events.append(
+        build_event_entry(
+            current_recording_time_s(recording_start_s),
+            kind=kind,
+            message=message,
+            level=level,
+            summary=summary,
+            context=context,
+        )
+    )
 
 
 def controller_body_to_local_velocity(
@@ -310,13 +342,41 @@ async def run_takeoff_phase(
     telemetry_state: LiveTelemetryState,
     dock_target: DockTarget,
     frames: list[dict[str, float | str]],
+    events: list[dict[str, object]],
+    commands: list[dict[str, object]],
     *,
     recording_start_s: float,
 ) -> VehicleLocalPose:
     log_stage(f"Takeoff start: target_altitude_m={TAKEOFF_ALTITUDE_M}")
+    record_event(
+        events,
+        recording_start_s=recording_start_s,
+        kind="action",
+        message="Takeoff sequence started",
+        summary=f"target_altitude={TAKEOFF_ALTITUDE_M:.1f} m",
+    )
     await drone.action.set_takeoff_altitude(TAKEOFF_ALTITUDE_M)
     await drone.action.arm()
+    commands.append(
+        build_command_entry(
+            current_recording_time_s(recording_start_s),
+            phase="TAKEOFF",
+            command_type="arm",
+            source="mavsdk_action",
+            note="PX4 arm command issued",
+        )
+    )
     await drone.action.takeoff()
+    commands.append(
+        build_command_entry(
+            current_recording_time_s(recording_start_s),
+            phase="TAKEOFF",
+            command_type="takeoff",
+            source="mavsdk_action",
+            target_down_m=-TAKEOFF_ALTITUDE_M,
+            note="PX4 takeoff command issued",
+        )
+    )
 
     while True:
         vehicle_pose = await wait_for_pose(telemetry_state, timeout_s=5.0)
@@ -349,6 +409,16 @@ async def run_takeoff_phase(
                 f"Takeoff complete: altitude_m={geometry['altitude_m']:.2f} "
                 f"north_m={vehicle_pose.north_m:.2f} east_m={vehicle_pose.east_m:.2f}"
             )
+            record_event(
+                events,
+                recording_start_s=recording_start_s,
+                kind="state",
+                message="PX4 takeoff complete",
+                summary=(
+                    f"altitude={geometry['altitude_m']:.2f} m "
+                    f"north={vehicle_pose.north_m:.2f} east={vehicle_pose.east_m:.2f}"
+                ),
+            )
             return vehicle_pose
         await asyncio.sleep(CONTROL_INTERVAL_S)
 
@@ -356,6 +426,10 @@ async def run_takeoff_phase(
 async def start_offboard(
     drone: System,
     vehicle_pose: VehicleLocalPose,
+    events: list[dict[str, object]],
+    commands: list[dict[str, object]],
+    *,
+    recording_start_s: float,
 ) -> None:
     if PositionNedYaw is None:
         raise RuntimeError("mavsdk offboard plugin is unavailable.")
@@ -371,7 +445,30 @@ async def start_offboard(
             vehicle_pose.yaw_deg,
         )
     )
+    commands.append(
+        build_command_entry(
+            current_recording_time_s(recording_start_s),
+            phase="APPROACH",
+            command_type="position_ned",
+            source="mavsdk_offboard",
+            target_north_m=vehicle_pose.north_m,
+            target_east_m=vehicle_pose.east_m,
+            target_down_m=vehicle_pose.down_m,
+            yaw_deg=vehicle_pose.yaw_deg,
+            note="Initial offboard hold setpoint",
+        )
+    )
     await drone.offboard.start()
+    record_event(
+        events,
+        recording_start_s=recording_start_s,
+        kind="action",
+        message="Offboard mode started",
+        summary=(
+            f"hold north={vehicle_pose.north_m:.2f} east={vehicle_pose.east_m:.2f} "
+            f"down={vehicle_pose.down_m:.2f}"
+        ),
+    )
 
 
 async def run_approach_phase(
@@ -379,6 +476,8 @@ async def run_approach_phase(
     telemetry_state: LiveTelemetryState,
     dock_target: DockTarget,
     frames: list[dict[str, float | str]],
+    events: list[dict[str, object]],
+    commands: list[dict[str, object]],
     *,
     recording_start_s: float,
 ) -> VehicleLocalPose:
@@ -387,6 +486,16 @@ async def run_approach_phase(
     log_stage(
         f"Approach start: target_north_m={APPROACH_NORTH_M} "
         f"target_east_m={APPROACH_EAST_M} target_altitude_m={TAKEOFF_ALTITUDE_M}"
+    )
+    record_event(
+        events,
+        recording_start_s=recording_start_s,
+        kind="command",
+        message="Cinematic approach leg started",
+        summary=(
+            f"target_north={APPROACH_NORTH_M:.1f} m "
+            f"target_east={APPROACH_EAST_M:.1f} m altitude={TAKEOFF_ALTITUDE_M:.1f} m"
+        ),
     )
     deadline = time.monotonic() + APPROACH_TIMEOUT_S
     while time.monotonic() < deadline:
@@ -397,6 +506,19 @@ async def run_approach_phase(
                 APPROACH_EAST_M,
                 -TAKEOFF_ALTITUDE_M,
                 vehicle_pose.yaw_deg,
+            )
+        )
+        commands.append(
+            build_command_entry(
+                current_recording_time_s(recording_start_s),
+                phase="APPROACH",
+                command_type="position_ned",
+                source="mavsdk_offboard",
+                target_north_m=APPROACH_NORTH_M,
+                target_east_m=APPROACH_EAST_M,
+                target_down_m=-TAKEOFF_ALTITUDE_M,
+                yaw_deg=vehicle_pose.yaw_deg,
+                note="Cinematic offset approach setpoint",
             )
         )
         _, geometry = build_visibility_observation(vehicle_pose, dock_target)
@@ -433,6 +555,16 @@ async def run_approach_phase(
                 f"Approach complete: north_m={vehicle_pose.north_m:.2f} "
                 f"east_m={vehicle_pose.east_m:.2f} altitude_m={geometry['altitude_m']:.2f}"
             )
+            record_event(
+                events,
+                recording_start_s=recording_start_s,
+                kind="state",
+                message="Approach leg reached",
+                summary=(
+                    f"north={vehicle_pose.north_m:.2f} east={vehicle_pose.east_m:.2f} "
+                    f"altitude={geometry['altitude_m']:.2f} m"
+                ),
+            )
             return vehicle_pose
         await asyncio.sleep(CONTROL_INTERVAL_S)
     raise RuntimeError("Timed out moving to the cinematic approach offset.")
@@ -444,6 +576,8 @@ async def run_precision_landing_phase(
     dock_target: DockTarget,
     controller: PrecisionLandingController,
     frames: list[dict[str, float | str]],
+    events: list[dict[str, object]],
+    commands: list[dict[str, object]],
     *,
     recording_start_s: float,
 ) -> None:
@@ -452,6 +586,7 @@ async def run_precision_landing_phase(
     deadline = time.monotonic() + LANDING_TIMEOUT_S
     handed_off_to_land = False
     last_phase: PrecisionLandingPhase | None = None
+    target_acquired_logged = False
     companion_managed_descent = _env_flag("SKYLINK_ENABLE_COMPANION_SIM")
 
     while time.monotonic() < deadline:
@@ -460,6 +595,19 @@ async def run_precision_landing_phase(
         observation, geometry = build_visibility_observation(vehicle_pose, dock_target)
         state = controller.step(observation, time_s=loop_start_s - recording_start_s)
 
+        if observation.acquired and not target_acquired_logged:
+            record_event(
+                events,
+                recording_start_s=recording_start_s,
+                kind="target",
+                message="QR landing target acquired",
+                summary=(
+                    f"range={observation.range_m:.2f} m "
+                    f"horizontal_error={geometry['horizontal_error_m']:.2f} m"
+                ),
+            )
+            target_acquired_logged = True
+
         if state.phase != last_phase:
             log_stage(
                 "Precision landing phase="
@@ -467,9 +615,28 @@ async def run_precision_landing_phase(
                 f"horizontal_error_m={geometry['horizontal_error_m']:.2f} "
                 f"altitude_m={geometry['altitude_m']:.2f}"
             )
+            record_event(
+                events,
+                recording_start_s=recording_start_s,
+                kind="phase",
+                message=f"Precision landing phase changed to {state.phase.name}",
+                summary=(
+                    f"target_acquired={observation.acquired} "
+                    f"horizontal_error={geometry['horizontal_error_m']:.2f} m "
+                    f"altitude={geometry['altitude_m']:.2f} m"
+                ),
+            )
             last_phase = state.phase
 
         if state.phase == PrecisionLandingPhase.ABORT:
+            record_event(
+                events,
+                recording_start_s=recording_start_s,
+                kind="abort",
+                message="Precision landing controller aborted",
+                level="error",
+                summary="PX4 landing takeover stopped because target tracking was lost.",
+            )
             raise RuntimeError("Precision landing controller aborted after losing the target.")
 
         append_frame(
@@ -497,6 +664,22 @@ async def run_precision_landing_phase(
                 with contextlib.suppress(OffboardError, RuntimeError):
                     await drone.offboard.stop()
                 await drone.action.land()
+                commands.append(
+                    build_command_entry(
+                        current_recording_time_s(recording_start_s),
+                        phase=state.phase.name,
+                        command_type="land",
+                        source="mavsdk_action",
+                        note="Companion-managed descent handed off to PX4 land mode",
+                    )
+                )
+                record_event(
+                    events,
+                    recording_start_s=recording_start_s,
+                    kind="handoff",
+                    message="Precision controller handed off to PX4 land mode",
+                    summary=f"phase={state.phase.name} via companion-managed descent",
+                )
                 handed_off_to_land = True
                 await asyncio.sleep(CONTROL_INTERVAL_S)
                 continue
@@ -513,15 +696,53 @@ async def run_precision_landing_phase(
                     vehicle_pose.yaw_deg,
                 )
             )
+            commands.append(
+                build_command_entry(
+                    current_recording_time_s(recording_start_s),
+                    phase=state.phase.name,
+                    command_type="velocity_ned",
+                    source="precision_landing_controller",
+                    forward_velocity_mps=float(state.command.forward_velocity_mps),
+                    right_velocity_mps=float(state.command.right_velocity_mps),
+                    down_velocity_mps=float(state.command.descent_rate_mps),
+                    north_velocity_mps=north_velocity_mps,
+                    east_velocity_mps=east_velocity_mps,
+                    yaw_deg=vehicle_pose.yaw_deg,
+                    note="Offboard velocity command sent to PX4",
+                )
+            )
             if state.phase == PrecisionLandingPhase.TOUCHDOWN:
                 log_stage("Controller reached TOUCHDOWN window; handing off to PX4 land mode")
                 with contextlib.suppress(OffboardError, RuntimeError):
                     await drone.offboard.stop()
                 await drone.action.land()
+                commands.append(
+                    build_command_entry(
+                        current_recording_time_s(recording_start_s),
+                        phase=state.phase.name,
+                        command_type="land",
+                        source="mavsdk_action",
+                        note="Touchdown window reached; PX4 land handoff issued",
+                    )
+                )
+                record_event(
+                    events,
+                    recording_start_s=recording_start_s,
+                    kind="handoff",
+                    message="Touchdown window reached; PX4 land mode commanded",
+                    summary=f"horizontal_error={geometry['horizontal_error_m']:.3f} m",
+                )
                 handed_off_to_land = True
         else:
             if not telemetry_state.in_air and geometry["altitude_m"] <= 0.15:
                 log_stage("PX4 reported landed after land handoff")
+                record_event(
+                    events,
+                    recording_start_s=recording_start_s,
+                    kind="state",
+                    message="PX4 reported landed after land handoff",
+                    summary=f"horizontal_error={geometry['horizontal_error_m']:.3f} m",
+                )
                 return
 
         await asyncio.sleep(max(0.0, CONTROL_INTERVAL_S - (time.monotonic() - loop_start_s)))
@@ -533,6 +754,7 @@ async def finalize_touchdown(
     telemetry_state: LiveTelemetryState,
     dock_target: DockTarget,
     frames: list[dict[str, float | str]],
+    events: list[dict[str, object]],
     *,
     recording_start_s: float,
 ) -> None:
@@ -568,6 +790,16 @@ async def finalize_touchdown(
                 f"Touchdown complete: north_m={vehicle_pose.north_m:.2f} "
                 f"east_m={vehicle_pose.east_m:.2f} horizontal_error_m={geometry['horizontal_error_m']:.3f}"
             )
+            record_event(
+                events,
+                recording_start_s=recording_start_s,
+                kind="summary",
+                message="Touchdown complete",
+                summary=(
+                    f"north={vehicle_pose.north_m:.2f} east={vehicle_pose.east_m:.2f} "
+                    f"horizontal_error={geometry['horizontal_error_m']:.3f} m"
+                ),
+            )
             return
         await asyncio.sleep(CONTROL_INTERVAL_S)
     raise RuntimeError("Timed out waiting for PX4 to report touchdown after land handoff.")
@@ -593,13 +825,33 @@ async def main_async() -> None:
 
     telemetry_state = LiveTelemetryState()
     frames: list[dict[str, float | str]] = []
+    events: list[dict[str, object]] = []
+    commands: list[dict[str, object]] = []
+    flight_modes_seen: set[str] = set()
+    recording_start_s: float | None = None
+    applied_parameter_count = 0
     drone = System()
     await drone.connect(system_address=SYSTEM_ADDRESS)
     await wait_for_connection(drone)
     log_stage("PX4 connection established")
+    record_event(
+        events,
+        recording_start_s=recording_start_s,
+        kind="connection",
+        message="PX4 connection established",
+        summary=f"vehicle_link={SYSTEM_ADDRESS}",
+    )
     with contextlib.suppress(Exception):
         applied = await configure_px4_precision_landing(drone, baseline, tuning)
+        applied_parameter_count = len(applied)
         log_stage(f"PX4 precision-landing parameters applied: count={len(applied)}")
+        record_event(
+            events,
+            recording_start_s=recording_start_s,
+            kind="configuration",
+            message="PX4 precision-landing parameters applied",
+            summary=f"count={len(applied)}",
+        )
     await configure_telemetry_rates(drone)
 
     stream_tasks = [
@@ -634,10 +886,13 @@ async def main_async() -> None:
         asyncio.create_task(
             monitor_stream(
                 drone.telemetry.flight_mode(),
-                lambda item: setattr(
-                    telemetry_state,
-                    "flight_mode",
-                    str(item).split(".")[-1].lower(),
+                lambda item: (
+                    setattr(
+                        telemetry_state,
+                        "flight_mode",
+                        str(item).split(".")[-1].lower(),
+                    ),
+                    flight_modes_seen.add(str(item).split(".")[-1].lower()),
                 ),
             )
         ),
@@ -646,6 +901,13 @@ async def main_async() -> None:
     try:
         await wait_for_health(drone)
         log_stage("PX4 health ready: global and home position are valid")
+        record_event(
+            events,
+            recording_start_s=recording_start_s,
+            kind="health",
+            message="PX4 health ready",
+            summary="Global position and home position are valid",
+        )
         await wait_for_pose(telemetry_state)
         recording_start_s = time.monotonic()
 
@@ -654,14 +916,24 @@ async def main_async() -> None:
             telemetry_state,
             dock_target,
             frames,
+            events,
+            commands,
             recording_start_s=recording_start_s,
         )
-        await start_offboard(drone, current_pose)
+        await start_offboard(
+            drone,
+            current_pose,
+            events,
+            commands,
+            recording_start_s=recording_start_s,
+        )
         await run_approach_phase(
             drone,
             telemetry_state,
             dock_target,
             frames,
+            events,
+            commands,
             recording_start_s=recording_start_s,
         )
         await run_precision_landing_phase(
@@ -670,12 +942,15 @@ async def main_async() -> None:
             dock_target,
             controller,
             frames,
+            events,
+            commands,
             recording_start_s=recording_start_s,
         )
         await finalize_touchdown(
             telemetry_state,
             dock_target,
             frames,
+            events,
             recording_start_s=recording_start_s,
         )
     finally:
@@ -696,10 +971,21 @@ async def main_async() -> None:
         raise RuntimeError("No live telemetry frames were recorded.")
 
     payload = {
+        "schema_version": 2,
         "frames": frames,
         "dock_north_m": round(dock_target.north_m, 6),
         "dock_east_m": round(dock_target.east_m, 6),
         "accuracy_m": round(float(frames[-1]["horizontal_error_m"]), 6),
+        "proof": build_demo_proof(
+            source=PROOF_SOURCE_LIVE_PX4_SITL,
+            live_pixhawk=True,
+            vehicle_link=SYSTEM_ADDRESS,
+            command_rate_hz=CONTROL_RATE_HZ,
+            modes_seen=sorted(flight_modes_seen),
+            parameter_count=applied_parameter_count,
+        ),
+        "events": events,
+        "commands": commands,
     }
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     OUTPUT_JSON_PATH.write_text(json.dumps(payload, indent=2), encoding="utf-8")
