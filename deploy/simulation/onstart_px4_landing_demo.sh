@@ -64,6 +64,17 @@ raise SystemExit('Timed out waiting for PX4 SITL readiness')
 PY
 }
 
+run_px4_ubuntu_setup() {
+  # `ubuntu.sh` exits successfully after consuming enough `yes` input, which leaves
+  # `yes` terminated by SIGPIPE. With `pipefail` enabled that would incorrectly abort
+  # the whole bootstrap despite the setup succeeding.
+  set +o pipefail
+  yes | bash ./Tools/setup/ubuntu.sh --no-nuttx
+  local status=$?
+  set -o pipefail
+  return "$status"
+}
+
 export DEBIAN_FRONTEND=noninteractive
 export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
@@ -87,7 +98,7 @@ fi
 write_status deps 'running PX4 ubuntu setup'
 cd /opt/skylink2/vendor/PX4-Autopilot
 reset_environment_file
-yes | bash ./Tools/setup/ubuntu.sh --no-nuttx
+run_px4_ubuntu_setup
 reset_environment_file
 
 write_status venv 'creating autonomy virtual environment'
