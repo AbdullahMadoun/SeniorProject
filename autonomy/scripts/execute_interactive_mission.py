@@ -36,6 +36,7 @@ from autonomy.drone_system.live_px4_runtime import (
     snapshot_to_dict,
     stream_live_projected_targets,
     wait_for_departure,
+    wait_for_mission_completion,
     wait_for_mission_entry,
     wait_for_rtl_approach_window,
 )
@@ -66,6 +67,7 @@ STREAM_DURATION_S = 12.0
 LIVE_TELEMETRY_INTERVAL_S = 0.35
 TELEMETRY_PREFIX = "__TELEMETRY__"
 LIVE_POSITION_READY_TIMEOUT_S = 45.0
+MISSION_COMPLETION_TIMEOUT_S = 60.0
 
 
 def use_direct_px4_transport() -> bool:
@@ -121,6 +123,20 @@ def _estimate_rtl_approach_timeout_s(spec, dock_target: DockTarget) -> float:
 
     cruise_speed_mps = max(1.0, spec.cruise_speed_mps)
     return max(RTL_APPROACH_TIMEOUT_S, ((horizontal_distance_m / cruise_speed_mps) * 3.0) + 45.0)
+
+
+def _estimate_mission_completion_timeout_s(spec) -> float:
+    route_points = [(0.0, 0.0)]
+    route_points.extend((waypoint.north_m, waypoint.east_m) for waypoint in spec.waypoints)
+
+    horizontal_distance_m = 0.0
+    for index in range(1, len(route_points)):
+        prev_north, prev_east = route_points[index - 1]
+        north_m, east_m = route_points[index]
+        horizontal_distance_m += ((north_m - prev_north) ** 2 + (east_m - prev_east) ** 2) ** 0.5
+
+    cruise_speed_mps = max(1.0, spec.cruise_speed_mps)
+    return max(MISSION_COMPLETION_TIMEOUT_S, ((horizontal_distance_m / cruise_speed_mps) * 3.0) + 30.0)
 
 
 def _emit_live_telemetry(payload: dict[str, object]) -> None:
@@ -473,6 +489,14 @@ async def main_async(spec_path: Path) -> None:
             min_radius_m=DEPARTURE_RADIUS_M,
             timeout_s=DEPARTURE_TIMEOUT_S,
         )
+        mission_phase_observations = mission_entry_observations + departure_observations
+        if spec.weather_profile_mode != WEATHER_PROFILE_MODE_PROOF:
+            print("stage=mission_completion", flush=True)
+            mission_completion_observations = await wait_for_mission_completion(
+                gateway,
+                timeout_s=_estimate_mission_completion_timeout_s(spec),
+            )
+            mission_phase_observations.extend(mission_completion_observations)
         print("stage=dynamic_weather_injection", flush=True)
         if spec.weather_profile_mode == WEATHER_PROFILE_MODE_PROOF:
             weather_payload, snapshot_after_weather = await _monitor_dynamic_weather(
@@ -503,7 +527,7 @@ async def main_async(spec_path: Path) -> None:
             "battery_overrides": _battery_payload(spec),
             "initial_snapshot": snapshot_to_dict(initial_snapshot),
             "initial_local_pose": local_pose_to_dict(initial_local_pose),
-            "mission_phase_snapshots": mission_entry_observations + departure_observations,
+            "mission_phase_snapshots": mission_phase_observations,
             "after_rtl_snapshot": snapshot_to_dict(snapshot_after_weather),
             "after_rtl_local_pose": local_pose_to_dict(await gateway.get_local_pose()),
             "weather_validation_path": str(WEATHER_OUTPUT_PATH),

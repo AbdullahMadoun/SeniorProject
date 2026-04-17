@@ -88,7 +88,7 @@ class MissionApiTests(unittest.TestCase):
         self.assertEqual(payload["default_battery"]["warn_battery_threshold_percent"], 25.0)
         self.assertEqual(payload["default_battery"]["emergency_battery_threshold_percent"], 18.0)
         self.assertEqual(payload["default_battery"]["low_battery_action"], "return")
-        self.assertEqual(payload["default_simulation"]["weather_profile_mode"], "proof")
+        self.assertEqual(payload["default_simulation"]["weather_profile_mode"], "full_trip")
 
     def test_validate_returns_400_with_exact_reason_for_altitude_violation(self) -> None:
         response = self.client.post(
@@ -124,8 +124,9 @@ class MissionApiTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         mission = response.json()["mission"]
+        self.assertEqual(mission["weather_profile_mode"], "full_trip")
         self.assertEqual(mission["weather_profile"][0]["steady_wind_mps"], 3.4)
-        self.assertEqual(mission["weather_profile"][2]["gust_wind_mps"], 10.5)
+        self.assertEqual(mission["weather_profile"][2]["gust_wind_mps"], 5.6)
 
     def test_execute_returns_job_id_when_runner_is_started(self) -> None:
         fake_job = SimpleNamespace(
@@ -171,6 +172,26 @@ class MissionApiTests(unittest.TestCase):
         _, kwargs = start_job_mock.call_args
         self.assertEqual(kwargs["execution_mode"], "remote")
         self.assertTrue(kwargs["replace_running"])
+
+    def test_execute_remote_launch_normalizes_stale_proof_payload_to_full_trip(self) -> None:
+        fake_job = SimpleNamespace(
+            job_id="remote124",
+            status="running",
+            redirect_url="../showcase/latest/index.html",
+            execution_mode="remote",
+            target="ssh://root@ssh4.vast.ai:17126/root/SeniorProject",
+            bridge_status="Remote Ready",
+            spec={},
+        )
+        payload = dict(self.valid_payload)
+        payload["weather_profile_mode"] = "proof"
+
+        with patch.object(mission_api.job_manager, "start_job", return_value=fake_job) as start_job_mock:
+            response = self.client.post("/api/mission/execute?remote=true", json=payload)
+
+        self.assertEqual(response.status_code, 200)
+        submitted_spec = start_job_mock.call_args.args[0]
+        self.assertEqual(submitted_spec.weather_profile_mode, "full_trip")
 
     def test_remote_status_endpoint_relays_manager_status(self) -> None:
         fake_status = {

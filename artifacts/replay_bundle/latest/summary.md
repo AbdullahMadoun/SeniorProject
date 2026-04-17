@@ -14,17 +14,17 @@
 
 ## Key Results
 
-- mission waypoint count: `2`
-- post-RTL execution mode: `return_to_launch`
+- mission waypoint count: `4`
+- post-RTL execution mode: `mission`
 - dock proof status: `streamed_without_full_receiver_match`
 - dock stream record count: `60`
 - dock receiver count: `0`
-- dock final horizontal distance: `0.0843407010478428` m
+- dock final horizontal distance: `0.144422100045003` m
 - dock final in_air: `True`
 - precision profile `RTL_PLD_MD`: `2`
 - landing-target consumption count: `50`
-- live weather proof status: `rtl_triggered_by_live_weather_injection`
-- live weather triggered action: `return_to_launch`
+- live weather proof status: `nominal_weather_profile_no_forced_rtl`
+- live weather triggered action: `None`
 - precision simulator pass count: `2` / `3`
 - weather scenario pass count: `4` / `4`
 - bound media count: `0`

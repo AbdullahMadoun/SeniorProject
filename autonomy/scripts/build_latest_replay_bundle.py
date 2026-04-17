@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 from pathlib import Path
 import sys
 
@@ -15,6 +16,10 @@ OUTPUT_DIR = REPO_ROOT / "artifacts" / "replay_bundle" / "latest"
 
 
 def main() -> None:
+    with contextlib.suppress(Exception):
+        sys.stdout.reconfigure(encoding="utf-8")
+    with contextlib.suppress(Exception):
+        sys.stderr.reconfigure(encoding="utf-8")
     manifest = build_replay_bundle(
         repo_root=REPO_ROOT,
         output_dir=OUTPUT_DIR,

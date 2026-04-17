@@ -124,7 +124,7 @@ def _constraints_payload() -> dict[str, Any]:
             "low_battery_action": default_battery.low_battery_action,
         },
         "default_simulation": {
-            "weather_profile_mode": WEATHER_PROFILE_MODE_PROOF,
+            "weather_profile_mode": WEATHER_PROFILE_MODE_FULL_TRIP,
         },
         "battery_actions": [
             {"id": LOW_BATTERY_ACTION_WARNING, "label": "Warn Only"},
@@ -151,6 +151,7 @@ def _normalize_payload(body: Any) -> dict[str, Any]:
         return {
             "mission_id": "interactive-mission",
             "cruise_speed_mps": baseline.speed_band.nominal_mps,
+            "weather_profile_mode": WEATHER_PROFILE_MODE_FULL_TRIP,
             "waypoints": body,
             "weather_profile": [
                 {
@@ -167,8 +168,18 @@ def _normalize_payload(body: Any) -> dict[str, Any]:
             normalized.pop(key, None)
         normalized.setdefault("mission_id", "interactive-mission")
         normalized.setdefault("cruise_speed_mps", baseline.speed_band.nominal_mps)
+        normalized.setdefault("weather_profile_mode", WEATHER_PROFILE_MODE_FULL_TRIP)
         return normalized
     raise HTTPException(status_code=400, detail="Mission payload must be an object or a waypoint list.")
+
+
+def _normalize_remote_launch_payload(body: Any) -> Any:
+    if not isinstance(body, dict):
+        return body
+    normalized = dict(body)
+    if str(normalized.get("weather_profile_mode", "")).strip().lower() == WEATHER_PROFILE_MODE_PROOF:
+        normalized["weather_profile_mode"] = WEATHER_PROFILE_MODE_FULL_TRIP
+    return normalized
 
 
 def _execution_mode_from_body(body: Any) -> str:
@@ -784,6 +795,8 @@ async def execute_mission(
     remote: bool = Query(default=False),
 ) -> dict[str, Any]:
     execution_mode = "remote" if remote else _execution_mode_from_body(body)
+    if execution_mode == "remote":
+        body = _normalize_remote_launch_payload(body)
     if PREPARED_SPEC_PATH.exists():
         try:
             spec_dict = json.loads(PREPARED_SPEC_PATH.read_text(encoding="utf-8-sig"))

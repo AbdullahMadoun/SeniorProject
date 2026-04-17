@@ -387,7 +387,7 @@
             </div>
             <div class="field">
               <label for="weather-profile">Weather Injection</label>
-              <input id="weather-profile" value="0s:4.2, 10s:5.0, 18s:8.4, 30s:5.0" spellcheck="false">
+              <input id="weather-profile" value="0s:3.8, 10s:4.6, 22s:5.4, 36s:4.4" spellcheck="false">
             </div>
             <div class="field field-wide">
               <label for="remote-sim-toggle">Remote Simulation Mode</label>
@@ -646,6 +646,7 @@
       return {
         mission_id: missionIdInput.value.trim() || "interactive-mission",
         cruise_speed_mps: Number(cruiseSpeedInput.value || 0),
+        weather_profile_mode: "full_trip",
         waypoints: state.waypoints.map((waypoint) => ({
           north_m: waypoint.north_m,
           east_m: waypoint.east_m,

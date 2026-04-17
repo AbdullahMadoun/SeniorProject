@@ -174,6 +174,31 @@ async def wait_for_departure(
     raise RuntimeError("Vehicle did not depart the dock area before timeout.")
 
 
+async def wait_for_mission_completion(
+    gateway: MavsdkVehicleGateway,
+    *,
+    timeout_s: float,
+) -> list[dict[str, object]]:
+    observations: list[dict[str, object]] = []
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        snapshot = await gateway.get_snapshot()
+        local_pose = await gateway.get_local_pose()
+        observations.append(
+            {
+                "t_s": round(time.monotonic(), 3),
+                "snapshot": snapshot_to_dict(snapshot),
+                "local_pose": local_pose_to_dict(local_pose),
+                "attitude_euler": attitude_to_dict(local_pose),
+            }
+        )
+        mission_progress = snapshot.mission_progress
+        if mission_progress.total > 0 and mission_progress.current >= mission_progress.total:
+            return observations
+        await asyncio.sleep(1.0)
+    raise RuntimeError("Vehicle did not complete the uploaded mission before timeout.")
+
+
 async def wait_for_rtl_approach_window(
     gateway: MavsdkVehicleGateway,
     dock_target: DockTarget,

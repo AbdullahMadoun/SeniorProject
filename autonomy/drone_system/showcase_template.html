@@ -351,6 +351,88 @@
       font-size: 0.9rem;
       padding: 0 22px 22px;
     }
+    .dock-vision-shell {
+      display: grid;
+      grid-template-columns: 320px minmax(0, 1fr);
+      gap: 18px;
+      margin-top: 16px;
+      align-items: start;
+    }
+    .dock-camera-box {
+      position: relative;
+      width: 320px;
+      height: 320px;
+      border-radius: 20px;
+      overflow: hidden;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: linear-gradient(180deg, rgba(6, 9, 14, 0.98), rgba(11, 15, 24, 0.96));
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.02);
+    }
+    #dock-camera-canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    .dock-crosshair {
+      position: absolute;
+      inset: 50% auto auto 50%;
+      width: 30px;
+      height: 30px;
+      transform: translate(-50%, -50%);
+      border: 2px solid var(--dock);
+      border-radius: 999px;
+      color: var(--dock);
+      pointer-events: none;
+    }
+    .dock-crosshair::before, .dock-crosshair::after {
+      content: "";
+      position: absolute;
+      background: currentColor;
+    }
+    .dock-crosshair::before {
+      top: -10px;
+      bottom: -10px;
+      left: 50%;
+      width: 2px;
+      transform: translateX(-50%);
+    }
+    .dock-crosshair::after {
+      left: -10px;
+      right: -10px;
+      top: 50%;
+      height: 2px;
+      transform: translateY(-50%);
+    }
+    .dock-camera-meta {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .dock-camera-note {
+      margin-top: 14px;
+      color: var(--muted);
+      font-size: 0.92rem;
+      line-height: 1.55;
+    }
+    .dock-timeline {
+      display: grid;
+      gap: 12px;
+      margin-top: 16px;
+    }
+    .dock-timeline-item {
+      padding: 14px 16px;
+      border-radius: 18px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+    .dock-timeline-item strong {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 1rem;
+    }
+    .dock-timeline-item p {
+      font-size: 0.95rem;
+    }
     @media (max-width: 1200px) {
       .hero, .grid-2 { grid-template-columns: 1fr; }
       .controls-bar { grid-template-columns: 1fr; }
@@ -358,6 +440,8 @@
       .hud-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .lifecycle-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .scenario-grid, .evidence-grid, .hero-summary, .media-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .dock-vision-shell { grid-template-columns: 1fr; }
+      .dock-camera-box { width: 100%; max-width: 420px; height: min(72vw, 420px); }
     }
     @media (max-width: 720px) {
       .page { width: min(100% - 16px, 1480px); margin: 12px auto 28px; }
@@ -365,6 +449,7 @@
       .scene-shell { margin: 16px 16px 0; height: 460px; }
       .controls-bar { padding: 16px; }
       .hero-summary, .hud-grid, .lifecycle-grid, .scenario-grid, .evidence-grid, .media-grid { grid-template-columns: 1fr; }
+      .dock-camera-meta { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -426,6 +511,34 @@
         </div>
       </div>
       <div class="footer-note">Bundle source: <span id="bundle-name"></span></div>
+    </section>
+
+    <section class="grid-2">
+      <article class="panel">
+        <div class="chart-card">
+          <div class="eyebrow">Dock Vision</div>
+          <h2>Downward Camera and QR Marker</h2>
+          <p>The panel below is driven from the live projected dock-stream records. It shows what the landing camera would see once the drone enters precision landing and the QR marker is pulled into the optical centerline.</p>
+          <div class="dock-vision-shell">
+            <div class="dock-camera-box">
+              <canvas id="dock-camera-canvas" width="320" height="320" aria-label="Projected downward landing camera"></canvas>
+              <div class="dock-crosshair" id="dock-crosshair"></div>
+            </div>
+            <div>
+              <div class="dock-camera-meta" id="dock-camera-meta"></div>
+              <div class="dock-camera-note" id="dock-camera-note"></div>
+            </div>
+          </div>
+        </div>
+      </article>
+      <article class="panel">
+        <div class="table-card">
+          <div class="eyebrow">Dock Guidance</div>
+          <h2>Landing Target Timeline</h2>
+          <p>The landing sequence below is built from live PX4 dock-approach artifacts: activation radius, LANDING_TARGET packet flow, bridge forwarding, and touchdown accuracy.</p>
+          <div id="dock-timeline" class="dock-timeline"></div>
+        </div>
+      </article>
     </section>
 
     <section class="grid-2">
@@ -524,9 +637,12 @@
     const sceneExtentM = Number(data.simulation?.scene_extent_m || 200);
     const dockTarget = data.simulation?.dock_target || { north_m: 0, east_m: 0, down_m: 0 };
     const dockRecords = Array.isArray(data.dock?.records) ? data.dock.records : [];
+    const dockCameraFrames = Array.isArray(data.dock?.camera_frames) ? data.dock.camera_frames : [];
+    const dockTimelineEvents = Array.isArray(data.dock?.timeline_events) ? data.dock.timeline_events : [];
     const precisionSteps = Array.isArray(data.precision_landing?.nominal_steps) ? data.precision_landing.nominal_steps : [];
     const liveWeatherObservations = Array.isArray(data.weather?.live_validation?.observations) ? data.weather.live_validation.observations : [];
     const mediaBindings = Array.isArray(data.media) ? data.media : [];
+    const dockCameraFrameBySourceIndex = new Map(dockCameraFrames.map((frame) => [Number(frame.source_index), frame]));
 
     const MODE_COLORS = {
       mission: "#53b7ff",
@@ -539,7 +655,7 @@
     };
 
     let playhead = 0;
-    let isPlaying = false;
+    let isPlaying = telemetry.length > 1;
     let playbackSpeed = 1;
     let cameraMode = "follow";
     let lastAnimationTs = 0;
@@ -548,12 +664,15 @@
     const timelineSlider = document.getElementById("timeline-slider");
     const speedButtons = Array.from(document.querySelectorAll("#speed-controls button"));
     const cameraButtons = Array.from(document.querySelectorAll("#camera-controls button"));
+    const dockCameraCanvas = document.getElementById("dock-camera-canvas");
+    const dockCameraContext = dockCameraCanvas ? dockCameraCanvas.getContext("2d") : null;
+    const dockCrosshair = document.getElementById("dock-crosshair");
 
     function statusClass(value) {
-      if (value === true || value === "continue" || value === "consumed" || value === "consumed_from_live_telemetry_projection") {
+      if (value === true || value === "good" || value === "continue" || value === "consumed" || value === "consumed_from_live_telemetry_projection") {
         return "good";
       }
-      if (value === false || value === "abort_launch") {
+      if (value === false || value === "bad" || value === "abort_launch") {
         return "bad";
       }
       if (typeof value === "string" && (value.includes("return") || value.includes("warn"))) {
@@ -698,6 +817,160 @@
       );
     }
 
+    function renderDockTimeline() {
+      if (!dockTimelineEvents.length) {
+        setHtml(
+          "dock-timeline",
+          `<div class="dock-timeline-item"><strong class="muted">No dock guidance events found</strong><p>Rebuild the replay bundle with the latest live dock approach validation to populate the landing target proof chain.</p></div>`
+        );
+        return;
+      }
+      setHtml(
+        "dock-timeline",
+        dockTimelineEvents.map((event) => `
+          <div class="dock-timeline-item">
+            <label>${event.status || "info"}</label>
+            <strong class="${statusClass(event.status)}">${event.label || "Dock event"}</strong>
+            <p>${event.detail || ""}</p>
+          </div>
+        `).join("")
+      );
+    }
+
+    function currentDockCameraFrame(indexFloat) {
+      if (!dockCameraFrames.length || !telemetry.length) {
+        return null;
+      }
+      const boundedIndex = clamp(Math.round(indexFloat), 0, telemetry.length - 1);
+      const activeFrame = telemetry[boundedIndex];
+      if (!activeFrame || activeFrame.source !== "dock_stream") {
+        return null;
+      }
+      return dockCameraFrameBySourceIndex.get(Number(activeFrame.source_index)) || null;
+    }
+
+    function renderDockCamera(frame, flightFrame, options = {}) {
+      if (!dockCameraContext || !dockCameraCanvas) {
+        return;
+      }
+      const previewOnly = Boolean(options.previewOnly);
+      const context = dockCameraContext;
+      const width = dockCameraCanvas.width;
+      const height = dockCameraCanvas.height;
+      context.clearRect(0, 0, width, height);
+      const gradient = context.createLinearGradient(0, 0, 0, height);
+      gradient.addColorStop(0, "#07101a");
+      gradient.addColorStop(1, "#101723");
+      context.fillStyle = gradient;
+      context.fillRect(0, 0, width, height);
+      context.strokeStyle = "rgba(84, 201, 255, 0.12)";
+      context.lineWidth = 1;
+      for (let step = 1; step < 6; step += 1) {
+        const x = (width / 6) * step;
+        const y = (height / 6) * step;
+        context.beginPath();
+        context.moveTo(x, 0);
+        context.lineTo(x, height);
+        context.stroke();
+        context.beginPath();
+        context.moveTo(0, y);
+        context.lineTo(width, y);
+        context.stroke();
+      }
+      context.strokeStyle = "rgba(0, 212, 170, 0.16)";
+      context.lineWidth = 2;
+      context.strokeRect(16, 16, width - 32, height - 32);
+
+      if (!frame) {
+        if (dockCameraFrames.length) {
+          renderDockCamera(dockCameraFrames[0], flightFrame, { previewOnly: true });
+          return;
+        }
+        if (dockCrosshair) {
+          dockCrosshair.style.color = "#ffb454";
+          dockCrosshair.style.borderColor = "#ffb454";
+        }
+        context.fillStyle = "rgba(232, 232, 237, 0.72)";
+        context.font = '600 16px Inter, sans-serif';
+        context.textAlign = "center";
+        context.fillText("Awaiting dock-stream camera lock", width / 2, height / 2 - 10);
+        context.font = '400 13px Inter, sans-serif';
+        context.fillStyle = "rgba(156, 163, 179, 0.92)";
+        context.fillText("Mission / RTL frames render here once landing target data begins.", width / 2, height / 2 + 16);
+        setHtml(
+          "dock-camera-meta",
+          [
+            ["Replay phase", flightFrame?.mode || "mission"],
+            ["Camera state", "standby"],
+            ["Altitude", `${Number(flightFrame?.altitude_agl_m || 0).toFixed(2)} m`],
+            ["Dock error", `${Number(flightFrame?.horizontal_distance_to_dock_m || 0).toFixed(3)} m`],
+          ].map(([label, value]) => `<div class="stat"><label>${label}</label><strong>${value}</strong></div>`).join("")
+        );
+        document.getElementById("dock-camera-note").textContent = "The camera inset becomes active when the replay reaches the live dock stream. Before that point the drone is still flying the mission or returning toward home.";
+        return;
+      }
+
+      const observation = frame.observation || {};
+      const relativeTarget = frame.relative_target || {};
+      const acquired = Boolean(observation.acquired);
+      const quality = Number(observation.quality || 0);
+      const rangeM = Number(observation.range_m || frame.altitude_agl_m || 0);
+      const forwardAngleRad = Number(observation.forward_angle_rad || 0);
+      const rightAngleRad = Number(observation.right_angle_rad || 0);
+      const fieldOfViewRad = Math.PI / 3;
+      const maxOffset = Math.tan(fieldOfViewRad / 2);
+      const offsetX = clamp(Math.tan(rightAngleRad) / maxOffset, -1.1, 1.1);
+      const offsetY = clamp(Math.tan(forwardAngleRad) / maxOffset, -1.1, 1.1);
+      const markerX = width * 0.5 + offsetX * width * 0.3;
+      const markerY = height * 0.5 - offsetY * height * 0.3;
+      const markerSize = clamp(34, 220 / Math.max(rangeM, 1.0), 164);
+      const guidanceColor = acquired ? "#2ecc71" : "#ffb454";
+
+      context.strokeStyle = "rgba(255,255,255,0.12)";
+      context.lineWidth = 1.5;
+      context.beginPath();
+      context.moveTo(width / 2, height / 2);
+      context.lineTo(markerX, markerY);
+      context.stroke();
+
+      context.beginPath();
+      context.arc(markerX, markerY, markerSize * 0.74, 0, Math.PI * 2);
+      context.strokeStyle = acquired ? "rgba(46,204,113,0.46)" : "rgba(255,180,84,0.46)";
+      context.lineWidth = 3;
+      context.stroke();
+
+      drawMarkerPattern(context, markerX, markerY, markerSize, degToRad(frame.vehicle_pose?.yaw_deg || 0) * 0.18);
+
+      context.fillStyle = guidanceColor;
+      context.font = '700 14px Inter, sans-serif';
+      context.textAlign = "left";
+      context.fillText(`lock ${acquired ? "acquired" : "searching"}`, 20, 28);
+      context.fillStyle = "rgba(232,232,237,0.92)";
+      context.font = '500 13px Inter, sans-serif';
+      context.fillText(`range ${rangeM.toFixed(2)} m`, 20, 48);
+      context.fillText(`fwd ${Number(relativeTarget.forward_error_m || 0).toFixed(2)} m`, 20, 68);
+      context.fillText(`right ${Number(relativeTarget.right_error_m || 0).toFixed(2)} m`, 20, 88);
+
+      if (dockCrosshair) {
+        dockCrosshair.style.color = guidanceColor;
+        dockCrosshair.style.borderColor = guidanceColor;
+      }
+      setHtml(
+        "dock-camera-meta",
+        [
+          ["Precision phase", previewOnly ? "dock_preview" : (frame.mode || "dock_stream"), statusClass(previewOnly ? "warn" : frame.mode)],
+          ["Marker quality", `${quality.toFixed(2)}`, quality >= 0.8 ? "good" : quality >= 0.45 ? "warn" : "bad"],
+          ["Range", `${rangeM.toFixed(2)} m`],
+          ["Horizontal error", `${Number(relativeTarget.horizontal_error_m || 0).toFixed(3)} m`, Number(relativeTarget.horizontal_error_m || 0) <= 0.4 ? "good" : "warn"],
+          ["Forward / Right", `${Number(relativeTarget.forward_error_m || 0).toFixed(2)} / ${Number(relativeTarget.right_error_m || 0).toFixed(2)} m`],
+          ["Battery", frame.battery_percent == null ? "-" : `${Number(frame.battery_percent).toFixed(0)}%`],
+        ].map(([label, value, extraClass]) => `<div class="stat"><label>${label}</label><strong class="${extraClass || ""}">${value}</strong></div>`).join("")
+      );
+      document.getElementById("dock-camera-note").textContent = previewOnly
+        ? `Live server dock preview ${Number(frame.source_index) + 1}/${dockCameraFrames.length}. The main replay is still in the mission/RTL segment, but this inset is already showing the real projected landing-target frame from the synced PX4 run.`
+        : `Live projected frame ${Number(frame.source_index) + 1}/${dockCameraFrames.length}. The QR marker moves toward the optical center as PX4 closes the landing-target error and descends onto the pad.`;
+    }
+
     function renderParameterTable() {
       const rows = (Array.isArray(data.precision_landing?.parameters) ? data.precision_landing.parameters : []).map((item) => `
         <tr>
@@ -838,6 +1111,64 @@
       const min = Math.min(...numeric);
       const max = Math.max(...numeric);
       return { min, max: min === max ? min + 1 : max };
+    }
+
+    function clamp(value, min, max) {
+      return Math.min(max, Math.max(min, value));
+    }
+
+    function drawMarkerPattern(context, centerX, centerY, size, rotationRad = 0) {
+      const cellSize = size / 6;
+      const outerSize = cellSize * 6;
+      const innerStart = -outerSize / 2 + cellSize;
+      const pattern = [
+        [1, 1, 0, 1],
+        [0, 1, 1, 0],
+        [1, 0, 1, 1],
+        [0, 1, 0, 1],
+      ];
+      context.save();
+      context.translate(centerX, centerY);
+      context.rotate(rotationRad);
+      context.fillStyle = "#f8fafc";
+      context.fillRect(-outerSize / 2, -outerSize / 2, outerSize, outerSize);
+      context.fillStyle = "#0c1017";
+      context.fillRect(-outerSize / 2 + cellSize * 0.25, -outerSize / 2 + cellSize * 0.25, outerSize - cellSize * 0.5, outerSize - cellSize * 0.5);
+      for (let row = 0; row < pattern.length; row += 1) {
+        for (let column = 0; column < pattern[row].length; column += 1) {
+          context.fillStyle = pattern[row][column] ? "#f8fafc" : "#0c1017";
+          context.fillRect(
+            innerStart + column * cellSize,
+            innerStart + row * cellSize,
+            cellSize,
+            cellSize,
+          );
+        }
+      }
+      context.strokeStyle = "rgba(232,232,237,0.8)";
+      context.lineWidth = Math.max(2, size * 0.04);
+      context.strokeRect(-outerSize / 2, -outerSize / 2, outerSize, outerSize);
+      context.restore();
+    }
+
+    function markerTexture() {
+      const canvas = document.createElement("canvas");
+      canvas.width = 256;
+      canvas.height = 256;
+      const context = canvas.getContext("2d");
+      context.fillStyle = "#d7f8ef";
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.fillStyle = "#0b1118";
+      context.fillRect(0, 0, canvas.width, 24);
+      context.fillRect(0, canvas.height - 24, canvas.width, 24);
+      context.fillRect(0, 0, 24, canvas.height);
+      context.fillRect(canvas.width - 24, 0, 24, canvas.height);
+      drawMarkerPattern(context, canvas.width / 2, canvas.height / 2, 150, 0);
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.magFilter = THREE.NearestFilter;
+      texture.minFilter = THREE.LinearFilter;
+      texture.needsUpdate = true;
+      return texture;
     }
 
     function renderTelemetryChart() {
@@ -994,16 +1325,23 @@
       pad.receiveShadow = true;
       pad.position.set(Number(dockTarget.east_m || 0), 0.08, Number(dockTarget.north_m || 0));
       dockGroup.add(pad);
+      const markerPlane = new THREE.Mesh(
+        new THREE.PlaneGeometry(2.1, 2.1),
+        new THREE.MeshBasicMaterial({ map: markerTexture(), transparent: false }),
+      );
+      markerPlane.rotation.x = -Math.PI / 2;
+      markerPlane.position.set(pad.position.x, 0.17, pad.position.z);
+      dockGroup.add(markerPlane);
       const ring = new THREE.Mesh(new THREE.RingGeometry(2.35, 2.8, 48), new THREE.MeshBasicMaterial({ color: 0x00d4aa, transparent: true, opacity: 0.4, side: THREE.DoubleSide }));
       ring.rotation.x = -Math.PI / 2;
       ring.position.set(pad.position.x, 0.09, pad.position.z);
       dockGroup.add(ring);
-      const crossMaterial = new THREE.MeshStandardMaterial({ color: 0xe8e8ed, emissive: 0x1a1a28, emissiveIntensity: 0.6 });
-      const crossA = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.06, 0.26), crossMaterial);
-      const crossB = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.06, 2.0), crossMaterial);
-      crossA.position.set(pad.position.x, 0.18, pad.position.z);
-      crossB.position.set(pad.position.x, 0.18, pad.position.z);
-      dockGroup.add(crossA, crossB);
+      const beacon = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.08, 0.08, 0.9, 20),
+        new THREE.MeshStandardMaterial({ color: 0xe8e8ed, emissive: 0x1f2937, emissiveIntensity: 0.9 }),
+      );
+      beacon.position.set(pad.position.x, 0.52, pad.position.z);
+      dockGroup.add(beacon);
       scene.add(dockGroup);
     }
 
@@ -1064,6 +1402,21 @@
       return { root: yawGroup, yawGroup, pitchGroup, rollGroup, rotors };
     }
 
+    function createDockVisionGuide() {
+      const frustumGeometry = new THREE.BufferGeometry();
+      frustumGeometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(48), 3));
+      const frustum = new THREE.LineSegments(
+        frustumGeometry,
+        new THREE.LineBasicMaterial({ color: 0x54c9ff, transparent: true, opacity: 0.65 }),
+      );
+      const guidanceLine = new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]),
+        new THREE.LineDashedMaterial({ color: 0xffb454, dashSize: 0.4, gapSize: 0.22, transparent: true, opacity: 0.88 }),
+      );
+      guidanceLine.computeLineDistances();
+      return { frustum, guidanceLine };
+    }
+
     const sceneContainer = document.getElementById("flight-scene");
     const scene = new THREE.Scene();
     scene.background = new THREE.Color("#0a0a1a");
@@ -1108,6 +1461,9 @@
     buildModeTrails(scene);
     const droneMesh = createDroneMesh();
     scene.add(droneMesh.root);
+    const dockVisionGuide = createDockVisionGuide();
+    scene.add(dockVisionGuide.frustum);
+    scene.add(dockVisionGuide.guidanceLine);
     const altitudeLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]), new THREE.LineDashedMaterial({ color: 0x9ae6d3, linewidth: 1, dashSize: 0.45, gapSize: 0.25, transparent: true, opacity: 0.8 }));
     altitudeLine.computeLineDistances();
     scene.add(altitudeLine);
@@ -1123,11 +1479,55 @@
     timelineSlider.addEventListener("input", (event) => { playhead = Number(event.target.value || 0); isPlaying = false; playToggle.textContent = "Play"; });
     setPlaybackSpeed(1);
     setCameraMode("follow");
+    playToggle.textContent = isPlaying ? "Pause" : "Play";
 
     function updateHud(frame) {
       setHtml("hud-grid", [["Altitude", `${Number(frame.altitude_agl_m || 0).toFixed(2)} m`], ["Speed", `${Number(frame.speed_mps || 0).toFixed(2)} m/s`], ["Mode", frame.mode || "-", statusClass(frame.mode)], ["Battery", `${Number(frame.battery_percent || 0).toFixed(0)}%`], ["Dock Error", `${Number(frame.horizontal_distance_to_dock_m || 0).toFixed(3)} m`]].map(([label, value, extraClass]) => `<div class="hud-card"><label>${label}</label><strong class="${extraClass || ""}">${value}</strong></div>`).join(""));
     }
     function updateAltitudeLine(position) { altitudeLine.geometry.setFromPoints([position, new THREE.Vector3(position.x, 0, position.z)]); altitudeLine.computeLineDistances(); }
+    function updateDockVisionGuide(frame, position, dockCameraFrame) {
+      const targetPoint = new THREE.Vector3(Number(dockTarget.east_m || 0), 0.08, Number(dockTarget.north_m || 0));
+      const origin = position.clone();
+      const altitude = Math.max(0.3, Number(frame.altitude_agl_m || 0));
+      const footprintHalfWidth = clamp(altitude * 0.18, 0.8, 6.0);
+      const footprintHalfDepth = clamp(altitude * 0.18, 0.8, 6.0);
+      const yawRad = degToRad(frame.yaw_deg || 0);
+      const basisEast = new THREE.Vector3(Math.cos(yawRad), 0, Math.sin(yawRad));
+      const basisNorth = new THREE.Vector3(-Math.sin(yawRad), 0, Math.cos(yawRad));
+      const center = new THREE.Vector3(position.x, 0.06, position.z);
+      const footprintCorners = [
+        center.clone().addScaledVector(basisEast, -footprintHalfWidth).addScaledVector(basisNorth, -footprintHalfDepth),
+        center.clone().addScaledVector(basisEast, footprintHalfWidth).addScaledVector(basisNorth, -footprintHalfDepth),
+        center.clone().addScaledVector(basisEast, footprintHalfWidth).addScaledVector(basisNorth, footprintHalfDepth),
+        center.clone().addScaledVector(basisEast, -footprintHalfWidth).addScaledVector(basisNorth, footprintHalfDepth),
+      ];
+      const frustumSegments = [
+        [origin, footprintCorners[0]],
+        [origin, footprintCorners[1]],
+        [origin, footprintCorners[2]],
+        [origin, footprintCorners[3]],
+        [footprintCorners[0], footprintCorners[1]],
+        [footprintCorners[1], footprintCorners[2]],
+        [footprintCorners[2], footprintCorners[3]],
+        [footprintCorners[3], footprintCorners[0]],
+      ];
+      const positionArray = dockVisionGuide.frustum.geometry.attributes.position.array;
+      let writeIndex = 0;
+      frustumSegments.forEach(([fromPoint, toPoint]) => {
+        positionArray[writeIndex++] = fromPoint.x;
+        positionArray[writeIndex++] = fromPoint.y;
+        positionArray[writeIndex++] = fromPoint.z;
+        positionArray[writeIndex++] = toPoint.x;
+        positionArray[writeIndex++] = toPoint.y;
+        positionArray[writeIndex++] = toPoint.z;
+      });
+      dockVisionGuide.frustum.geometry.attributes.position.needsUpdate = true;
+      const acquired = Boolean(dockCameraFrame?.observation?.acquired);
+      dockVisionGuide.frustum.material.color.set(acquired ? 0x2ecc71 : 0x54c9ff);
+      dockVisionGuide.guidanceLine.geometry.setFromPoints([position, targetPoint]);
+      dockVisionGuide.guidanceLine.material.color.set(acquired ? 0x2ecc71 : 0xffb454);
+      dockVisionGuide.guidanceLine.computeLineDistances();
+    }
     function updateCamera(frame, position) {
       const yawRad = degToRad(frame.yaw_deg || 0);
       const followOffset = new THREE.Vector3(-10, 7, -15).applyAxisAngle(new THREE.Vector3(0, 1, 0), yawRad);
@@ -1138,6 +1538,7 @@
     }
     function updateScene(frame, deltaSeconds) {
       const position = frameToVector(frame);
+      const dockCameraFrame = currentDockCameraFrame(playhead);
       droneMesh.root.position.copy(position);
       droneMesh.yawGroup.rotation.y = -degToRad(frame.yaw_deg || 0);
       droneMesh.pitchGroup.rotation.x = degToRad(frame.pitch_deg || 0);
@@ -1145,7 +1546,9 @@
       const rotorSpeed = (frame.in_air ? 18 : 4) * deltaSeconds * Math.max(1, playbackSpeed);
       droneMesh.rotors.forEach((rotor, index) => { rotor.rotation.y += rotorSpeed * (index % 2 === 0 ? 1 : -1); });
       updateAltitudeLine(position);
+      updateDockVisionGuide(frame, position, dockCameraFrame);
       updateHud(frame);
+      renderDockCamera(dockCameraFrame, frame);
       updateCamera(frame, position);
     }
     function animate(timestamp) {
@@ -1163,6 +1566,7 @@
 
     renderHero();
     renderMissionLifecycle();
+    renderDockTimeline();
     renderTelemetryChart();
     renderPrecisionChart();
     renderPrecisionScenarios();

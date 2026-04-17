@@ -233,8 +233,13 @@ class RemoteExecutionBridge:
 
     REMOTE_RUNTIME_SYNC_FILES: tuple[str, ...] = (
         "autonomy/drone_system/config.py",
+        "autonomy/drone_system/live_px4_runtime.py",
+        "autonomy/drone_system/replay_bundle.py",
         "autonomy/drone_system/safety_engine.py",
+        "autonomy/drone_system/showcase_builder.py",
         "autonomy/drone_system/vehicle_interface.py",
+        "autonomy/scripts/build_latest_replay_bundle.py",
+        "autonomy/scripts/build_showcase.py",
         "autonomy/scripts/execute_interactive_mission.py",
         "autonomy/scripts/generate_synthetic_telemetry.py",
         "autonomy/scripts/run_remote_interactive_mission.py",

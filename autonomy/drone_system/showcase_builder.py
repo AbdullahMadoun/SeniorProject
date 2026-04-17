@@ -107,6 +107,110 @@ def _dock_records(dock_artifact: dict[str, Any] | None) -> list[dict[str, Any]]:
     return normalized
 
 
+def _dock_camera_frames(dock_artifact: dict[str, Any] | None) -> list[dict[str, Any]]:
+    records = _safe_get(dock_artifact, "live_stream", "records")
+    if not isinstance(records, list):
+        return []
+    normalized: list[dict[str, Any]] = []
+    for source_index, record in enumerate(records):
+        if not isinstance(record, dict):
+            continue
+        projected_frame = record.get("projected_frame")
+        if not isinstance(projected_frame, dict):
+            continue
+        observation = projected_frame.get("observation") if isinstance(projected_frame.get("observation"), dict) else {}
+        relative_target = projected_frame.get("relative_target") if isinstance(projected_frame.get("relative_target"), dict) else {}
+        vehicle_pose = projected_frame.get("vehicle_pose") if isinstance(projected_frame.get("vehicle_pose"), dict) else {}
+        snapshot = record.get("snapshot") if isinstance(record.get("snapshot"), dict) else {}
+        normalized.append(
+            {
+                "index": int(record.get("index", source_index)),
+                "source_index": source_index,
+                "mode": _normalize_mode(snapshot.get("mode")) or "unknown",
+                "battery_percent": _coerce_float(snapshot.get("battery_percent")),
+                "horizontal_distance_to_dock_m": _coerce_float(record.get("horizontal_distance_to_dock_m")),
+                "altitude_agl_m": _coerce_float(record.get("altitude_agl_m")),
+                "vehicle_pose": {
+                    "north_m": _coerce_float(vehicle_pose.get("north_m")) or 0.0,
+                    "east_m": _coerce_float(vehicle_pose.get("east_m")) or 0.0,
+                    "down_m": _coerce_float(vehicle_pose.get("down_m")) or 0.0,
+                    "yaw_deg": _coerce_float(vehicle_pose.get("yaw_deg")) or 0.0,
+                    "roll_deg": _coerce_float(vehicle_pose.get("roll_deg")) or 0.0,
+                    "pitch_deg": _coerce_float(vehicle_pose.get("pitch_deg")) or 0.0,
+                },
+                "observation": {
+                    "acquired": bool(observation.get("acquired", False)),
+                    "quality": _coerce_float(observation.get("quality")) or 0.0,
+                    "forward_angle_rad": _coerce_float(observation.get("forward_angle_rad")) or 0.0,
+                    "right_angle_rad": _coerce_float(observation.get("right_angle_rad")) or 0.0,
+                    "range_m": _coerce_float(observation.get("range_m")) or 0.0,
+                },
+                "relative_target": {
+                    "forward_error_m": _coerce_float(relative_target.get("forward_error_m")) or 0.0,
+                    "right_error_m": _coerce_float(relative_target.get("right_error_m")) or 0.0,
+                    "down_error_m": _coerce_float(relative_target.get("down_error_m")) or 0.0,
+                    "horizontal_error_m": _coerce_float(relative_target.get("horizontal_error_m")) or 0.0,
+                },
+                "target_north_m": _coerce_float(projected_frame.get("target_north_m")) or 0.0,
+                "target_east_m": _coerce_float(projected_frame.get("target_east_m")) or 0.0,
+                "target_down_m": _coerce_float(projected_frame.get("target_down_m")) or 0.0,
+            }
+        )
+    return normalized
+
+
+def _dock_timeline_events(dock_artifact: dict[str, Any] | None) -> list[dict[str, Any]]:
+    if not isinstance(dock_artifact, dict):
+        return []
+    events: list[dict[str, Any]] = []
+    activation_radius_m = _coerce_float(_safe_get(dock_artifact, "rtl_approach_window", "activation_radius_m"))
+    if activation_radius_m is not None:
+        events.append(
+            {
+                "label": "Dock window armed",
+                "detail": f"PX4 entered the precision-landing window inside {activation_radius_m:.1f} m.",
+                "status": "good",
+            }
+        )
+    receiver_count = _coerce_float(_safe_get(dock_artifact, "receiver_observation", "count"))
+    if receiver_count is not None:
+        events.append(
+            {
+                "label": "Receiver matched target packets",
+                "detail": f"Receiver observed {int(receiver_count)} LANDING_TARGET matches.",
+                "status": "good" if receiver_count > 0 else "warn",
+            }
+        )
+    host_to_px4_count = _coerce_float(_safe_get(dock_artifact, "bridge_summary", "gcs_host_to_px4_count"))
+    if host_to_px4_count is not None:
+        events.append(
+            {
+                "label": "Bridge forwarded guidance",
+                "detail": f"Host-to-PX4 bridge forwarded {int(host_to_px4_count)} packets.",
+                "status": "good" if host_to_px4_count > 0 else "warn",
+            }
+        )
+    final_error_m = _coerce_float(_safe_get(dock_artifact, "live_stream", "last_record", "horizontal_distance_to_dock_m"))
+    if final_error_m is not None:
+        events.append(
+            {
+                "label": "Final touchdown error",
+                "detail": f"Dock stream finished at {final_error_m:.3f} m horizontal error.",
+                "status": "good" if final_error_m <= 0.4 else "warn",
+            }
+        )
+    proof_status = dock_artifact.get("proof_status")
+    if isinstance(proof_status, str) and proof_status:
+        events.append(
+            {
+                "label": "Dock proof status",
+                "detail": proof_status.replace("_", " "),
+                "status": "good" if "consumed" in proof_status or "streamed" in proof_status else "warn",
+            }
+        )
+    return events
+
+
 def _weather_results(weather_manifest: dict[str, Any] | None) -> list[dict[str, Any]]:
     results = _safe_get(weather_manifest, "results")
     if not isinstance(results, list):
@@ -273,8 +377,24 @@ def _normalized_telemetry_frame(
     }
 
 
-def _flight_telemetry(dock_artifact: dict[str, Any] | None) -> list[dict[str, Any]]:
-    if not isinstance(dock_artifact, dict):
+def _synthetic_execution_rtl_record(execution_validation: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not isinstance(execution_validation, dict):
+        return None
+    local_pose = execution_validation.get("after_rtl_local_pose")
+    snapshot = execution_validation.get("after_rtl_snapshot")
+    if not isinstance(local_pose, dict) or not isinstance(snapshot, dict):
+        return None
+    return {
+        "local_pose": local_pose,
+        "snapshot": snapshot,
+    }
+
+
+def _flight_telemetry(
+    execution_validation: dict[str, Any] | None,
+    dock_artifact: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    if not isinstance(execution_validation, dict) and not isinstance(dock_artifact, dict):
         return []
     dock_target_raw = dock_artifact.get("dock_target") if isinstance(dock_artifact.get("dock_target"), dict) else {}
     dock_target = {
@@ -282,11 +402,26 @@ def _flight_telemetry(dock_artifact: dict[str, Any] | None) -> list[dict[str, An
         "east_m": _coerce_float(dock_target_raw.get("east_m")) or 0.0,
         "down_m": _coerce_float(dock_target_raw.get("down_m")) or 0.0,
     }
-    frame_groups = (
-        ("mission_entry", _safe_get(dock_artifact, "mission_entry_observations") or []),
-        ("departure", _safe_get(dock_artifact, "departure_observations") or []),
-        ("rtl_approach", _safe_get(dock_artifact, "rtl_approach_window", "observations") or []),
-        ("dock_stream", _safe_get(dock_artifact, "live_stream", "records") or []),
+    mission_phase_snapshots = _safe_get(execution_validation, "mission_phase_snapshots") or []
+    has_execution_mission_stream = isinstance(mission_phase_snapshots, list) and bool(mission_phase_snapshots)
+    frame_groups: list[tuple[str, list[dict[str, Any]]]] = []
+    if has_execution_mission_stream:
+        frame_groups.append(("mission_phase", mission_phase_snapshots))
+    else:
+        frame_groups.extend(
+            [
+                ("mission_entry", _safe_get(dock_artifact, "mission_entry_observations") or []),
+                ("departure", _safe_get(dock_artifact, "departure_observations") or []),
+            ]
+        )
+    synthetic_rtl = _synthetic_execution_rtl_record(execution_validation)
+    if synthetic_rtl is not None:
+        frame_groups.append(("after_rtl", [synthetic_rtl]))
+    frame_groups.extend(
+        [
+            ("rtl_approach", _safe_get(dock_artifact, "rtl_approach_window", "observations") or []),
+            ("dock_stream", _safe_get(dock_artifact, "live_stream", "records") or []),
+        ]
     )
     normalized: list[dict[str, Any]] = []
     for source, frames in frame_groups:
@@ -390,7 +525,7 @@ def build_showcase_data(replay_bundle_manifest: dict[str, Any]) -> dict[str, Any
     precision_manifest = _load_preferred_artifact(replay_bundle_manifest, "precision_landing_manifest")
     weather_manifest = _load_preferred_artifact(replay_bundle_manifest, "weather_scenario_manifest")
     media_bindings = _load_preferred_value(replay_bundle_manifest, "media_bindings")
-    flight_telemetry = _flight_telemetry(dock_artifact)
+    flight_telemetry = _flight_telemetry(execution_validation, dock_artifact)
     mission_waypoints = _mission_waypoints(mission_validation)
     geofence_radius_m = _coerce_float(_safe_get(mission_validation, "geofence", "radius_m")) or DEFAULT_GEOFENCE_RADIUS_M
     dock_target = {
@@ -398,6 +533,7 @@ def build_showcase_data(replay_bundle_manifest: dict[str, Any]) -> dict[str, Any
         "east_m": _coerce_float(_safe_get(dock_artifact, "dock_target", "east_m")) or 0.0,
         "down_m": _coerce_float(_safe_get(dock_artifact, "dock_target", "down_m")) or 0.0,
     }
+    dock_camera_frames = _dock_camera_frames(dock_artifact)
 
     return {
         "bundle_name": replay_bundle_manifest.get("bundle_name"),
@@ -433,6 +569,8 @@ def build_showcase_data(replay_bundle_manifest: dict[str, Any]) -> dict[str, Any
             "final_in_air": _safe_get(dock_artifact, "live_stream", "last_record", "snapshot", "in_air"),
             "telemetry_frame_count": len(flight_telemetry),
             "records": _dock_records(dock_artifact),
+            "camera_frames": dock_camera_frames,
+            "timeline_events": _dock_timeline_events(dock_artifact),
         },
         "precision_landing": {
             "parameters": _precision_parameters(precision_profile),

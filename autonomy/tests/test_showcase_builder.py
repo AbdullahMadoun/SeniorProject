@@ -66,6 +66,7 @@ class ShowcaseBuilderTests(unittest.TestCase):
                     },
                     "mission_phase_snapshots": [
                         {
+                            "t_s": 1.0,
                             "snapshot": {
                                 "mode": "mission",
                                 "armed": True,
@@ -73,7 +74,35 @@ class ShowcaseBuilderTests(unittest.TestCase):
                                 "battery_percent": 98.0,
                                 "position": {"alt_m": 0.0},
                                 "mission_progress": {"current": 1, "total": 6},
-                            }
+                            },
+                            "local_pose": {"north_m": 0.0, "east_m": 0.0, "down_m": -3.5, "yaw_deg": 96.9},
+                            "attitude_euler": {"roll_deg": 1.0, "pitch_deg": -0.8, "yaw_deg": 96.9},
+                        },
+                        {
+                            "t_s": 2.0,
+                            "snapshot": {
+                                "mode": "mission",
+                                "armed": True,
+                                "in_air": True,
+                                "battery_percent": 94.0,
+                                "position": {"alt_m": 0.0},
+                                "mission_progress": {"current": 2, "total": 6},
+                            },
+                            "local_pose": {"north_m": 6.5, "east_m": 4.0, "down_m": -10.0, "yaw_deg": 52.0},
+                            "attitude_euler": {"roll_deg": 4.0, "pitch_deg": -3.0, "yaw_deg": 52.0},
+                        },
+                        {
+                            "t_s": 3.0,
+                            "snapshot": {
+                                "mode": "mission",
+                                "armed": True,
+                                "in_air": True,
+                                "battery_percent": 90.0,
+                                "position": {"alt_m": 0.0},
+                                "mission_progress": {"current": 3, "total": 6},
+                            },
+                            "local_pose": {"north_m": 14.0, "east_m": 18.0, "down_m": -10.0, "yaw_deg": -10.0},
+                            "attitude_euler": {"roll_deg": 6.0, "pitch_deg": -4.0, "yaw_deg": -10.0},
                         }
                     ],
                     "after_rtl_snapshot": {
@@ -83,6 +112,14 @@ class ShowcaseBuilderTests(unittest.TestCase):
                         "battery_percent": 82.0,
                         "position": {"alt_m": 6.5},
                         "mission_progress": {"current": 0, "total": 0},
+                    },
+                    "after_rtl_local_pose": {
+                        "north_m": 10.1,
+                        "east_m": 1.7,
+                        "down_m": -10.0,
+                        "yaw_deg": -91.1,
+                        "roll_deg": 2.0,
+                        "pitch_deg": -2.0,
                     },
                 },
                 "precision_profile": {
@@ -173,6 +210,15 @@ class ShowcaseBuilderTests(unittest.TestCase):
                                 "horizontal_distance_to_dock_m": 10.6,
                                 "vehicle_local_pose": {"north_m": 10.5, "east_m": 1.3, "down_m": -23.1, "yaw_deg": -91.3},
                                 "attitude_euler": {"roll_deg": 2.5, "pitch_deg": -1.2, "yaw_deg": -91.3},
+                                "projected_frame": {
+                                    "vehicle_pose": {"north_m": 10.5, "east_m": 1.3, "down_m": -23.1, "yaw_deg": -91.3, "roll_deg": 2.5, "pitch_deg": -1.2},
+                                    "dock_target": {"north_m": 0.0, "east_m": 0.0, "down_m": 0.0},
+                                    "observation": {"acquired": True, "quality": 0.95, "forward_angle_rad": 0.12, "right_angle_rad": -0.08, "range_m": 23.1},
+                                    "relative_target": {"forward_error_m": 10.5, "right_error_m": 1.3, "down_error_m": 23.1, "horizontal_error_m": 10.6},
+                                    "target_north_m": 0.0,
+                                    "target_east_m": 0.0,
+                                    "target_down_m": 0.0,
+                                },
                             },
                             {
                                 "index": 1,
@@ -181,6 +227,15 @@ class ShowcaseBuilderTests(unittest.TestCase):
                                 "horizontal_distance_to_dock_m": 0.385,
                                 "vehicle_local_pose": {"north_m": 0.38, "east_m": 0.06, "down_m": 0.06, "yaw_deg": 97.8},
                                 "attitude_euler": {"roll_deg": 0.0, "pitch_deg": 0.0, "yaw_deg": 97.8},
+                                "projected_frame": {
+                                    "vehicle_pose": {"north_m": 0.38, "east_m": 0.06, "down_m": 0.06, "yaw_deg": 97.8, "roll_deg": 0.0, "pitch_deg": 0.0},
+                                    "dock_target": {"north_m": 0.0, "east_m": 0.0, "down_m": 0.0},
+                                    "observation": {"acquired": True, "quality": 0.95, "forward_angle_rad": -0.03, "right_angle_rad": 0.02, "range_m": 0.2},
+                                    "relative_target": {"forward_error_m": 0.38, "right_error_m": 0.06, "down_error_m": 0.06, "horizontal_error_m": 0.385},
+                                    "target_north_m": 0.0,
+                                    "target_east_m": 0.0,
+                                    "target_down_m": 0.0,
+                                },
                             },
                         ],
                     },
@@ -221,14 +276,19 @@ class ShowcaseBuilderTests(unittest.TestCase):
         self.assertEqual(showcase_data["mission"]["waypoint_count"], 6)
         self.assertEqual(len(showcase_data["mission"]["lifecycle"]), 7)
         self.assertEqual(showcase_data["dock"]["records"][0]["index"], 0)
-        self.assertEqual(len(showcase_data["flight_telemetry"]), 6)
-        self.assertEqual(showcase_data["flight_telemetry"][0]["source"], "mission_entry")
+        self.assertEqual(len(showcase_data["flight_telemetry"]), 7)
+        self.assertEqual(showcase_data["flight_telemetry"][0]["source"], "mission_phase")
+        self.assertEqual(showcase_data["flight_telemetry"][2]["east_m"], 18.0)
+        self.assertEqual(showcase_data["flight_telemetry"][3]["source"], "after_rtl")
         self.assertEqual(showcase_data["flight_telemetry"][-1]["source"], "dock_stream")
         self.assertIn("roll_deg", showcase_data["flight_telemetry"][0])
         self.assertEqual(len(showcase_data["mission"]["waypoints"]), 6)
         self.assertEqual(showcase_data["weather"]["results"][1]["safety_action"], "abort_launch")
         self.assertEqual(showcase_data["weather"]["live_validation"]["triggered_action"], "return_to_launch")
         self.assertEqual(showcase_data["media"][0]["id"], "gazebo_recording")
+        self.assertEqual(len(showcase_data["dock"]["camera_frames"]), 2)
+        self.assertEqual(showcase_data["dock"]["camera_frames"][0]["observation"]["quality"], 0.95)
+        self.assertGreaterEqual(len(showcase_data["dock"]["timeline_events"]), 3)
 
     def test_render_showcase_html_contains_key_sections(self) -> None:
         html = render_showcase_html(build_showcase_data(self._sample_bundle_manifest()))
@@ -240,6 +300,8 @@ class ShowcaseBuilderTests(unittest.TestCase):
         self.assertIn("Live Weather Injection", html)
         self.assertIn("Bound Media", html)
         self.assertIn("Precision Landing Parameters", html)
+        self.assertIn("Downward Camera and QR Marker", html)
+        self.assertIn("Landing Target Timeline", html)
         self.assertIn("Top-down", html)
         self.assertIn("\"flight_telemetry\"", html)
 

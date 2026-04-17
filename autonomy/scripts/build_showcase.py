@@ -14,7 +14,14 @@ from autonomy.drone_system.showcase_builder import default_replay_bundle_manifes
 OUTPUT_DIR = REPO_ROOT / "artifacts" / "showcase" / "latest"
 
 
+def _configure_stdout() -> None:
+    stdout = getattr(sys, "stdout", None)
+    if stdout is not None and hasattr(stdout, "reconfigure"):
+        stdout.reconfigure(encoding="utf-8")
+
+
 def main() -> None:
+    _configure_stdout()
     manifest_path = default_replay_bundle_manifest_path(REPO_ROOT)
     showcase_data = write_showcase(
         replay_bundle_manifest_path=manifest_path,
