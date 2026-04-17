@@ -15,6 +15,10 @@ LANDING_TARGET_ENDPOINT_PORTS = {
     "gcs": 14550,
     "offboard": 14540,
 }
+LANDING_TARGET_DIRECT_PX4_PORTS = {
+    "gcs": 18570,
+    "offboard": 14580,
+}
 
 
 @dataclass(frozen=True)
@@ -65,15 +69,33 @@ def connection_string_for_endpoint(
     endpoint: str,
     *,
     bridge_ip: str | None,
+    direct_px4: bool = False,
 ) -> str:
+    ports = LANDING_TARGET_DIRECT_PX4_PORTS if direct_px4 else LANDING_TARGET_ENDPOINT_PORTS
     try:
-        port = LANDING_TARGET_ENDPOINT_PORTS[endpoint]
+        port = ports[endpoint]
     except KeyError as exc:
-        valid = ", ".join(sorted(LANDING_TARGET_ENDPOINT_PORTS))
+        valid = ", ".join(sorted(ports))
         raise ValueError(f"Unsupported landing-target endpoint '{endpoint}'. Valid endpoints: {valid}.") from exc
 
     host = bridge_ip or "127.0.0.1"
     return f"udpout:{host}:{port}"
+
+
+def observer_connection_string_for_endpoint(
+    endpoint: str,
+    *,
+    direct_px4: bool = False,
+) -> str:
+    try:
+        if direct_px4:
+            port = LANDING_TARGET_DIRECT_PX4_PORTS[endpoint]
+            return f"udpout:127.0.0.1:{port}"
+        port = LANDING_TARGET_ENDPOINT_PORTS[endpoint]
+    except KeyError as exc:
+        valid = ", ".join(sorted(LANDING_TARGET_ENDPOINT_PORTS))
+        raise ValueError(f"Unsupported landing-target endpoint '{endpoint}'. Valid endpoints: {valid}.") from exc
+    return f"udpin:0.0.0.0:{port}"
 
 
 class LandingTargetPublisher:

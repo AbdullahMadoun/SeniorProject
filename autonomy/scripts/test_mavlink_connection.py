@@ -42,7 +42,7 @@ def test_connection(port: str = "COM5", baud: int = 115200, duration: float = 10
             return results
         
         results["connection_ok"] = True
-        print(f"✓ Connected! System {mav.target_system}, Autopilot: {hb.autopilot}")
+        print(f"[OK] Connected! System {mav.target_system}, Autopilot: {hb.autopilot}")
         
         # Collect telemetry for specified duration
         print(f"Collecting telemetry for {duration}s...")
@@ -123,29 +123,45 @@ def test_connection(port: str = "COM5", baud: int = 115200, duration: float = 10
 
 def main():
     import argparse
-    
-    parser = argparse.ArgumentParser(description="Test MAVLink connection to Pixhawk")
-    parser.add_argument("--port", "-p", default="COM5", help="Serial port")
-    parser.add_argument("--baud", "-b", type=int, default=115200, help="Baud rate")
+    import os
+
+    # Force UTF-8 output on Windows to avoid cp1252 codec errors
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(errors="replace")
+
+    parser = argparse.ArgumentParser(description="Test MAVLink connection to Pixhawk or SITL")
+    parser.add_argument(
+        "--target", "-t",
+        default=None,
+        help="MAVLink connection string, e.g. udp:192.168.1.1:14550 or /dev/ttyAMA0. "
+             "Overrides --port when provided.",
+    )
+    parser.add_argument("--port", "-p", default="COM5", help="Serial port (used if --target is not set)")
+    parser.add_argument("--baud", "-b", type=int, default=115200, help="Baud rate (serial only)")
     parser.add_argument("--duration", "-d", type=float, default=10.0, help="Test duration in seconds")
     args = parser.parse_args()
-    
+
+    # Resolve the connection target
+    connection_target = args.target if args.target else args.port
+    baud = 0 if args.target else args.baud   # baud is ignored for UDP targets
+
     print("=" * 50)
     print("MAVLink Quick Test")
+    print(f"Target : {connection_target}")
     print("=" * 50)
-    
-    results = test_connection(args.port, args.baud, args.duration)
-    
+
+    results = test_connection(connection_target, baud, args.duration)
+
     print()
     print("=" * 50)
     print("RESULT")
     print("=" * 50)
     if results["connection_ok"]:
-        print("✓ Connection working")
+        print("[OK] Connection working")
         print(f"  - {results['heartbeats']} heartbeats received")
         print(f"  - {len(results['telemetry'].get('gps', []))} GPS readings")
     else:
-        print("✗ Connection failed")
+        print("[FAIL] Connection failed")
         for err in results["errors"]:
             print(f"  Error: {err}")
 

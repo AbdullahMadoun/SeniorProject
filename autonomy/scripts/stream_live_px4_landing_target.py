@@ -43,13 +43,21 @@ def detect_wsl_bridge_ip() -> str | None:
     return bridge_ip
 
 
+def use_direct_px4_transport() -> bool:
+    raw = os.environ.get("LANDING_TARGET_DIRECT_PX4")
+    if raw is not None and raw.strip():
+        return raw.strip().lower() in {"1", "true", "yes", "on"}
+    return os.name != "nt"
+
+
 def main() -> None:
-    bridge_ip = os.environ.get("WSL_BRIDGE_IP") or detect_wsl_bridge_ip()
+    direct_px4 = use_direct_px4_transport()
+    bridge_ip = None if direct_px4 else (os.environ.get("WSL_BRIDGE_IP") or detect_wsl_bridge_ip())
     endpoint = os.environ.get("LANDING_TARGET_ENDPOINT", DEFAULT_ENDPOINT)
     source_mode = os.environ.get("LANDING_TARGET_SOURCE_MODE", DEFAULT_SOURCE_MODE)
     connection_string = os.environ.get(
         "LANDING_TARGET_CONNECTION_STRING",
-        connection_string_for_endpoint(endpoint, bridge_ip=bridge_ip),
+        connection_string_for_endpoint(endpoint, bridge_ip=bridge_ip, direct_px4=direct_px4),
     )
     print("stage=build_samples", flush=True)
     projection_preview: dict[str, object] = {}
@@ -77,6 +85,7 @@ def main() -> None:
     payload = {
         "endpoint": endpoint,
         "source_mode": source_mode,
+        "direct_px4_transport": direct_px4,
         "connection_string": connection_string,
         "duration_s": DEFAULT_DURATION_S,
         "rate_hz": DEFAULT_RATE_HZ,
