@@ -762,7 +762,7 @@
     async function pollRemoteStatusOnce() {
       if (!state.remoteMode) { return; }
       try {
-        const { response, payload } = await fetchJsonWithTimeout("/api/remote/status", null, 2200);
+        const { response, payload } = await fetchJsonWithTimeout("/api/remote/status", null, 8000);
         if (!response.ok) {
           setRemoteBadge("Unavailable", "bad", `HTTP ${response.status}`);
           return;
@@ -859,6 +859,7 @@
         state.eventSource = null;
         cancelButton.disabled = true;
         if (remoteToggle) { remoteToggle.disabled = false; }
+        if (state.remoteMode) { startRemotePolling(); }
         setTimeout(() => {
           window.location.href = payload.redirect_url || "../showcase/latest/index.html";
         }, 1200);
@@ -876,6 +877,7 @@
         executeButton.disabled = false;
         cancelButton.disabled = true;
         if (remoteToggle) { remoteToggle.disabled = false; }
+        if (state.remoteMode) { startRemotePolling(); }
       });
       eventSource.addEventListener("cancelled", (event) => {
         let payload = {};
@@ -891,6 +893,7 @@
         executeButton.disabled = false;
         cancelButton.disabled = true;
         if (remoteToggle) { remoteToggle.disabled = false; }
+        if (state.remoteMode) { startRemotePolling(); }
       });
       eventSource.onerror = () => {
         if (state.eventSource === eventSource) {
@@ -904,6 +907,7 @@
       hudStatus.textContent = "Launching";
       cancelButton.disabled = true;
       if (remoteToggle) { remoteToggle.disabled = true; }
+      if (state.remoteMode) { stopRemotePolling(); }
       const executeUrl = state.remoteMode ? "/api/mission/execute?remote=true" : "/api/mission/execute";
       appendTerminal(`[STATUS] Sending mission to ${executeUrl}`, "status");
       try {
@@ -932,6 +936,7 @@
         executeButton.disabled = false;
         cancelButton.disabled = true;
         if (remoteToggle) { remoteToggle.disabled = false; }
+        if (state.remoteMode) { startRemotePolling(); }
         hudStatus.textContent = "Idle";
         appendTerminal(`[ERROR] ${error.message || "Mission launch failed."}`, "error");
       }

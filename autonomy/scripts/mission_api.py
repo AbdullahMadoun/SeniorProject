@@ -11,6 +11,7 @@ from pathlib import Path
 import subprocess
 import sys
 import threading
+import time
 import uuid
 from typing import Any
 import urllib.error
@@ -65,6 +66,8 @@ DEFAULT_FPV_MODE = os.environ.get("SKYLINK_FPV_MODE", "simulation")
 DEFAULT_CPU_CORE = int(os.environ.get("SKYLINK_API_CPU_CORE", "0"))
 DEFAULT_EXECUTION_CPU_CORES = os.environ.get("SKYLINK_EXECUTION_CPU_CORES", "2,3")
 CONTROL_FIELD_NAMES = {"remote", "execution_mode"}
+REMOTE_STATUS_CACHE_TTL_S = 8.0
+REMOTE_STATUS_READY_FALLBACK_TTL_S = 45.0
 
 baseline = load_system_baseline()
 default_environment = default_environment_overrides()
@@ -294,32 +297,121 @@ class MissionExecutionManager:
     def __init__(self) -> None:
         self._jobs: dict[str, MissionExecutionJob] = {}
         self._lock = threading.Lock()
+        self._remote_status_lock = threading.Lock()
+        self._remote_status_cache: dict[str, Any] | None = None
+        self._remote_status_cached_at = 0.0
+        self._last_ready_remote_status: dict[str, Any] | None = None
+        self._last_ready_remote_status_at = 0.0
         JOB_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
     def _remote_bridge(self) -> RemoteExecutionBridge | None:
         return remote_bridge_from_env(REPO_ROOT)
 
-    def remote_status(self) -> dict[str, Any]:
+    def _remote_status_unconfigured(self) -> dict[str, Any]:
+        return {
+            "configured": False,
+            "reachable": False,
+            "status": "unavailable",
+            "status_label": "Remote Unavailable",
+            "detail": "Remote execution is not configured.",
+            "target": "",
+            "target_label": "",
+            "repo_root": "",
+            "repo_present": False,
+            "venv_present": False,
+            "runner_present": False,
+            "px4_binary_present": False,
+            "sitl_running": False,
+            "mavlink_ready": False,
+            "ready_for_remote_execution": False,
+        }
+
+    def _remote_status_placeholder(
+        self,
+        bridge: RemoteExecutionBridge,
+        *,
+        status: str,
+        status_label: str,
+        detail: str,
+        reachable: bool,
+    ) -> dict[str, Any]:
+        return {
+            "configured": True,
+            "reachable": reachable,
+            "status": status,
+            "status_label": status_label,
+            "detail": detail,
+            "target": bridge.target.destination(),
+            "target_label": bridge.target_label,
+            "repo_root": bridge.target.remote_repo_root,
+            "repo_present": False,
+            "venv_present": False,
+            "runner_present": False,
+            "px4_binary_present": False,
+            "sitl_running": False,
+            "mavlink_ready": False,
+            "ready_for_remote_execution": False,
+        }
+
+    def _recent_ready_remote_status(self) -> dict[str, Any] | None:
+        age_s = time.monotonic() - self._last_ready_remote_status_at
+        if self._last_ready_remote_status is None or age_s > REMOTE_STATUS_READY_FALLBACK_TTL_S:
+            return None
+        payload = dict(self._last_ready_remote_status)
+        payload["status"] = "ready_cached"
+        payload["status_label"] = "Remote Ready (Cached)"
+        payload["detail"] = f"{payload.get('detail', 'Remote execution host ready.')} cached={age_s:.1f}s"
+        return payload
+
+    def remote_status(self, *, force_refresh: bool = False) -> dict[str, Any]:
         bridge = self._remote_bridge()
         if bridge is None:
-            return {
-                "configured": False,
-                "reachable": False,
-                "status": "unavailable",
-                "status_label": "Remote Unavailable",
-                "detail": "Remote execution is not configured.",
-                "target": "",
-                "target_label": "",
-                "repo_root": "",
-                "repo_present": False,
-                "venv_present": False,
-                "runner_present": False,
-                "px4_binary_present": False,
-                "sitl_running": False,
-                "mavlink_ready": False,
-                "ready_for_remote_execution": False,
-            }
-        return bridge.check_status()
+            return self._remote_status_unconfigured()
+        now = time.monotonic()
+        if (
+            not force_refresh
+            and self._remote_status_cache is not None
+            and (now - self._remote_status_cached_at) <= REMOTE_STATUS_CACHE_TTL_S
+        ):
+            return dict(self._remote_status_cache)
+
+        if not self._remote_status_lock.acquire(blocking=False):
+            if self._remote_status_cache is not None:
+                return dict(self._remote_status_cache)
+            return self._remote_status_placeholder(
+                bridge,
+                status="checking",
+                status_label="Remote Checking",
+                detail="Remote status probe already in progress.",
+                reachable=False,
+            )
+
+        try:
+            now = time.monotonic()
+            if (
+                not force_refresh
+                and self._remote_status_cache is not None
+                and (now - self._remote_status_cached_at) <= REMOTE_STATUS_CACHE_TTL_S
+            ):
+                return dict(self._remote_status_cache)
+            try:
+                status = bridge.check_status()
+            except Exception as exc:
+                status = self._remote_status_placeholder(
+                    bridge,
+                    status="unavailable",
+                    status_label="Remote Unavailable",
+                    detail=str(exc),
+                    reachable=False,
+                )
+            self._remote_status_cache = dict(status)
+            self._remote_status_cached_at = time.monotonic()
+            if status.get("ready_for_remote_execution", False):
+                self._last_ready_remote_status = dict(status)
+                self._last_ready_remote_status_at = self._remote_status_cached_at
+            return dict(status)
+        finally:
+            self._remote_status_lock.release()
 
     def start_job(self, spec, *, execution_mode: str = "local") -> MissionExecutionJob:
         with self._lock:
@@ -340,12 +432,43 @@ class MissionExecutionManager:
             redirect_url = "../dashboard/index.html"
             remote_status: dict[str, Any] | None = None
             if execution_mode == "remote":
+                bridge = self._remote_bridge()
+                if bridge is None:
+                    raise RuntimeError("Remote execution is not configured.")
                 remote_status = self.remote_status()
                 if not remote_status.get("configured", False):
                     raise RuntimeError(str(remote_status.get("detail", "Remote execution is not configured.")))
                 if not remote_status.get("ready_for_remote_execution", False):
-                    raise RuntimeError(str(remote_status.get("detail", "Remote execution host is not ready.")))
-                target = str(remote_status.get("target_label") or remote_status.get("target") or DEFAULT_TARGET)
+                    cached_status = self._recent_ready_remote_status()
+                    if cached_status is not None:
+                        remote_status = cached_status
+                    elif remote_status.get("reachable", False):
+                        missing_runtime_bits = [
+                            not remote_status.get("repo_present", False),
+                            not remote_status.get("venv_present", False),
+                            not remote_status.get("runner_present", False),
+                            not remote_status.get("px4_binary_present", False),
+                        ]
+                        if any(missing_runtime_bits):
+                            raise RuntimeError(str(remote_status.get("detail", "Remote execution host is not ready.")))
+                        remote_status = {
+                            **remote_status,
+                            "status": "launching",
+                            "status_label": "Remote Launch Pending",
+                            "detail": str(remote_status.get("detail") or "Remote execution host reachable; continuing with launch."),
+                            "ready_for_remote_execution": True,
+                        }
+                    else:
+                        remote_status = {
+                            **remote_status,
+                            "status": "launching",
+                            "status_label": "Remote Launch Pending",
+                            "detail": str(remote_status.get("detail") or "Remote status probe timed out; attempting launch anyway."),
+                            "ready_for_remote_execution": True,
+                            "target_label": bridge.target_label,
+                            "target": bridge.target.destination(),
+                        }
+                target = str(remote_status.get("target_label") or bridge.target_label or DEFAULT_TARGET)
                 bridge_status = str(remote_status.get("status_label") or DEFAULT_REMOTE_BRIDGE_STATUS)
                 redirect_url = DEFAULT_SHOWCASE_REDIRECT
             job = MissionExecutionJob(

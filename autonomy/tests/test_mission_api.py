@@ -363,10 +363,15 @@ class MissionApiTests(unittest.TestCase):
             "remote_status",
             return_value={
                 "configured": True,
+                "reachable": True,
+                "repo_present": False,
+                "venv_present": False,
+                "runner_present": False,
+                "px4_binary_present": False,
                 "ready_for_remote_execution": False,
                 "detail": "px4 binary missing",
             },
-        ):
+        ), patch.object(manager, "_remote_bridge", return_value=object()):
             with self.assertRaises(RuntimeError):
                 manager.start_job(spec, execution_mode="remote")
 
@@ -382,6 +387,7 @@ class MissionApiTests(unittest.TestCase):
             def start(self) -> None:
                 return None
 
+        fake_bridge = SimpleNamespace(target_label="ssh://root@ssh4.vast.ai:17126/root/SeniorProject")
         with patch.object(
             manager,
             "remote_status",
@@ -391,13 +397,83 @@ class MissionApiTests(unittest.TestCase):
                 "target_label": "ssh://root@ssh4.vast.ai:17126/root/SeniorProject",
                 "status_label": "Remote Ready",
             },
-        ), patch.object(mission_api.threading, "Thread", _FakeThread):
+        ), patch.object(manager, "_remote_bridge", return_value=fake_bridge), patch.object(mission_api.threading, "Thread", _FakeThread):
             job = manager.start_job(spec, execution_mode="remote")
 
         self.assertEqual(job.execution_mode, "remote")
         self.assertEqual(job.target, "ssh://root@ssh4.vast.ai:17126/root/SeniorProject")
         self.assertEqual(job.bridge_status, "Remote Ready")
         self.assertEqual(job.redirect_url, mission_api.DEFAULT_SHOWCASE_REDIRECT)
+
+    def test_start_job_remote_uses_recent_ready_cache_when_probe_is_unavailable(self) -> None:
+        manager = mission_api.MissionExecutionManager()
+        spec = mission_api._parse_and_validate(self.valid_payload)
+        manager._last_ready_remote_status = {
+            "configured": True,
+            "reachable": True,
+            "ready_for_remote_execution": True,
+            "target_label": "ssh://root@ssh4.vast.ai:17126/root/SeniorProject",
+            "status_label": "Remote Ready",
+            "detail": "Remote execution host ready.",
+        }
+        manager._last_ready_remote_status_at = mission_api.time.monotonic()
+
+        class _FakeThread:
+            def __init__(self, *args, **kwargs) -> None:
+                self.args = args
+                self.kwargs = kwargs
+
+            def start(self) -> None:
+                return None
+
+        fake_bridge = SimpleNamespace(target_label="ssh://root@ssh4.vast.ai:17126/root/SeniorProject")
+        with patch.object(
+            manager,
+            "remote_status",
+            return_value={
+                "configured": True,
+                "reachable": False,
+                "ready_for_remote_execution": False,
+                "detail": "Command timed out after 12.0s",
+            },
+        ), patch.object(manager, "_remote_bridge", return_value=fake_bridge), patch.object(mission_api.threading, "Thread", _FakeThread):
+            job = manager.start_job(spec, execution_mode="remote")
+
+        self.assertEqual(job.execution_mode, "remote")
+        self.assertEqual(job.target, "ssh://root@ssh4.vast.ai:17126/root/SeniorProject")
+        self.assertEqual(job.bridge_status, "Remote Ready (Cached)")
+
+    def test_start_job_remote_allows_unreachable_probe_without_cache(self) -> None:
+        manager = mission_api.MissionExecutionManager()
+        spec = mission_api._parse_and_validate(self.valid_payload)
+
+        class _FakeThread:
+            def __init__(self, *args, **kwargs) -> None:
+                self.args = args
+                self.kwargs = kwargs
+
+            def start(self) -> None:
+                return None
+
+        fake_bridge = SimpleNamespace(
+            target_label="ssh://root@ssh4.vast.ai:17126/root/SeniorProject",
+            target=SimpleNamespace(destination=lambda: "root@ssh4.vast.ai"),
+        )
+        with patch.object(
+            manager,
+            "remote_status",
+            return_value={
+                "configured": True,
+                "reachable": False,
+                "ready_for_remote_execution": False,
+                "detail": "Command timed out after 12.0s",
+            },
+        ), patch.object(manager, "_remote_bridge", return_value=fake_bridge), patch.object(mission_api.threading, "Thread", _FakeThread):
+            job = manager.start_job(spec, execution_mode="remote")
+
+        self.assertEqual(job.execution_mode, "remote")
+        self.assertEqual(job.target, "ssh://root@ssh4.vast.ai:17126/root/SeniorProject")
+        self.assertEqual(job.bridge_status, "Remote Launch Pending")
 
     def test_run_remote_job_streams_telemetry_and_syncs_artifacts(self) -> None:
         manager = mission_api.MissionExecutionManager()

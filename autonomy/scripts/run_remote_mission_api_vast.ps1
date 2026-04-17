@@ -33,12 +33,23 @@ if (-not (Test-Path $identityPath)) {
     throw "SSH identity key not found at $identityPath"
 }
 
+# Copy identity key to a temporary ASCII path to avoid Arabic character encoding issues in subprocess calls
+$tempKeyDir = Join-Path $env:TEMP "skylink_ssh"
+if (-not (Test-Path $tempKeyDir)) { New-Item -ItemType Directory -Path $tempKeyDir -Force | Out-Null }
+$tempKeyPath = Join-Path $tempKeyDir "id_ed25519"
+Copy-Item -Path $identityPath -Destination $tempKeyPath -Force
+
+# Lock down the ssh key permissions for OpenSSH on Windows
+icacls $tempKeyPath /c /t /inheritance:d | Out-Null
+icacls $tempKeyPath /c /t /remove Administrator BUILTIN\Administrators BUILTIN Everyone System Users | Out-Null
+icacls $tempKeyPath /c /t /grant:r "$($env:USERNAME):F" | Out-Null
+
 $env:SKYLINK_REMOTE_SSH_HOST = $RemoteHost
 $env:SKYLINK_REMOTE_SSH_PORT = "$RemotePort"
 $env:SKYLINK_REMOTE_SSH_USER = $RemoteUser
 $env:SKYLINK_REMOTE_REPO_ROOT = $RemoteRepoRoot
-$env:SKYLINK_REMOTE_IDENTITY_PATH = (Resolve-Path $identityPath).Path
-$env:SKYLINK_REMOTE_CONNECT_TIMEOUT_S = "12"
+$env:SKYLINK_REMOTE_IDENTITY_PATH = $tempKeyPath
+$env:SKYLINK_REMOTE_CONNECT_TIMEOUT_S = "20"
 
 Write-Host "Remote execution target: $RemoteUser@$RemoteHost`:$RemotePort$RemoteRepoRoot"
 Write-Host "Identity key: $env:SKYLINK_REMOTE_IDENTITY_PATH"
