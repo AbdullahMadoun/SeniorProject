@@ -363,6 +363,13 @@ async def main_async(spec_path: Path) -> None:
     print("stage=connect", flush=True)
     await gateway.connect()
     try:
+        # Prevent EKF freeze due to heavy Gazebo load on Vast.ai dropping frames
+        print("stage=bypass_sitl_gps_drift", flush=True)
+        await gateway.apply_parameter_overrides(
+            int_params={"EKF2_GPS_CHECK": 0},
+            float_params={"COM_ARM_EKF_POS": 5.0},
+        )
+        
         print("stage=await_live_position", flush=True)
         pre_override_snapshot, pre_override_local_pose = await gateway.wait_for_live_position(
             timeout_s=LIVE_POSITION_READY_TIMEOUT_S,

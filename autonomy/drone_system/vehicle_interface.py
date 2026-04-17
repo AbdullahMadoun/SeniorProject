@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -50,6 +51,19 @@ class TelemetryError(RuntimeError):
 class TelemetryStreamClosed(TelemetryError):
     """Raised when telemetry stream ends unexpectedly."""
     pass
+
+
+@dataclass
+class _TelemetryCache:
+    position: Any | None = None
+    battery: Any | None = None
+    armed: bool | None = None
+    in_air: bool | None = None
+    flight_mode: Any | None = None
+    mission_progress: MissionProgress | None = None
+    position_velocity_ned: Any | None = None
+    attitude_euler: Any | None = None
+    gps_info: Any | None = None
 
 
 class VehicleGateway(ABC):
@@ -277,6 +291,9 @@ class MavsdkVehicleGateway(VehicleGateway):
         self._telemetry_stream_closed = False
         self._telemetry_reconnect_task: asyncio.Task | None = None
         self._reconnect_attempts = 0
+        self._telemetry_cache = _TelemetryCache()
+        self._telemetry_tasks: list[asyncio.Task[None]] = []
+        self._disconnecting = False
 
     async def connect(self) -> None:
         if System is None:
@@ -284,6 +301,8 @@ class MavsdkVehicleGateway(VehicleGateway):
 
         last_exception = None
         delay_s = CONNECT_BASE_DELAY_S
+        self._disconnecting = False
+        self._reset_telemetry_cache()
 
         for attempt in range(CONNECT_MAX_RETRIES):
             try:
@@ -298,6 +317,9 @@ class MavsdkVehicleGateway(VehicleGateway):
                     timeout_s=self._connect_timeout_s,
                 )
                 await self._configure_telemetry_rates()
+                self._start_telemetry_monitors()
+                self._consecutive_failures = 0
+                self._telemetry_stream_closed = False
                 _logger.info(f"Connected to {self._system_address} after {attempt + 1} attempt(s)")
                 return
             except Exception as exc:
@@ -311,12 +333,26 @@ class MavsdkVehicleGateway(VehicleGateway):
 
     async def disconnect(self) -> None:
         drone = self._drone
+        self._disconnecting = True
         self._drone = None
+        await self._cancel_telemetry_tasks()
+        current_task = asyncio.current_task()
+        if self._telemetry_reconnect_task is not None and self._telemetry_reconnect_task is not current_task:
+            self._telemetry_reconnect_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._telemetry_reconnect_task
+        self._telemetry_reconnect_task = None
+        self._telemetry_stream_closed = False
+        self._consecutive_failures = 0
+        self._reconnect_attempts = 0
+        self._reset_telemetry_cache()
         if drone is None:
+            self._disconnecting = False
             return
         stop_server = getattr(drone, "_stop_mavsdk_server", None)
         if callable(stop_server):
             stop_server()
+        self._disconnecting = False
 
     async def get_snapshot(self) -> VehicleSnapshot:
         vehicle_snapshot_disconnected = VehicleSnapshot(
@@ -329,92 +365,60 @@ class MavsdkVehicleGateway(VehicleGateway):
         if self._drone is None:
             return vehicle_snapshot_disconnected
 
-        try:
-            async with self._telemetry_lock:
-                position = await self._read_once_or_default(
-                    self._drone.telemetry.position(),
-                    timeout_s=3.0,
-                )
-                battery = await self._read_once_or_default(
-                    self._drone.telemetry.battery(),
-                    timeout_s=3.0,
-                )
-                armed = await self._read_once_or_default(
-                    self._drone.telemetry.armed(),
-                    timeout_s=3.0,
-                )
-                in_air = await self._read_once_or_default(
-                    self._drone.telemetry.in_air(),
-                    timeout_s=3.0,
-                )
-                flight_mode = await self._read_once_or_default(
-                    self._drone.telemetry.flight_mode(),
-                    timeout_s=3.0,
-                )
-                mission_progress = await self._read_once_or_default(
-                    self._drone.mission.mission_progress(),
-                    transform=lambda progress: MissionProgress(
-                        current=int(progress.current),
-                        total=int(progress.total),
-                    ),
-                    timeout_s=3.0,
-                )
+        position = self._telemetry_cache.position
+        battery = self._telemetry_cache.battery
+        armed = self._telemetry_cache.armed
+        in_air = self._telemetry_cache.in_air
+        flight_mode = self._telemetry_cache.flight_mode
+        mission_progress = self._telemetry_cache.mission_progress
 
-            self._consecutive_failures = 0
+        if (
+            position is None
+            and battery is None
+            and armed is None
+            and in_air is None
+            and flight_mode is None
+            and mission_progress is None
+        ):
+            return vehicle_snapshot_disconnected
 
-            mode_value = str(flight_mode).split(".")[-1].lower() if flight_mode is not None else ""
-            mode = VehicleMode.HOLD
-            if "mission" in mode_value:
-                mode = VehicleMode.MISSION
-            elif "return" in mode_value:
-                mode = VehicleMode.RETURN_TO_LAUNCH
-            elif "land" in mode_value:
-                mode = VehicleMode.LAND
+        mode_value = str(flight_mode).split(".")[-1].lower() if flight_mode is not None else ""
+        mode = VehicleMode.HOLD
+        if "mission" in mode_value:
+            mode = VehicleMode.MISSION
+        elif "return" in mode_value:
+            mode = VehicleMode.RETURN_TO_LAUNCH
+        elif "land" in mode_value:
+            mode = VehicleMode.LAND
 
-            return VehicleSnapshot(
-                connected=True,
-                armed=bool(armed),
-                in_air=bool(in_air),
-                mode=mode,
-                battery_percent=(
-                    self._normalize_battery_percent(float(battery.remaining_percent))
-                    if battery is not None
-                    else None
-                ),
-                position=(
-                    Waypoint(
-                        lat=float(position.latitude_deg),
-                        lon=float(position.longitude_deg),
-                        alt_m=float(position.relative_altitude_m),
-                    )
-                    if position is not None
-                    else None
-                ),
-                mission_progress=mission_progress,
-            )
-
-        except TelemetryError as exc:
-            return self._handle_telemetry_failure(exc, disconnected_snapshot=vehicle_snapshot_disconnected)
+        return VehicleSnapshot(
+            connected=not self._telemetry_stream_closed,
+            armed=bool(armed),
+            in_air=bool(in_air),
+            mode=mode,
+            battery_percent=(
+                self._normalize_battery_percent(float(battery.remaining_percent))
+                if battery is not None
+                else None
+            ),
+            position=(
+                Waypoint(
+                    lat=float(position.latitude_deg),
+                    lon=float(position.longitude_deg),
+                    alt_m=float(position.relative_altitude_m),
+                )
+                if position is not None
+                else None
+            ),
+            mission_progress=mission_progress or MissionProgress(),
+        )
 
     async def get_local_pose(self) -> VehicleLocalPose | None:
         if self._drone is None:
             return None
 
-        try:
-            async with self._telemetry_lock:
-                position_velocity_ned = await self._read_once_or_default(
-                    self._drone.telemetry.position_velocity_ned(),
-                    default=None,
-                    timeout_s=3.0,
-                )
-                attitude_euler = await self._read_once_or_default(
-                    self._drone.telemetry.attitude_euler(),
-                    default=None,
-                    timeout_s=3.0,
-                )
-        except TelemetryError:
-            return None
-
+        position_velocity_ned = self._telemetry_cache.position_velocity_ned
+        attitude_euler = self._telemetry_cache.attitude_euler
         if position_velocity_ned is None or attitude_euler is None:
             return None
         return VehicleLocalPose(
@@ -429,21 +433,8 @@ class MavsdkVehicleGateway(VehicleGateway):
     async def get_gps_info(self) -> dict[str, Any]:
         if self._drone is None:
             return {}
-        try:
-            async with self._telemetry_lock:
-                position = await self._read_once_or_default(
-                    self._drone.telemetry.position(),
-                    default=None,
-                    timeout_s=3.0,
-                )
-                gps_info = await self._read_once_or_default(
-                    self._drone.telemetry.gps_info(),
-                    default=None,
-                    timeout_s=3.0,
-                )
-        except TelemetryError:
-            return {}
-
+        position = self._telemetry_cache.position
+        gps_info = self._telemetry_cache.gps_info
         if position is None:
             return {}
         payload: dict[str, Any] = {
@@ -620,6 +611,99 @@ class MavsdkVehicleGateway(VehicleGateway):
             except Exception:
                 continue
 
+    def _reset_telemetry_cache(self) -> None:
+        self._telemetry_cache = _TelemetryCache()
+
+    def _start_telemetry_monitors(self) -> None:
+        drone = self._require_drone()
+        self._telemetry_tasks = [
+            asyncio.create_task(self._monitor_stream("position", drone.telemetry.position())),
+            asyncio.create_task(self._monitor_stream("battery", drone.telemetry.battery())),
+            asyncio.create_task(
+                self._monitor_stream(
+                    "armed",
+                    drone.telemetry.armed(),
+                    transform=lambda item: bool(item),
+                )
+            ),
+            asyncio.create_task(
+                self._monitor_stream(
+                    "in_air",
+                    drone.telemetry.in_air(),
+                    transform=lambda item: bool(item),
+                )
+            ),
+            asyncio.create_task(self._monitor_stream("flight_mode", drone.telemetry.flight_mode())),
+            asyncio.create_task(
+                self._monitor_stream(
+                    "mission_progress",
+                    drone.mission.mission_progress(),
+                    transform=lambda progress: MissionProgress(
+                        current=int(progress.current),
+                        total=int(progress.total),
+                    ),
+                )
+            ),
+            asyncio.create_task(
+                self._monitor_stream(
+                    "position_velocity_ned",
+                    drone.telemetry.position_velocity_ned(),
+                )
+            ),
+            asyncio.create_task(
+                self._monitor_stream(
+                    "attitude_euler",
+                    drone.telemetry.attitude_euler(),
+                )
+            ),
+            asyncio.create_task(
+                self._monitor_stream(
+                    "gps_info",
+                    drone.telemetry.gps_info(),
+                )
+            ),
+        ]
+
+    async def _cancel_telemetry_tasks(self) -> None:
+        if not self._telemetry_tasks:
+            return
+        for task in self._telemetry_tasks:
+            task.cancel()
+        for task in self._telemetry_tasks:
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+        self._telemetry_tasks.clear()
+
+    async def _monitor_stream(self, cache_name: str, stream, *, transform=lambda item: item) -> None:
+        try:
+            async for item in stream:
+                setattr(self._telemetry_cache, cache_name, transform(item))
+                self._consecutive_failures = 0
+                self._telemetry_stream_closed = False
+            if not self._disconnecting:
+                self._handle_telemetry_failure(
+                    TelemetryStreamClosed(f"{cache_name} stream ended before disconnect"),
+                    disconnected_snapshot=VehicleSnapshot(
+                        connected=False,
+                        armed=False,
+                        in_air=False,
+                        mode=VehicleMode.DISCONNECTED,
+                    ),
+                )
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            if not self._disconnecting:
+                self._handle_telemetry_failure(
+                    TelemetryError(f"{cache_name} stream error: {exc}"),
+                    disconnected_snapshot=VehicleSnapshot(
+                        connected=False,
+                        armed=False,
+                        in_air=False,
+                        mode=VehicleMode.DISCONNECTED,
+                    ),
+                )
+
     async def _read_once(self, stream):
         async for item in stream:
             return item
@@ -637,12 +721,19 @@ class MavsdkVehicleGateway(VehicleGateway):
                 return transform(item)
             raise TelemetryStreamClosed("Stream ended before a value was received")
 
-        try:
-            return await asyncio.wait_for(_consume(), timeout=timeout_s)
-        except asyncio.TimeoutError:
+        task = asyncio.create_task(_consume())
+        done, pending = await asyncio.wait([task], timeout=timeout_s)
+        
+        if pending:
+            # Cancel the task but don't await its completion to avoid deadlock
+            # with ignoring-cancellation gRPC cores.
+            task.cancel()
             raise TelemetryStreamClosed(f"Stream timed out after {timeout_s}s")
+            
+        try:
+            return task.result()
         except TelemetryStreamClosed:
-            raise  # Re-raise our own exceptions
+            raise
         except Exception as exc:
             raise TelemetryError(f"Unexpected stream error: {exc}") from exc
 
@@ -682,7 +773,8 @@ class MavsdkVehicleGateway(VehicleGateway):
         await asyncio.sleep(delay_s)
 
         try:
-            self._drone = None
+            await self.disconnect()
+            self._disconnecting = False
             await self.connect()
 
             self._consecutive_failures = 0

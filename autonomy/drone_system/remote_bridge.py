@@ -7,7 +7,9 @@ from enum import Enum
 import posixpath
 import queue
 import shlex
+import shutil
 import subprocess
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -178,6 +180,31 @@ def _posix_join(root: str, *parts: str) -> str:
     return path
 
 
+def _is_ascii_text(value: str) -> bool:
+    try:
+        value.encode("ascii")
+    except UnicodeEncodeError:
+        return False
+    return True
+
+
+def _needs_ascii_staging(path: Path) -> bool:
+    return not _is_ascii_text(str(path))
+
+
+def _staging_root() -> Path:
+    root = Path(tempfile.gettempdir()) / "skylink_bridge_xfer"
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
+def _make_staging_path(original: Path) -> Path:
+    safe_stem = "".join(character if ord(character) < 128 and character not in '\\/:*?"<>|' else "_" for character in original.stem)
+    safe_suffix = "".join(character if ord(character) < 128 and character not in '\\/:*?"<>|' else "_" for character in original.suffix)
+    timestamp = f"{time.time_ns()}"
+    return _staging_root() / f"{safe_stem}_{timestamp}{safe_suffix}"
+
+
 @dataclass
 class RemoteHealthStatus:
     ssh_ok: bool
@@ -203,6 +230,15 @@ class RemoteExecutionBridge:
     This module is intentionally "dumb plumbing": it constructs commands, streams output,
     and moves files. Higher layers (mission_api) decide what to run and how to parse logs.
     """
+
+    REMOTE_RUNTIME_SYNC_FILES: tuple[str, ...] = (
+        "autonomy/drone_system/config.py",
+        "autonomy/drone_system/safety_engine.py",
+        "autonomy/drone_system/vehicle_interface.py",
+        "autonomy/scripts/execute_interactive_mission.py",
+        "autonomy/scripts/generate_synthetic_telemetry.py",
+        "autonomy/scripts/run_remote_interactive_mission.py",
+    )
 
     def __init__(
         self,
@@ -239,6 +275,11 @@ class RemoteExecutionBridge:
 
     def remote_path(self, *parts: str) -> str:
         return _posix_join(self._target.remote_repo_root, *parts)
+
+    def local_repo_root(self) -> Path:
+        if self._local_cwd is not None:
+            return Path(self._local_cwd)
+        return Path.cwd()
 
     def ssh_base_args(self) -> list[str]:
         args = ["ssh"]
@@ -407,20 +448,30 @@ class RemoteExecutionBridge:
         check: bool = True,
     ) -> CommandResult:
         local_path = local_path.resolve()
+        staged_path: Path | None = None
+        source_path = local_path
+        if _needs_ascii_staging(local_path):
+            staged_path = _make_staging_path(local_path)
+            shutil.copy2(local_path, staged_path)
+            source_path = staged_path
         if ensure_remote_parent:
             parent = posixpath.dirname(remote_path)
             if parent:
                 self.run(f"mkdir -p {shlex.quote(parent)}", timeout_seconds=timeout_seconds, check=True)
-        args = [*self.scp_base_args(), str(local_path), f"{self._target.destination()}:{remote_path}"]
-        result = self._executor.run(args, cwd=self._local_cwd, timeout_seconds=timeout_seconds)
-        if check and result.exit_code != 0:
-            raise RemoteCommandError(
-                f"SCP upload failed with exit code {result.exit_code}.",
-                exit_code=result.exit_code,
-                stdout=result.stdout,
-                stderr=result.stderr,
-            )
-        return result
+        try:
+            args = [*self.scp_base_args(), str(source_path), f"{self._target.destination()}:{remote_path}"]
+            result = self._executor.run(args, cwd=self._local_cwd, timeout_seconds=timeout_seconds)
+            if check and result.exit_code != 0:
+                raise RemoteCommandError(
+                    f"SCP upload failed with exit code {result.exit_code}.",
+                    exit_code=result.exit_code,
+                    stdout=result.stdout,
+                    stderr=result.stderr,
+                )
+            return result
+        finally:
+            if staged_path is not None:
+                staged_path.unlink(missing_ok=True)
 
     def download_file(
         self,
@@ -432,9 +483,14 @@ class RemoteExecutionBridge:
         check: bool = True,
     ) -> CommandResult:
         local_path = local_path.resolve()
+        staged_path: Path | None = None
+        target_path = local_path
+        if _needs_ascii_staging(local_path):
+            staged_path = _make_staging_path(local_path)
+            target_path = staged_path
         if ensure_local_parent:
             local_path.parent.mkdir(parents=True, exist_ok=True)
-        args = [*self.scp_base_args(), f"{self._target.destination()}:{remote_path}", str(local_path)]
+        args = [*self.scp_base_args(), f"{self._target.destination()}:{remote_path}", str(target_path)]
         result = self._executor.run(args, cwd=self._local_cwd, timeout_seconds=timeout_seconds)
         if check and result.exit_code != 0:
             raise RemoteCommandError(
@@ -443,6 +499,10 @@ class RemoteExecutionBridge:
                 stdout=result.stdout,
                 stderr=result.stderr,
             )
+        if staged_path is not None and staged_path.exists():
+            if local_path.exists():
+                local_path.unlink()
+            shutil.move(str(staged_path), str(local_path))
         return result
 
     def download_path(
@@ -455,6 +515,12 @@ class RemoteExecutionBridge:
         check: bool = True,
     ) -> CommandResult:
         local_path = local_path.resolve()
+        staged_parent: Path | None = None
+        target_dir = local_path
+        if _needs_ascii_staging(local_path):
+            staged_parent = _staging_root() / f"download_{time.time_ns()}"
+            staged_parent.mkdir(parents=True, exist_ok=True)
+            target_dir = staged_parent
         if recursive:
             local_path.mkdir(parents=True, exist_ok=True)
         else:
@@ -462,7 +528,7 @@ class RemoteExecutionBridge:
         args = self.scp_base_args()
         if recursive:
             args.append("-r")
-        args.extend([f"{self._target.destination()}:{remote_path}", str(local_path)])
+        args.extend([f"{self._target.destination()}:{remote_path}", str(target_dir)])
         result = self._executor.run(args, cwd=self._local_cwd, timeout_seconds=timeout_seconds)
         if check and result.exit_code != 0:
             raise RemoteCommandError(
@@ -471,6 +537,17 @@ class RemoteExecutionBridge:
                 stdout=result.stdout,
                 stderr=result.stderr,
             )
+        if staged_parent is not None:
+            remote_name = Path(posixpath.basename(remote_path.rstrip("/"))).name
+            staged_download = staged_parent / remote_name
+            destination = local_path / remote_name if recursive else local_path
+            if staged_download.exists():
+                if staged_download.is_dir():
+                    shutil.copytree(staged_download, destination, dirs_exist_ok=True)
+                else:
+                    destination.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(staged_download, destination)
+            shutil.rmtree(staged_parent, ignore_errors=True)
         return result
 
     def health_check(
@@ -560,7 +637,7 @@ class RemoteExecutionBridge:
         )
 
     def check_status(self) -> dict[str, Any]:
-        probe = self.health_check(udp_ports=(14540,), timeout_seconds=float(self._target.connect_timeout_seconds))
+        probe = self.health_check(udp_ports=(14580,), timeout_seconds=float(self._target.connect_timeout_seconds))
         unavailable = {
             "configured": True,
             "reachable": probe.ssh_ok,
@@ -617,7 +694,7 @@ payload = {
     "runner_present": os.path.exists(runner_path),
     "px4_binary_present": os.path.exists(px4_binary),
     "sitl_running": sh("pgrep -x px4 >/dev/null 2>&1"),
-    "mavlink_ready": sh("ss -lun | grep -q ':14540'"),
+    "mavlink_ready": sh("ss -lun | grep -q ':14580'"),
     "gpu_name": gpu_name,
 }
 print(json.dumps(payload))
@@ -662,7 +739,7 @@ PY
         if ready and not sitl_running:
             detail_parts.append("sitl idle")
         if ready and sitl_running and not mavlink_ready:
-            detail_parts.append("udp 14540 not ready")
+            detail_parts.append("udp 14580 not ready")
         if gpu_name:
             detail_parts.append(gpu_name)
 
@@ -691,6 +768,21 @@ PY
         self.upload_file(local_spec_path, remote_spec_path, timeout_seconds=60.0, ensure_remote_parent=True, check=True)
         return remote_spec_path
 
+    def sync_runtime_sources(self) -> None:
+        local_repo_root = self.local_repo_root()
+        for relative_path in self.REMOTE_RUNTIME_SYNC_FILES:
+            local_path = (local_repo_root / Path(relative_path)).resolve()
+            if not local_path.exists():
+                continue
+            remote_path = self.remote_path(*Path(relative_path).parts)
+            self.upload_file(
+                local_path,
+                remote_path,
+                timeout_seconds=120.0,
+                ensure_remote_parent=True,
+                check=True,
+            )
+
     def start_remote_mission_process(
         self,
         remote_spec_path: str,
@@ -698,6 +790,7 @@ PY
         job_id: str,
         cpu_cores: str,
     ) -> subprocess.Popen[str]:
+        self.sync_runtime_sources()
         command = " ".join(
             [
                 shlex.quote(self.remote_python_path),

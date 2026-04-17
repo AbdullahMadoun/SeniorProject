@@ -107,57 +107,55 @@ class VehicleInterfaceTests(unittest.TestCase):
         asyncio.run(_run())
 
     def test_mavsdk_gateway_returns_empty_snapshot_when_telemetry_is_unavailable(self) -> None:
-        async def _never_stream():
-            await asyncio.sleep(60.0)
-            if False:
-                yield None
-
         class FakeTelemetry:
             def position(self):
-                return _never_stream()
+                return self._never_stream()
 
             def battery(self):
-                return _never_stream()
+                return self._never_stream()
 
             def armed(self):
-                return _never_stream()
+                return self._never_stream()
 
             def in_air(self):
-                return _never_stream()
+                return self._never_stream()
 
             def flight_mode(self):
-                return _never_stream()
+                return self._never_stream()
 
             def position_velocity_ned(self):
-                return _never_stream()
+                return self._never_stream()
 
             def attitude_euler(self):
-                return _never_stream()
+                return self._never_stream()
 
             def gps_info(self):
-                return _never_stream()
+                return self._never_stream()
+
+            async def _never_stream(self):
+                await asyncio.sleep(60.0)
+                if False:
+                    yield None
 
         class FakeMission:
             def mission_progress(self):
-                return _never_stream()
+                return self._never_stream()
+
+            async def _never_stream(self):
+                await asyncio.sleep(60.0)
+                if False:
+                    yield None
 
         class FakeDrone:
             telemetry = FakeTelemetry()
             mission = FakeMission()
 
         async def _run() -> None:
-            from autonomy.drone_system.vehicle_interface import TelemetryStreamClosed
             gateway = MavsdkVehicleGateway(self.baseline)
             gateway._drone = FakeDrone()
-            
-            async def _always_raise(stream, default=None, transform=lambda item: item, timeout_s: float = 3.0):
-                raise TelemetryStreamClosed("Simulated telemetry unavailable")
-            
-            gateway._read_once_or_default = _always_raise  # type: ignore[method-assign]
             snapshot = await gateway.get_snapshot()
             local_pose = await gateway.get_local_pose()
             gps_info = await gateway.get_gps_info()
-            # With new telemetry health monitoring, unavailable telemetry means disconnected
             self.assertFalse(snapshot.connected)
             self.assertEqual(snapshot.mode, VehicleMode.DISCONNECTED)
             self.assertIsNone(local_pose)
@@ -184,52 +182,54 @@ class VehicleInterfaceTests(unittest.TestCase):
 
     def test_mavsdk_gateway_degrades_safely_on_unexpected_telemetry_error(self) -> None:
         async def _run() -> None:
-            from autonomy.drone_system.vehicle_interface import TelemetryError
-
             gateway = MavsdkVehicleGateway(self.baseline)
-
-            async def _unused_stream():
-                if False:
-                    yield None
 
             class FakeTelemetry:
                 def position(self):
-                    return _unused_stream()
+                    return self._broken_stream()
 
                 def battery(self):
-                    return _unused_stream()
+                    return self._broken_stream()
 
                 def armed(self):
-                    return _unused_stream()
+                    return self._broken_stream()
 
                 def in_air(self):
-                    return _unused_stream()
+                    return self._broken_stream()
 
                 def flight_mode(self):
-                    return _unused_stream()
+                    return self._broken_stream()
 
                 def position_velocity_ned(self):
-                    return _unused_stream()
+                    return self._broken_stream()
 
                 def attitude_euler(self):
-                    return _unused_stream()
+                    return self._broken_stream()
 
                 def gps_info(self):
-                    return _unused_stream()
+                    return self._broken_stream()
+
+                async def _broken_stream(self):
+                    raise RuntimeError("Simulated telemetry fault")
+                    if False:
+                        yield None
 
             class FakeMission:
                 def mission_progress(self):
-                    return _unused_stream()
+                    return self._broken_stream()
+
+                async def _broken_stream(self):
+                    raise RuntimeError("Simulated telemetry fault")
+                    if False:
+                        yield None
 
             class FakeDrone:
                 telemetry = FakeTelemetry()
                 mission = FakeMission()
 
-            async def _always_raise(stream, default=None, transform=lambda item: item, timeout_s: float = 3.0):
-                raise TelemetryError("Simulated telemetry fault")
-
             gateway._drone = FakeDrone()
-            gateway._read_once_or_default = _always_raise  # type: ignore[method-assign]
+            gateway._start_telemetry_monitors()
+            await asyncio.sleep(0.05)
 
             snapshot = await gateway.get_snapshot()
             local_pose = await gateway.get_local_pose()
@@ -239,6 +239,124 @@ class VehicleInterfaceTests(unittest.TestCase):
             self.assertEqual(snapshot.mode, VehicleMode.DISCONNECTED)
             self.assertIsNone(local_pose)
             self.assertEqual(gps_info, {})
+            await gateway.disconnect()
+
+        asyncio.run(_run())
+
+    def test_mavsdk_gateway_uses_background_telemetry_cache(self) -> None:
+        class Position:
+            latitude_deg = 26.30710
+            longitude_deg = 50.14590
+            relative_altitude_m = 11.5
+            absolute_altitude_m = 17.2
+
+        class Battery:
+            remaining_percent = 0.62
+
+        class PositionNed:
+            north_m = 4.0
+            east_m = -2.0
+            down_m = -11.5
+
+        class VelocityNed:
+            north_m_s = 0.0
+            east_m_s = 0.0
+            down_m_s = 0.0
+
+        class PositionVelocityNed:
+            position = PositionNed()
+            velocity = VelocityNed()
+
+        class AttitudeEuler:
+            yaw_deg = 15.0
+            roll_deg = -1.0
+            pitch_deg = 2.0
+
+        class GpsInfo:
+            num_satellites = 13
+            fix_type = "FIX_3D"
+
+        class MissionProgressItem:
+            current = 1
+            total = 3
+
+        class FakeTelemetry:
+            def __init__(self, stop_event: asyncio.Event) -> None:
+                self._stop_event = stop_event
+
+            async def _stream(self, item):
+                yield item
+                await self._stop_event.wait()
+
+            def position(self):
+                return self._stream(Position())
+
+            def battery(self):
+                return self._stream(Battery())
+
+            def armed(self):
+                return self._stream(True)
+
+            def in_air(self):
+                return self._stream(True)
+
+            def flight_mode(self):
+                return self._stream("MISSION")
+
+            def position_velocity_ned(self):
+                return self._stream(PositionVelocityNed())
+
+            def attitude_euler(self):
+                return self._stream(AttitudeEuler())
+
+            def gps_info(self):
+                return self._stream(GpsInfo())
+
+        class FakeMission:
+            def __init__(self, stop_event: asyncio.Event) -> None:
+                self._stop_event = stop_event
+
+            async def _stream(self, item):
+                yield item
+                await self._stop_event.wait()
+
+            def mission_progress(self):
+                return self._stream(MissionProgressItem())
+
+        class FakeDrone:
+            def __init__(self, stop_event: asyncio.Event) -> None:
+                self.telemetry = FakeTelemetry(stop_event)
+                self.mission = FakeMission(stop_event)
+
+        async def _run() -> None:
+            stop_event = asyncio.Event()
+            gateway = MavsdkVehicleGateway(self.baseline)
+            gateway._drone = FakeDrone(stop_event)
+            gateway._start_telemetry_monitors()
+            await asyncio.sleep(0.05)
+
+            snapshot = await gateway.get_snapshot()
+            local_pose = await gateway.get_local_pose()
+            gps_info = await gateway.get_gps_info()
+
+            self.assertTrue(snapshot.connected)
+            self.assertTrue(snapshot.armed)
+            self.assertTrue(snapshot.in_air)
+            self.assertEqual(snapshot.mode, VehicleMode.MISSION)
+            self.assertAlmostEqual(snapshot.battery_percent or 0.0, 62.0)
+            self.assertIsNotNone(snapshot.position)
+            self.assertEqual(snapshot.mission_progress.current, 1)
+            self.assertEqual(snapshot.mission_progress.total, 3)
+            self.assertIsNotNone(local_pose)
+            assert local_pose is not None
+            self.assertAlmostEqual(local_pose.north_m, 4.0)
+            self.assertAlmostEqual(local_pose.east_m, -2.0)
+            self.assertAlmostEqual(local_pose.down_m, -11.5)
+            self.assertEqual(gps_info["num_satellites"], 13)
+            self.assertEqual(gps_info["fix_type"], "fix_3d")
+
+            stop_event.set()
+            await gateway.disconnect()
 
         asyncio.run(_run())
 

@@ -56,6 +56,9 @@ class ProcessRegistry:
         subprocess.run(["pkill", "-x", "px4"], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         subprocess.run(["pkill", "-f", "[g]z sim"], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         subprocess.run(["pkill", "-f", "[m]ake px4_sitl"], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(["pkill", "-f", "mavsdk_server"], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(["pkill", "-f", "execute_interactive_mission.py"], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(["pkill", "-f", "check_live_px4_snapshot.py"], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 def _reconfigure_stdout() -> None:
@@ -148,7 +151,7 @@ def _run_step(
 def _sitl_ready() -> bool:
     px4_running = subprocess.run(["pgrep", "-x", "px4"], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
     mavlink_ready = subprocess.run(
-        ["bash", "-lc", "ss -lun | grep -q ':14540'"],
+        ["bash", "-lc", "ss -lun | grep -q ':14580'"],
         check=False,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
@@ -161,6 +164,13 @@ def _cleanup_stale_sitl() -> None:
     subprocess.run(["pkill", "-f", "[g]z sim"], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     subprocess.run(["pkill", "-f", "[m]ake px4_sitl"], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     time.sleep(2.0)
+
+
+def _cleanup_stale_mavsdk_clients() -> None:
+    subprocess.run(["pkill", "-9", "-f", "mavsdk_server"], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(["pkill", "-9", "-f", "execute_interactive_mission.py"], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(["pkill", "-9", "-f", "check_live_px4_snapshot.py"], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    time.sleep(1.0)
 
 
 def _start_sitl(job_dir: Path, registry: ProcessRegistry) -> None:
@@ -188,10 +198,19 @@ def _start_sitl(job_dir: Path, registry: ProcessRegistry) -> None:
     registry.add(managed)
     if not ready_event.wait(timeout=300.0):
         raise RuntimeError("Timed out waiting for PX4 SITL readiness markers.")
-    time.sleep(5.0)
-    if not _sitl_ready():
-        raise RuntimeError("PX4 SITL started but MAVLink port 14540 is not ready.")
-    _write_status(job_dir, step="sitl", detail="PX4 SITL ready on udp 14540", ok=True)
+
+    # Poll for MAVLink readiness instead of a static sleep to avoid race conditions on remote hosts
+    max_wait = 45.0
+    start_wait = time.time()
+    _write_status(job_dir, step="sitl", detail="PX4 process started, waiting for local MAVLink port 14580 to bind...")
+
+    while (time.time() - start_wait) < max_wait:
+        if _sitl_ready():
+            _write_status(job_dir, step="sitl", detail="PX4 SITL ready with local UDP 14580 forwarding to 14540", ok=True)
+            return
+        time.sleep(1.5)
+
+    raise RuntimeError(f"PX4 SITL started but local MAVLink port 14580 was not found after {max_wait}s.")
 
 
 def _build_child_env(cpu_cores: str) -> dict[str, str]:
@@ -252,6 +271,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         _write_status(job_dir, step="bootstrap", detail="Remote mission runner starting")
         _start_sitl(job_dir, registry)
+        _write_status(job_dir, step="mission", detail="Cleaning stale MAVSDK clients before mission start")
+        _cleanup_stale_mavsdk_clients()
         _write_status(job_dir, step="mission", detail=f"Executing mission spec {args.mission_spec.name}")
         mission_managed = _start_process(
             [

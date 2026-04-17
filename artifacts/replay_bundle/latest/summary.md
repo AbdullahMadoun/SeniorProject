@@ -14,13 +14,13 @@
 
 ## Key Results
 
-- mission waypoint count: `5`
+- mission waypoint count: `2`
 - post-RTL execution mode: `return_to_launch`
-- dock proof status: `consumed_from_live_telemetry_projection`
-- dock stream record count: `5`
-- dock receiver count: `5`
-- dock final horizontal distance: `0.09933330109296704` m
-- dock final in_air: `False`
+- dock proof status: `streamed_without_full_receiver_match`
+- dock stream record count: `60`
+- dock receiver count: `0`
+- dock final horizontal distance: `0.031079112700935607` m
+- dock final in_air: `True`
 - precision profile `RTL_PLD_MD`: `2`
 - landing-target consumption count: `50`
 - live weather proof status: `rtl_triggered_by_live_weather_injection`
@@ -31,5 +31,5 @@
 
 ## Generated Files
 
-- [manifest.json](C:/Users/sa239/OneDrive/سطح المكتب/Skylink2/SeniorProject/artifacts/replay_bundle/latest/manifest.json)
-- [dock_approach_timeline.csv](C:/Users/sa239/OneDrive/سطح المكتب/Skylink2/SeniorProject/artifacts/replay_bundle/latest/dock_approach_timeline.csv)
+- [manifest.json](/root/SeniorProject/artifacts/replay_bundle/latest/manifest.json)
+- [dock_approach_timeline.csv](/root/SeniorProject/artifacts/replay_bundle/latest/dock_approach_timeline.csv)

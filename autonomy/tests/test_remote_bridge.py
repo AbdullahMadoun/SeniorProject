@@ -164,6 +164,31 @@ class RemoteBridgeTests(unittest.TestCase):
         self.assertEqual(fake.run_calls[1][0][0], "scp")
         self.assertIn("root@ssh4.vast.ai:/root/SeniorProject/artifacts/planner/job_cache/abc/mission.json", fake.run_calls[1][0])
 
+    def test_upload_file_stages_non_ascii_local_paths_through_ascii_temp_path(self) -> None:
+        fake = _FakeExecutor()
+        target = RemoteTarget(
+            host="ssh4.vast.ai",
+            port=17126,
+            user="root",
+            ssh_key_path=Path("deploy/backend/ssh/id_ed25519"),
+            remote_repo_root="/root/SeniorProject",
+            user_known_hosts_file="/dev/null",
+        )
+        bridge = RemoteExecutionBridge(target, executor=fake)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            unicode_dir = Path(tmp) / "سطح_المكتب"
+            unicode_dir.mkdir(parents=True, exist_ok=True)
+            local_file = unicode_dir / "mission.json"
+            local_file.write_text('{"ok": true}\n', encoding="utf-8")
+
+            remote_path = "/root/SeniorProject/artifacts/planner/job_cache/unicode/mission.json"
+            bridge.upload_file(local_file, remote_path, timeout_seconds=1.0)
+
+        scp_args = fake.run_calls[1][0]
+        self.assertEqual(scp_args[0], "scp")
+        self.assertNotIn("سطح_المكتب", " ".join(str(arg) for arg in scp_args))
+
     def test_run_streaming_delivers_stdout_and_stderr(self) -> None:
         fake = _FakeExecutor()
         fake.next_popen = _FakePopen(
@@ -209,6 +234,47 @@ class RemoteBridgeTests(unittest.TestCase):
         with self.assertRaises(RemoteTimeoutError):
             bridge.run_streaming("sleep 999", timeout_seconds=0.05)
         self.assertTrue(fake.next_popen.terminated)
+
+    def test_start_remote_mission_process_syncs_runtime_sources_before_launch(self) -> None:
+        fake = _FakeExecutor()
+        fake.next_popen = _FakePopen(stdout_text="", stderr_text="", exit_code=0, poll_code=0)
+        target = RemoteTarget(
+            host="ssh4.vast.ai",
+            port=17126,
+            user="root",
+            ssh_key_path=Path("deploy/backend/ssh/id_ed25519"),
+            remote_repo_root="/root/SeniorProject",
+            user_known_hosts_file="/dev/null",
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            for relative in RemoteExecutionBridge.REMOTE_RUNTIME_SYNC_FILES:
+                local_path = repo_root / Path(relative)
+                local_path.parent.mkdir(parents=True, exist_ok=True)
+                local_path.write_text("# synced\n", encoding="utf-8")
+
+            bridge = RemoteExecutionBridge(target, executor=fake, local_cwd=repo_root)
+            bridge.start_remote_mission_process(
+                "/root/SeniorProject/artifacts/remote_jobs/job123/mission_request.json",
+                job_id="job123",
+                cpu_cores="2,3",
+            )
+
+        scp_destinations = [
+            arg
+            for args, _, _ in fake.run_calls
+            if args and args[0] == "scp"
+            for arg in args
+            if isinstance(arg, str) and arg.startswith("root@ssh4.vast.ai:")
+        ]
+        self.assertTrue(
+            any(destination.endswith("/autonomy/drone_system/safety_engine.py") for destination in scp_destinations)
+        )
+        self.assertTrue(
+            any(destination.endswith("/autonomy/scripts/run_remote_interactive_mission.py") for destination in scp_destinations)
+        )
+        self.assertEqual(len(fake.popen_calls), 1)
 
 
 if __name__ == "__main__":
