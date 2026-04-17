@@ -14,6 +14,7 @@ from autonomy.drone_system.landing_target_stream import (
     LandingTargetPublisher,
     build_stationary_landing_target_samples,
     connection_string_for_endpoint,
+    observer_connection_string_for_endpoint,
 )
 
 
@@ -73,6 +74,28 @@ class LandingTargetStreamTests(unittest.TestCase):
             "udpout:172.23.68.199:14550",
         )
 
+    def test_connection_string_for_endpoint_supports_direct_px4_linux_mode(self) -> None:
+        self.assertEqual(
+            connection_string_for_endpoint("gcs", bridge_ip=None, direct_px4=True),
+            "udpout:127.0.0.1:18570",
+        )
+
+    def test_observer_connection_string_for_endpoint_uses_host_listener_by_default(self) -> None:
+        self.assertEqual(
+            observer_connection_string_for_endpoint("gcs"),
+            "udpin:0.0.0.0:14550",
+        )
+
+    def test_observer_connection_string_for_endpoint_supports_direct_px4_linux_mode(self) -> None:
+        self.assertEqual(
+            observer_connection_string_for_endpoint("gcs", direct_px4=True),
+            "udpout:127.0.0.1:18570",
+        )
+
     def test_connection_string_for_endpoint_rejects_unsupported_endpoint(self) -> None:
         with self.assertRaises(ValueError):
             connection_string_for_endpoint("invalid", bridge_ip="172.23.68.199")
+
+    def test_observer_connection_string_for_endpoint_rejects_unsupported_endpoint(self) -> None:
+        with self.assertRaises(ValueError):
+            observer_connection_string_for_endpoint("invalid")

@@ -68,6 +68,13 @@ TELEMETRY_PREFIX = "__TELEMETRY__"
 LIVE_POSITION_READY_TIMEOUT_S = 45.0
 
 
+def use_direct_px4_transport() -> bool:
+    raw = os.environ.get("LANDING_TARGET_DIRECT_PX4")
+    if raw is not None and raw.strip():
+        return raw.strip().lower() in {"1", "true", "yes", "on"}
+    return os.name != "nt"
+
+
 def _write_json(path: Path, payload: dict[str, object]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
@@ -327,10 +334,11 @@ async def main_async(spec_path: Path) -> None:
         os.environ.get("MAVSDK_CONNECT_TIMEOUT_S", str(DEFAULT_CONNECT_TIMEOUT_S))
     )
     endpoint = os.environ.get("LANDING_TARGET_ENDPOINT", DEFAULT_ENDPOINT)
-    bridge_ip = os.environ.get("WSL_BRIDGE_IP") or detect_wsl_bridge_ip()
+    direct_px4 = use_direct_px4_transport()
+    bridge_ip = None if direct_px4 else (os.environ.get("WSL_BRIDGE_IP") or detect_wsl_bridge_ip())
     connection_string = os.environ.get(
         "LANDING_TARGET_CONNECTION_STRING",
-        connection_string_for_endpoint(endpoint, bridge_ip=bridge_ip),
+        connection_string_for_endpoint(endpoint, bridge_ip=bridge_ip, direct_px4=direct_px4),
     )
     dock_target = DockTarget(
         north_m=baseline.docking.dock_center_north_m,
@@ -554,6 +562,7 @@ async def main_async(spec_path: Path) -> None:
             },
             "landing_target_connection": {
                 "endpoint": endpoint,
+                "direct_px4_transport": direct_px4,
                 "connection_string": connection_string,
                 "stream_rate_hz": baseline.docking.landing_target_stream_rate_hz,
                 "stream_duration_s": STREAM_DURATION_S,

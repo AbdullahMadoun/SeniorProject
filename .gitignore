@@ -29,8 +29,8 @@ env/
 !.env.example
 .tokens/
 .streamlit/secrets.toml
-deploy/backend/ssh/id_ed25519
-deploy/backend/ssh/id_ed25519.pub
+deploy/backend/ssh/*
+!deploy/backend/ssh/.gitkeep
 
 # Logs
 *.log

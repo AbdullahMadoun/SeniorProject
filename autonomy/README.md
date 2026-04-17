@@ -21,6 +21,7 @@ to build a simulation-first backbone that can later connect to PX4 hardware with
 - `docs/installation_log.md`
 - `docs/milestone_results.md`
 - `docs/reproducibility_runbook.md`
+- `../deploy/simulation/README.md`
 - `drone_system/config.py`
 - `drone_system/geofence.py`
 - `drone_system/interactive_mission.py`
@@ -68,6 +69,13 @@ to build a simulation-first backbone that can later connect to PX4 hardware with
 - `scripts/run_live_px4_probe.ps1`
 - `scripts/run_live_px4_snapshot_wsl.ps1`
 - `scripts/run_live_px4_mission_validation_wsl.ps1`
+- `scripts/run_live_px4_landing_target_consumption_linux.sh`
+- `scripts/run_live_px4_probe_linux.sh`
+- `scripts/run_live_px4_mission_validation_linux.sh`
+- `scripts/run_live_px4_execution_validation_linux.sh`
+- `scripts/run_live_px4_precision_landing_profile_linux.sh`
+- `scripts/run_live_px4_landing_target_stream_linux.sh`
+- `scripts/run_live_px4_dock_approach_validation_linux.sh`
 - `scripts/run_px4_sitl_wsl.ps1`
 - `scripts/run_safety_scenarios.py`
 - `scripts/run_showcase.ps1`
