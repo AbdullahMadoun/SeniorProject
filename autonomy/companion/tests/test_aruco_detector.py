@@ -13,6 +13,11 @@ REPO_ROOT = AUTONOMY_ROOT.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+os.environ.setdefault(
+    "SKYLINK_CAMERA_CALIBRATION",
+    str(AUTONOMY_ROOT / "fixtures" / "sim_calibration.json"),
+)
+
 from autonomy.companion.aruco_detector import ArucoDetectorConfig, ArucoPrecisionLandingService
 
 
@@ -37,4 +42,3 @@ class ArucoDetectorTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

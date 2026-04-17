@@ -4,7 +4,9 @@ import asyncio
 import contextlib
 import json
 import math
+import os
 import sys
+import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -28,6 +30,7 @@ from autonomy.drone_system.precision_landing import (
     PrecisionLandingPhase,
     PrecisionLandingTuning,
 )
+from autonomy.drone_system.precision_landing_px4 import configure_px4_precision_landing
 from autonomy.scripts.export_landing_demo_data import (
     OUTPUT_DIR,
     OUTPUT_JSON_PATH,
@@ -56,6 +59,19 @@ LANDING_TIMEOUT_S = 120.0
 TOUCHDOWN_TIMEOUT_S = 30.0
 CAMERA_HALF_ANGLE_RAD = math.radians(55.0)
 CAMERA_MIN_RANGE_M = 0.15
+STATE_FILE = Path(
+    os.environ.get(
+        "SKYLINK_COMPANION_STATE_FILE",
+        str(Path(tempfile.gettempdir()) / "skylink_drone_state.json"),
+    )
+)
+
+
+def _env_flag(name: str, *, default: bool = False) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
 @dataclass
@@ -188,6 +204,49 @@ def append_frame(
     )
 
 
+def build_companion_state_payload(
+    *,
+    vehicle_pose: VehicleLocalPose,
+    telemetry_state: LiveTelemetryState,
+    dock_target: DockTarget,
+    phase: str,
+) -> dict[str, float | str | bool]:
+    position_velocity_ned = telemetry_state.position_velocity_ned
+    north_velocity_mps = 0.0
+    east_velocity_mps = 0.0
+    if position_velocity_ned is not None:
+        north_velocity_mps = float(position_velocity_ned.velocity.north_m_s)
+        east_velocity_mps = float(position_velocity_ned.velocity.east_m_s)
+    return {
+        "altitude_m": round(max(0.0, -vehicle_pose.down_m), 6),
+        "offset_x_m": round(vehicle_pose.east_m - dock_target.east_m, 6),
+        "offset_y_m": round(vehicle_pose.north_m - dock_target.north_m, 6),
+        "roll_rad": round(math.radians(vehicle_pose.roll_deg), 6),
+        "pitch_rad": round(math.radians(vehicle_pose.pitch_deg), 6),
+        "vel_xy_ms": round(math.hypot(north_velocity_mps, east_velocity_mps), 6),
+        "fsm_state": phase,
+        "noise_enabled": True,
+        "drop_prob": 0.0,
+    }
+
+
+def write_companion_state(
+    *,
+    vehicle_pose: VehicleLocalPose,
+    telemetry_state: LiveTelemetryState,
+    dock_target: DockTarget,
+    phase: str,
+) -> None:
+    STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    payload = build_companion_state_payload(
+        vehicle_pose=vehicle_pose,
+        telemetry_state=telemetry_state,
+        dock_target=dock_target,
+        phase=phase,
+    )
+    STATE_FILE.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
 async def wait_for_connection(drone: System, *, timeout_s: float = 30.0) -> None:
     deadline = time.monotonic() + timeout_s
     async for state in drone.core.connection_state():
@@ -279,6 +338,12 @@ async def run_takeoff_phase(
             forward_velocity_mps=forward_vel,
             right_velocity_mps=right_vel,
         )
+        write_companion_state(
+            vehicle_pose=vehicle_pose,
+            telemetry_state=telemetry_state,
+            dock_target=dock_target,
+            phase="TAKEOFF",
+        )
         if geometry["altitude_m"] >= TAKEOFF_ALTITUDE_M - 0.5 and telemetry_state.in_air:
             log_stage(
                 f"Takeoff complete: altitude_m={geometry['altitude_m']:.2f} "
@@ -352,6 +417,12 @@ async def run_approach_phase(
             forward_velocity_mps=forward_vel,
             right_velocity_mps=right_vel,
         )
+        write_companion_state(
+            vehicle_pose=vehicle_pose,
+            telemetry_state=telemetry_state,
+            dock_target=dock_target,
+            phase="APPROACH",
+        )
         horizontal_distance_m = math.hypot(
             vehicle_pose.north_m - APPROACH_NORTH_M,
             vehicle_pose.east_m - APPROACH_EAST_M,
@@ -381,6 +452,7 @@ async def run_precision_landing_phase(
     deadline = time.monotonic() + LANDING_TIMEOUT_S
     handed_off_to_land = False
     last_phase: PrecisionLandingPhase | None = None
+    companion_managed_descent = _env_flag("SKYLINK_ENABLE_COMPANION_SIM")
 
     while time.monotonic() < deadline:
         loop_start_s = time.monotonic()
@@ -409,8 +481,25 @@ async def run_precision_landing_phase(
             forward_velocity_mps=float(state.command.forward_velocity_mps),
             right_velocity_mps=float(state.command.right_velocity_mps),
         )
+        write_companion_state(
+            vehicle_pose=vehicle_pose,
+            telemetry_state=telemetry_state,
+            dock_target=dock_target,
+            phase=state.phase.name,
+        )
 
         if not handed_off_to_land:
+            if companion_managed_descent and state.phase in {
+                PrecisionLandingPhase.DESCEND,
+                PrecisionLandingPhase.FLARE,
+            }:
+                log_stage("Companion-managed descent enabled; handing off to PX4 land mode")
+                with contextlib.suppress(OffboardError, RuntimeError):
+                    await drone.offboard.stop()
+                await drone.action.land()
+                handed_off_to_land = True
+                await asyncio.sleep(CONTROL_INTERVAL_S)
+                continue
             north_velocity_mps, east_velocity_mps = controller_body_to_local_velocity(
                 forward_velocity_mps=float(state.command.forward_velocity_mps),
                 right_velocity_mps=float(state.command.right_velocity_mps),
@@ -468,6 +557,12 @@ async def finalize_touchdown(
             forward_velocity_mps=forward_vel,
             right_velocity_mps=right_vel,
         )
+        write_companion_state(
+            vehicle_pose=vehicle_pose,
+            telemetry_state=telemetry_state,
+            dock_target=dock_target,
+            phase="TOUCHDOWN",
+        )
         if not telemetry_state.in_air and geometry["altitude_m"] <= 0.15:
             log_stage(
                 f"Touchdown complete: north_m={vehicle_pose.north_m:.2f} "
@@ -502,6 +597,9 @@ async def main_async() -> None:
     await drone.connect(system_address=SYSTEM_ADDRESS)
     await wait_for_connection(drone)
     log_stage("PX4 connection established")
+    with contextlib.suppress(Exception):
+        applied = await configure_px4_precision_landing(drone, baseline, tuning)
+        log_stage(f"PX4 precision-landing parameters applied: count={len(applied)}")
     await configure_telemetry_rates(drone)
 
     stream_tasks = [
@@ -585,6 +683,9 @@ async def main_async() -> None:
             await drone.offboard.stop()
         with contextlib.suppress(Exception):
             await drone.action.disarm()
+        with contextlib.suppress(Exception):
+            if STATE_FILE.exists():
+                STATE_FILE.unlink()
         for task in stream_tasks:
             task.cancel()
         for task in stream_tasks:

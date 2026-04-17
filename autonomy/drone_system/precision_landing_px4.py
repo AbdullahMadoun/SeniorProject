@@ -23,6 +23,52 @@ class AppliedPx4ParameterSetting:
     rationale: str
 
 
+PX4_PRECISION_LANDING_RUNTIME_SETTINGS = (
+    Px4ParameterSetting(
+        name="RTL_RETURN_ALT",
+        param_type="float",
+        value=15.0,
+        rationale="Maintain safe climb altitude before the precision landing approach.",
+    ),
+    Px4ParameterSetting(
+        name="RTL_DESCEND_ALT",
+        param_type="float",
+        value=5.0,
+        rationale="Transition to the final precision-landing descent from a stable loiter altitude.",
+    ),
+    Px4ParameterSetting(
+        name="RTL_LAND_DELAY",
+        param_type="float",
+        value=0.0,
+        rationale="Avoid unnecessary hover delay before the landing controller takes over.",
+    ),
+    Px4ParameterSetting(
+        name="MPC_LAND_SPEED",
+        param_type="float",
+        value=0.4,
+        rationale="Slow the final touchdown for a controlled dock approach.",
+    ),
+    Px4ParameterSetting(
+        name="MPC_LAND_ALT1",
+        param_type="float",
+        value=5.0,
+        rationale="Begin the landing-speed ramp at the upper descent gate.",
+    ),
+    Px4ParameterSetting(
+        name="MPC_LAND_ALT2",
+        param_type="float",
+        value=1.0,
+        rationale="Reach the slow landing speed close to the dock.",
+    ),
+    Px4ParameterSetting(
+        name="EKF2_AID_MASK",
+        param_type="int",
+        value=321,
+        rationale="Allow PX4 to fuse landing-target information with the standard navigation aids.",
+    ),
+)
+
+
 def build_px4_precision_landing_profile(
     baseline: SystemBaseline,
     tuning: PrecisionLandingTuning | None = None,
@@ -100,3 +146,24 @@ def applied_profile_to_dict(
     applied_settings: tuple[AppliedPx4ParameterSetting, ...],
 ) -> list[dict[str, object]]:
     return [asdict(setting) for setting in applied_settings]
+
+
+def build_px4_precision_landing_runtime_profile(
+    baseline: SystemBaseline,
+    tuning: PrecisionLandingTuning | None = None,
+) -> tuple[Px4ParameterSetting, ...]:
+    base_settings = list(build_px4_precision_landing_profile(baseline, tuning))
+    names = {setting.name for setting in base_settings}
+    for runtime_setting in PX4_PRECISION_LANDING_RUNTIME_SETTINGS:
+        if runtime_setting.name not in names:
+            base_settings.append(runtime_setting)
+    return tuple(base_settings)
+
+
+async def configure_px4_precision_landing(
+    drone,
+    baseline: SystemBaseline,
+    tuning: PrecisionLandingTuning | None = None,
+) -> tuple[AppliedPx4ParameterSetting, ...]:
+    settings = build_px4_precision_landing_runtime_profile(baseline, tuning)
+    return await apply_px4_precision_landing_profile(drone.param, settings)

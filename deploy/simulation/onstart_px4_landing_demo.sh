@@ -118,7 +118,15 @@ wait_for_px4_ready
 
 write_status record 'running record_px4_landing_demo.py against live SITL'
 cd /opt/skylink2
+write_status companion 'starting simulated companion camera loop'
+export SKYLINK_CAMERA_CALIBRATION="/opt/skylink2/autonomy/fixtures/sim_calibration.json"
+export SKYLINK_ENABLE_COMPANION_SIM=1
+/opt/skylink2/autonomy/.venv/bin/python -m autonomy.companion.rpi_companion_sim \
+  2>&1 | tee /opt/skylink2/artifacts/demo/companion.log &
+COMPANION_PID=$!
+sleep 2
 if /opt/skylink2/autonomy/.venv/bin/python /opt/skylink2/autonomy/scripts/record_px4_landing_demo.py 2>&1 | tee /opt/skylink2/artifacts/demo/record.log; then
+  kill "${COMPANION_PID}" 2>/dev/null || true
   write_status upload 'uploading generated artifacts'
   JSON_URL="$(upload_tmpfiles /opt/skylink2/artifacts/demo/landing_trajectory.json landing_trajectory.bin)"
   HTML_URL="$(upload_tmpfiles /opt/skylink2/artifacts/demo/precision_landing_3d_demo.html precision_landing_3d_demo.bin)"
@@ -126,11 +134,14 @@ if /opt/skylink2/autonomy/.venv/bin/python /opt/skylink2/autonomy/scripts/record
   echo "LANDING_DEMO_HTML_URL=${HTML_URL}"
   write_status complete 'artifacts uploaded to temporary download URLs'
 else
+  kill "${COMPANION_PID}" 2>/dev/null || true
   write_status upload 'uploading failure logs'
   RECORD_URL="$(upload_tmpfiles /opt/skylink2/artifacts/demo/record.log record.log.bin || true)"
   PX4_URL="$(upload_tmpfiles /opt/skylink2/artifacts/demo/px4.log px4.log.bin || true)"
+  COMPANION_URL="$(upload_tmpfiles /opt/skylink2/artifacts/demo/companion.log companion.log.bin || true)"
   echo "RECORD_LOG_URL=${RECORD_URL}"
   echo "PX4_LOG_URL=${PX4_URL}"
+  echo "COMPANION_LOG_URL=${COMPANION_URL}"
   write_status failed 'record_px4_landing_demo.py failed; inspect uploaded logs'
   exit 1
 fi

@@ -28,10 +28,16 @@ class ArucoBoardDetectorBackend:
     ) -> None:
         self._cv2 = cv2_module
         self._aruco = cv2_module.aruco
+        self._marker_length_m = marker_length_m
 
         # Use 4x4 dictionary by default as per SkyLink standard
         self._dictionary = self._aruco.getPredefinedDictionary(self._aruco.DICT_4X4_50)
         self._parameters = self._aruco.DetectorParameters()
+        self._detector = (
+            self._aruco.ArucoDetector(self._dictionary, self._parameters)
+            if hasattr(self._aruco, "ArucoDetector")
+            else None
+        )
         
         # Load calibration
         if calibration_path is None:
@@ -54,9 +60,6 @@ class ArucoBoardDetectorBackend:
                 marker_separation_m,
                 self._dictionary,
             )
-            # Override IDs if needed
-            ids = np.arange(first_marker_id, first_marker_id + (markers_x * markers_y), dtype=np.int32)
-            self._board.setIds(ids)
         except AttributeError:
             # Legacy OpenCV format fallback
             self._board = self._aruco.GridBoard_create(
@@ -74,13 +77,18 @@ class ArucoBoardDetectorBackend:
         self._last_rvec = None
         self._last_tvec = None
 
-    def detect(self, frame: Any) -> list[LandingTargetObservation]:
-        """Detect the board and estimate its pose relative to the camera."""
-        corners, ids, _rejected = self._aruco.detectMarkers(
+    def detect_marker_geometry(self, frame: Any) -> tuple[Any, Any, Any]:
+        if self._detector is not None:
+            return self._detector.detectMarkers(frame)
+        return self._aruco.detectMarkers(
             frame,
             self._dictionary,
             parameters=self._parameters,
         )
+
+    def detect(self, frame: Any) -> list[LandingTargetObservation]:
+        """Detect the board and estimate its pose relative to the camera."""
+        corners, ids, _rejected = self.detect_marker_geometry(frame)
 
         image_shape = frame.shape
         quality = _compute_detection_quality(corners, ids, _rejected, image_shape, self.primary_marker_id)
@@ -91,74 +99,92 @@ class ArucoBoardDetectorBackend:
         observations: list[LandingTargetObservation] = []
 
         try:
-            # Attempt to estimate entire Board pose with Extrinsic Guess for stability
+            object_points, image_points = self._board.matchImagePoints(corners, ids)
+            object_points = np.asarray(object_points, dtype=np.float32).reshape((-1, 3))
+            image_points = np.asarray(image_points, dtype=np.float32).reshape((-1, 2))
             use_extrinsic_guess = self._last_rvec is not None and self._last_tvec is not None
-            rvec_in = self._last_rvec if use_extrinsic_guess else None
-            tvec_in = self._last_tvec if use_extrinsic_guess else None
-            
-            retval, rvec, tvec = self._aruco.estimatePoseBoard(
-                corners,
-                ids,
-                self._board,
-                self._camera_matrix,
-                self._dist_coeffs,
-                rvec_in,
-                tvec_in,
-                useExtrinsicGuess=use_extrinsic_guess
-            )
-            
+            if use_extrinsic_guess:
+                retval, rvec, tvec = self._cv2.solvePnP(
+                    object_points,
+                    image_points,
+                    self._camera_matrix,
+                    self._dist_coeffs,
+                    self._last_rvec,
+                    self._last_tvec,
+                    True,
+                )
+            else:
+                retval, rvec, tvec = self._cv2.solvePnP(
+                    object_points,
+                    image_points,
+                    self._camera_matrix,
+                    self._dist_coeffs,
+                )
+
             if retval and tvec is not None:
-                # Save state for next frame to prevent pose flipping
                 self._last_rvec = rvec
                 self._last_tvec = tvec
-                
-                # Transform from OpenCV Camera frame (Z-forward-out, X-right, Y-down)
-                # to Drone BODY_FRD (X-forward, Y-right, Z-down)
-                drone_x_m = -float(tvec[1][0])
-                drone_y_m = float(tvec[0][0])
-                drone_z_m = float(tvec[2][0])
-                
-                # Board successfully detected
+                flat_tvec = np.asarray(tvec, dtype=np.float32).reshape((-1,))
+                drone_x_m = -float(flat_tvec[1])
+                drone_y_m = float(flat_tvec[0])
+                drone_z_m = float(flat_tvec[2])
+
                 observations.append(
                     LandingTargetObservation(
                         timestamp_utc=time.time(),
                         marker_id=self.primary_marker_id,
-                        quality=quality * 1.2,  # Boost quality for board detection
+                        quality=quality * 1.2,
                         x_m=drone_x_m,
                         y_m=drone_y_m,
                         z_m=drone_z_m,
-                        source="cv2.aruco.board",
+                        source="cv2.solvepnp.board",
                     )
                 )
                 return observations
-            else:
-                # If estimate fails, reset guess
-                self._last_rvec = None
-                self._last_tvec = None
-        except Exception:
-            # Fallback to single marker if Board throws Exception due to OpenCV versioning
             self._last_rvec = None
             self._last_tvec = None
-            pass
+        except Exception:
+            self._last_rvec = None
+            self._last_tvec = None
 
-        # Fallback: Process single markers if board estimation failed
-        rvecs, tvecs, _ = self._aruco.estimatePoseSingleMarkers(
-            corners,
-            0.20, # Default length
-            self._camera_matrix,
-            self._dist_coeffs,
+        marker_object_points = np.array(
+            [
+                [-self._marker_length_m / 2.0, self._marker_length_m / 2.0, 0.0],
+                [self._marker_length_m / 2.0, self._marker_length_m / 2.0, 0.0],
+                [self._marker_length_m / 2.0, -self._marker_length_m / 2.0, 0.0],
+                [-self._marker_length_m / 2.0, -self._marker_length_m / 2.0, 0.0],
+            ],
+            dtype=np.float32,
         )
 
         for index, raw_id in enumerate(ids.flatten().tolist()):
             if int(raw_id) != self.primary_marker_id:
                 continue
-                
-            tvec = tvecs[index][0]
-            
+
+            image_points = np.asarray(corners[index], dtype=np.float32).reshape((-1, 2))
+            if hasattr(self._aruco, "estimatePoseSingleMarkers"):
+                _rvecs, tvecs, _ = self._aruco.estimatePoseSingleMarkers(
+                    [corners[index]],
+                    self._marker_length_m,
+                    self._camera_matrix,
+                    self._dist_coeffs,
+                )
+                tvec = tvecs[0][0]
+            else:
+                retval, _rvec, tvec = self._cv2.solvePnP(
+                    marker_object_points,
+                    image_points,
+                    self._camera_matrix,
+                    self._dist_coeffs,
+                )
+                if not retval:
+                    continue
+                tvec = np.asarray(tvec, dtype=np.float32).reshape((-1,))
+
             drone_x_m = -float(tvec[1])
             drone_y_m = float(tvec[0])
             drone_z_m = float(tvec[2])
-            
+
             observations.append(
                 LandingTargetObservation(
                     timestamp_utc=time.time(),
@@ -167,7 +193,7 @@ class ArucoBoardDetectorBackend:
                     x_m=drone_x_m,
                     y_m=drone_y_m,
                     z_m=drone_z_m,
-                    source="cv2.aruco.single",
+                    source="cv2.solvepnp.single",
                 )
             )
 

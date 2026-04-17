@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 import sys
 import tempfile
@@ -10,6 +11,11 @@ AUTONOMY_ROOT = Path(__file__).resolve().parents[2]
 REPO_ROOT = AUTONOMY_ROOT.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
+
+os.environ.setdefault(
+    "SKYLINK_CAMERA_CALIBRATION",
+    str(AUTONOMY_ROOT / "fixtures" / "sim_calibration.json"),
+)
 
 from autonomy.companion.run_companion_smoke import run_smoke
 

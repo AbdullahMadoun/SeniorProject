@@ -23,6 +23,8 @@ else:
 
 
 DEFAULT_OUTPUT_DIR = Path(os.environ.get("SKYLINK_ARUCO_OUTPUT", Path.cwd() / "companion_aruco"))
+AUTONOMY_ROOT = Path(__file__).resolve().parents[1]
+SIM_CALIBRATION_PATH = AUTONOMY_ROOT / "fixtures" / "sim_calibration.json"
 
 CALIBRATION_FILE_ENV = "SKYLINK_CAMERA_CALIBRATION"
 CALIBRATION_STATUS_CALIBRATED = "calibrated"
@@ -36,6 +38,13 @@ QUALITY_FROM_DISTANCE = {
     (0.6, 0.8): 0.6,
     (0.8, 1.0): 0.3,
 }
+
+
+def _env_flag(name: str, *, default: bool = False) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _compute_detection_quality(
@@ -218,6 +227,11 @@ class OpenCVArucoBackend:
         self._aruco = cv2_module.aruco
         self._dictionary = self._aruco.getPredefinedDictionary(self._aruco.DICT_4X4_50)
         self._parameters = self._aruco.DetectorParameters()
+        self._detector = (
+            self._aruco.ArucoDetector(self._dictionary, self._parameters)
+            if hasattr(self._aruco, "ArucoDetector")
+            else None
+        )
         
         if calibration_path is None:
             calibration_path = os.environ.get(CALIBRATION_FILE_ENV)
@@ -230,28 +244,62 @@ class OpenCVArucoBackend:
                 "or pass calibration_path to ArUco detector. Placeholder intrinsics will cause "
                 "10-50cm landing error and are NOT permitted for flight."
             )
+        self._marker_object_points_cache: dict[float, np.ndarray] = {}
 
-    def detect(self, frame: Any, *, marker_size_m: float, marker_id: int) -> list[LandingTargetObservation]:
-        corners, ids, _rejected = self._aruco.detectMarkers(
+    def _detect_markers(self, frame: Any) -> tuple[Any, Any, Any]:
+        if self._detector is not None:
+            return self._detector.detectMarkers(frame)
+        return self._aruco.detectMarkers(
             frame,
             self._dictionary,
             parameters=self._parameters,
         )
+
+    def _marker_object_points(self, marker_size_m: float) -> np.ndarray:
+        cached = self._marker_object_points_cache.get(marker_size_m)
+        if cached is not None:
+            return cached
+        half_size_m = marker_size_m / 2.0
+        cached = np.array(
+            [
+                [-half_size_m, half_size_m, 0.0],
+                [half_size_m, half_size_m, 0.0],
+                [half_size_m, -half_size_m, 0.0],
+                [-half_size_m, -half_size_m, 0.0],
+            ],
+            dtype=np.float32,
+        )
+        self._marker_object_points_cache[marker_size_m] = cached
+        return cached
+
+    def detect(self, frame: Any, *, marker_size_m: float, marker_id: int) -> list[LandingTargetObservation]:
+        corners, ids, _rejected = self._detect_markers(frame)
         image_shape = frame.shape
         quality = _compute_detection_quality(corners, ids, _rejected, image_shape, marker_id)
         if ids is None or len(ids) == 0:
             return []
-        rvecs, tvecs, _ = self._aruco.estimatePoseSingleMarkers(
-            corners,
-            marker_size_m,
-            self._camera_matrix,
-            self._dist_coeffs,
-        )
         observations: list[LandingTargetObservation] = []
         for index, raw_id in enumerate(ids.flatten().tolist()):
             if int(raw_id) != marker_id:
                 continue
-            tvec = tvecs[index][0]
+            if hasattr(self._aruco, "estimatePoseSingleMarkers"):
+                _rvecs, tvecs, _ = self._aruco.estimatePoseSingleMarkers(
+                    [corners[index]],
+                    marker_size_m,
+                    self._camera_matrix,
+                    self._dist_coeffs,
+                )
+                tvec = tvecs[0][0]
+            else:
+                retval, _rvec, tvec = self._cv2.solvePnP(
+                    self._marker_object_points(marker_size_m),
+                    np.asarray(corners[index], dtype=np.float32).reshape((-1, 2)),
+                    self._camera_matrix,
+                    self._dist_coeffs,
+                )
+                if not retval:
+                    continue
+                tvec = np.asarray(tvec, dtype=np.float32).reshape((-1,))
             
             # Transform from OpenCV Camera frame (Z-forward-out, X-right, Y-down)
             # to Drone BODY_FRD (X-forward, Y-right, Z-down)
@@ -285,6 +333,9 @@ class ArucoPrecisionLandingService:
         backend: OpenCVArucoBackend | None = None,
     ) -> None:
         resolved_cv2, cv2_is_mock = load_cv2_module() if cv2_module is None else (cv2_module, False)
+        if cv2_module is None and _env_flag("SKYLINK_MOCK_ARUCO_DETECTION"):
+            resolved_cv2 = MockCV2Module()
+            cv2_is_mock = True
         if not hasattr(resolved_cv2, "aruco"):
             resolved_cv2 = MockCV2Module()
             cv2_is_mock = True
@@ -292,7 +343,10 @@ class ArucoPrecisionLandingService:
         self.cv2 = resolved_cv2
         self.cv2_is_mock = cv2_is_mock
         self.camera = camera
-        self.backend = backend or OpenCVArucoBackend(self.cv2)
+        calibration_path = os.environ.get(CALIBRATION_FILE_ENV)
+        if calibration_path is None and (config.use_mock_camera or self.cv2_is_mock) and SIM_CALIBRATION_PATH.exists():
+            calibration_path = str(SIM_CALIBRATION_PATH)
+        self.backend = backend or OpenCVArucoBackend(self.cv2, calibration_path=calibration_path)
         self.sender = sender or self._build_sender(config)
 
     def _build_sender(self, config: ArucoDetectorConfig) -> LandingTargetSender:
