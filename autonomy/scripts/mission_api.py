@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import contextlib
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 import json
@@ -39,6 +40,10 @@ from autonomy.drone_system.interactive_mission import (
     interactive_mission_spec_to_dict,
     validate_interactive_mission,
 )
+from autonomy.drone_system.remote_bridge import (
+    RemoteExecutionBridge,
+    remote_bridge_from_env,
+)
 from autonomy.drone_system.runtime_affinity import enforce_cpu_affinity
 
 
@@ -50,6 +55,8 @@ ARTIFACTS_DIR = REPO_ROOT / "artifacts"
 JOB_CACHE_DIR = PLANNER_DIR / "job_cache"
 DEFAULT_TARGET = "udpin://0.0.0.0:14540"
 DEFAULT_BRIDGE_STATUS = "Bridge Active"
+DEFAULT_REMOTE_BRIDGE_STATUS = "Remote Ready"
+DEFAULT_SHOWCASE_REDIRECT = "../showcase/latest/index.html"
 TELEMETRY_PREFIX = "__TELEMETRY__"
 DEFAULT_FPV_SOURCE_URL = os.environ.get("SKYLINK_FPV_SOURCE_URL", "http://127.0.0.1:5050/stream")
 DEFAULT_FPV_PROXY_PATH = "/api/fpv/stream"
@@ -57,6 +64,7 @@ DEFAULT_FPV_ENABLED = os.environ.get("SKYLINK_FPV_ENABLED", "1").strip().lower()
 DEFAULT_FPV_MODE = os.environ.get("SKYLINK_FPV_MODE", "simulation")
 DEFAULT_CPU_CORE = int(os.environ.get("SKYLINK_API_CPU_CORE", "0"))
 DEFAULT_EXECUTION_CPU_CORES = os.environ.get("SKYLINK_EXECUTION_CPU_CORES", "2,3")
+CONTROL_FIELD_NAMES = {"remote", "execution_mode"}
 
 baseline = load_system_baseline()
 default_environment = default_environment_overrides()
@@ -152,10 +160,23 @@ def _normalize_payload(body: Any) -> dict[str, Any]:
         }
     if isinstance(body, dict):
         normalized = dict(body)
+        for key in CONTROL_FIELD_NAMES:
+            normalized.pop(key, None)
         normalized.setdefault("mission_id", "interactive-mission")
         normalized.setdefault("cruise_speed_mps", baseline.speed_band.nominal_mps)
         return normalized
     raise HTTPException(status_code=400, detail="Mission payload must be an object or a waypoint list.")
+
+
+def _execution_mode_from_body(body: Any) -> str:
+    if not isinstance(body, dict):
+        return "local"
+    execution_mode = str(body.get("execution_mode", "")).strip().lower()
+    if execution_mode == "remote":
+        return "remote"
+    if bool(body.get("remote")):
+        return "remote"
+    return "local"
 
 
 def _parse_and_validate(body: Any):
@@ -196,10 +217,14 @@ class MissionExecutionJob:
     spec: dict[str, Any]
     status: str = "queued"
     redirect_url: str = "../dashboard/index.html"
+    execution_mode: str = "local"
+    target: str = DEFAULT_TARGET
+    bridge_status: str = DEFAULT_BRIDGE_STATUS
     events: list[dict[str, Any]] = field(default_factory=list)
     telemetry_events: list[dict[str, Any]] = field(default_factory=list)
     exit_code: int | None = None
     process: subprocess.Popen[str] | None = None
+    cancel_requested: bool = False
     lock: threading.Lock = field(default_factory=threading.Lock)
     event_offset: int = 0
     telemetry_offset: int = 0
@@ -255,6 +280,9 @@ class MissionExecutionJob:
                 "status": self.status,
                 "created_at": self.created_at,
                 "redirect_url": self.redirect_url,
+                "execution_mode": self.execution_mode,
+                "target": self.target,
+                "bridge_status": self.bridge_status,
                 "exit_code": self.exit_code,
                 "event_count": self.total_event_count,
                 "telemetry_event_count": self.total_telemetry_count,
@@ -268,7 +296,32 @@ class MissionExecutionManager:
         self._lock = threading.Lock()
         JOB_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
-    def start_job(self, spec) -> MissionExecutionJob:
+    def _remote_bridge(self) -> RemoteExecutionBridge | None:
+        return remote_bridge_from_env(REPO_ROOT)
+
+    def remote_status(self) -> dict[str, Any]:
+        bridge = self._remote_bridge()
+        if bridge is None:
+            return {
+                "configured": False,
+                "reachable": False,
+                "status": "unavailable",
+                "status_label": "Remote Unavailable",
+                "detail": "Remote execution is not configured.",
+                "target": "",
+                "target_label": "",
+                "repo_root": "",
+                "repo_present": False,
+                "venv_present": False,
+                "runner_present": False,
+                "px4_binary_present": False,
+                "sitl_running": False,
+                "mavlink_ready": False,
+                "ready_for_remote_execution": False,
+            }
+        return bridge.check_status()
+
+    def start_job(self, spec, *, execution_mode: str = "local") -> MissionExecutionJob:
         with self._lock:
             active = self.active_job()
             if active is not None:
@@ -281,11 +334,29 @@ class MissionExecutionManager:
                 json.dumps(interactive_mission_spec_to_dict(spec), indent=2),
                 encoding="utf-8",
             )
+            execution_mode = execution_mode if execution_mode == "remote" else "local"
+            target = DEFAULT_TARGET
+            bridge_status = DEFAULT_BRIDGE_STATUS
+            redirect_url = "../dashboard/index.html"
+            remote_status: dict[str, Any] | None = None
+            if execution_mode == "remote":
+                remote_status = self.remote_status()
+                if not remote_status.get("configured", False):
+                    raise RuntimeError(str(remote_status.get("detail", "Remote execution is not configured.")))
+                if not remote_status.get("ready_for_remote_execution", False):
+                    raise RuntimeError(str(remote_status.get("detail", "Remote execution host is not ready.")))
+                target = str(remote_status.get("target_label") or remote_status.get("target") or DEFAULT_TARGET)
+                bridge_status = str(remote_status.get("status_label") or DEFAULT_REMOTE_BRIDGE_STATUS)
+                redirect_url = DEFAULT_SHOWCASE_REDIRECT
             job = MissionExecutionJob(
                 job_id=job_id,
                 spec_path=spec_path,
                 created_at=_timestamp_utc(),
                 spec=interactive_mission_spec_to_dict(spec),
+                execution_mode=execution_mode,
+                target=target,
+                bridge_status=bridge_status,
+                redirect_url=redirect_url,
             )
             job.status = "running"
             job.append_event(
@@ -293,11 +364,13 @@ class MissionExecutionManager:
                 {
                     "job_id": job.job_id,
                     "status": job.status,
-                    "target": DEFAULT_TARGET,
-                    "bridge_status": DEFAULT_BRIDGE_STATUS,
+                    "execution_mode": execution_mode,
+                    "target": target,
+                    "bridge_status": bridge_status,
                     "redirect_url": job.redirect_url,
                     "created_at": job.created_at,
                     "spec": job.spec,
+                    "remote_status": remote_status,
                 },
             )
             self._jobs[job_id] = job
@@ -319,7 +392,105 @@ class MissionExecutionManager:
     def get_job(self, job_id: str) -> MissionExecutionJob | None:
         return self._jobs.get(job_id)
 
+    def cancel_job(self, job_id: str) -> MissionExecutionJob:
+        with self._lock:
+            job = self._jobs.get(job_id)
+            if job is None:
+                raise RuntimeError(f"Mission job {job_id} was not found.")
+            if job.status != "running":
+                return job
+            job.cancel_requested = True
+            job.append_event(
+                "status",
+                {
+                    "message": "Cancellation requested.",
+                    "status": "cancelling",
+                },
+            )
+            if job.execution_mode == "remote":
+                bridge = self._remote_bridge()
+                if bridge is not None:
+                    bridge.cancel_remote_job(job.job_id)
+            if job.process is not None and job.process.poll() is None:
+                with contextlib.suppress(Exception):
+                    job.process.terminate()
+            return job
+
     def _run_job(self, job: MissionExecutionJob) -> None:
+        try:
+            if job.execution_mode == "remote":
+                exit_code = self._run_remote_job(job)
+            else:
+                exit_code = self._run_local_job(job)
+        except Exception as exc:
+            job.exit_code = -1
+            if job.cancel_requested:
+                job.status = "cancelled"
+                job.append_event(
+                    "cancelled",
+                    {
+                        "job_id": job.job_id,
+                        "status": job.status,
+                        "success": False,
+                        "redirect_url": job.redirect_url,
+                        "detail": str(exc),
+                    },
+                )
+                return
+            job.status = "failed"
+            job.append_event(
+                "failed",
+                {
+                    "job_id": job.job_id,
+                    "status": job.status,
+                    "success": False,
+                    "exit_code": job.exit_code,
+                    "redirect_url": job.redirect_url,
+                    "detail": str(exc),
+                },
+            )
+            return
+
+        job.exit_code = exit_code
+        if job.cancel_requested:
+            job.status = "cancelled"
+            job.append_event(
+                "cancelled",
+                {
+                    "job_id": job.job_id,
+                    "status": job.status,
+                    "success": False,
+                    "exit_code": exit_code,
+                    "redirect_url": job.redirect_url,
+                },
+            )
+            return
+        if exit_code == 0:
+            job.status = "completed"
+            job.append_event(
+                "complete",
+                {
+                    "job_id": job.job_id,
+                    "status": job.status,
+                    "success": True,
+                    "redirect_url": job.redirect_url,
+                },
+            )
+            return
+
+        job.status = "failed"
+        job.append_event(
+            "failed",
+            {
+                "job_id": job.job_id,
+                "status": job.status,
+                "success": False,
+                "exit_code": exit_code,
+                "redirect_url": job.redirect_url,
+            },
+        )
+
+    def _run_local_job(self, job: MissionExecutionJob) -> int:
         command = [
             sys.executable,
             str(RUNNER_SCRIPT),
@@ -358,33 +529,70 @@ class MissionExecutionManager:
                     "message": line,
                 },
             )
+        return process.wait()
 
-        exit_code = process.wait()
-        job.exit_code = exit_code
-        if exit_code == 0:
-            job.status = "completed"
-            job.append_event(
-                "complete",
-                {
-                    "job_id": job.job_id,
-                    "status": job.status,
-                    "success": True,
-                    "redirect_url": job.redirect_url,
-                },
-            )
-            return
-
-        job.status = "failed"
+    def _run_remote_job(self, job: MissionExecutionJob) -> int:
+        bridge = self._remote_bridge()
+        if bridge is None:
+            raise RuntimeError("Remote execution is not configured.")
+        remote_spec_path = bridge.upload_mission_spec(job.spec_path, job_id=job.job_id)
         job.append_event(
-            "failed",
+            "status",
             {
-                "job_id": job.job_id,
-                "status": job.status,
-                "success": False,
-                "exit_code": exit_code,
-                "redirect_url": job.redirect_url,
+                "message": "Mission spec uploaded to remote SITL host.",
+                "status": "running",
+                "execution_mode": "remote",
             },
         )
+        process = bridge.start_remote_mission_process(
+            remote_spec_path,
+            job_id=job.job_id,
+            cpu_cores=DEFAULT_EXECUTION_CPU_CORES,
+        )
+        job.process = process
+        job.append_event(
+            "status",
+            {
+                "message": "Remote mission execution started.",
+                "status": "running",
+                "execution_mode": "remote",
+            },
+        )
+
+        assert process.stdout is not None
+        for raw_line in process.stdout:
+            line = raw_line.rstrip("\r\n")
+            telemetry_payload = _extract_telemetry_payload(line)
+            if telemetry_payload is not None:
+                job.append_telemetry(telemetry_payload)
+                continue
+            job.append_event(
+                "log",
+                {
+                    "message": line,
+                },
+            )
+
+        exit_code = process.wait()
+        if exit_code == 0 and not job.cancel_requested:
+            job.append_event(
+                "status",
+                {
+                    "message": "Remote mission complete. Syncing artifacts locally.",
+                    "status": "running",
+                    "execution_mode": "remote",
+                },
+            )
+            bridge.download_artifacts(local_repo_root=REPO_ROOT)
+            job.append_event(
+                "status",
+                {
+                    "message": "Remote artifacts synced locally.",
+                    "status": "running",
+                    "execution_mode": "remote",
+                },
+            )
+        return exit_code
 
 
 job_manager = MissionExecutionManager()
@@ -426,7 +634,11 @@ async def validate_mission(body: Any = Body(...)) -> dict[str, Any]:
 
 
 @app.post("/api/mission/execute")
-async def execute_mission(body: Any = Body(...)) -> dict[str, Any]:
+async def execute_mission(
+    body: Any = Body(...),
+    remote: bool = Query(default=False),
+) -> dict[str, Any]:
+    execution_mode = "remote" if remote else _execution_mode_from_body(body)
     if PREPARED_SPEC_PATH.exists():
         try:
             spec_dict = json.loads(PREPARED_SPEC_PATH.read_text(encoding="utf-8-sig"))
@@ -440,15 +652,16 @@ async def execute_mission(body: Any = Body(...)) -> dict[str, Any]:
     else:
         spec = _parse_and_validate(body)
     try:
-        job = job_manager.start_job(spec)
+        job = job_manager.start_job(spec, execution_mode=execution_mode)
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return {
         "job_id": job.job_id,
         "status": job.status,
         "redirect_url": job.redirect_url,
-        "target": DEFAULT_TARGET,
-        "bridge_status": DEFAULT_BRIDGE_STATUS,
+        "execution_mode": job.execution_mode,
+        "target": job.target,
+        "bridge_status": job.bridge_status,
         "spec": job.spec,
     }
 
@@ -470,6 +683,20 @@ async def prepare_mission(body: Any = Body(...)) -> dict[str, Any]:
         "message": "Simulation prepared. Click Launch to execute.",
         "spec": interactive_mission_spec_to_dict(spec),
     }
+
+
+@app.get("/api/remote/status")
+async def remote_status() -> dict[str, Any]:
+    return job_manager.remote_status()
+
+
+@app.post("/api/mission/cancel")
+async def cancel_mission(job_id: str = Query(...)) -> dict[str, Any]:
+    try:
+        job = job_manager.cancel_job(job_id)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return job.snapshot()
 
 
 @app.get("/api/fpv/stream")
@@ -518,7 +745,7 @@ async def system_logs(job_id: str | None = Query(default=None)) -> StreamingResp
                 cursor = event["seq"] + 1
                 yield _format_sse(event["event"], event["data"])
                 heartbeat_at = asyncio.get_running_loop().time()
-            if status in {"completed", "failed"} and not pending:
+            if status in {"completed", "failed", "cancelled"} and not pending:
                 break
             now = asyncio.get_running_loop().time()
             if now - heartbeat_at >= 5.0:
@@ -551,7 +778,7 @@ async def telemetry_live(job_id: str | None = Query(default=None)) -> StreamingR
                 cursor = event["seq"] + 1
                 yield _format_sse("telemetry", event["data"])
                 heartbeat_at = asyncio.get_running_loop().time()
-            if status in {"completed", "failed"} and not pending:
+            if status in {"completed", "failed", "cancelled"} and not pending:
                 break
             now = asyncio.get_running_loop().time()
             if now - heartbeat_at >= 5.0:

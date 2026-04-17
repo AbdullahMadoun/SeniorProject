@@ -175,6 +175,67 @@
       padding: 13px 14px;
       font: inherit;
     }
+    .field-wide { grid-column: 1 / -1; }
+    .toggle-row {
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+    }
+    .toggle-copy { min-width: 0; }
+    .toggle-caption {
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-top: 2px;
+    }
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 52px;
+      height: 30px;
+      flex: 0 0 auto;
+      margin-top: 2px;
+    }
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(255,255,255,0.07);
+      border: 1px solid rgba(255,255,255,0.12);
+      transition: background 180ms ease, border-color 180ms ease;
+      border-radius: 999px;
+    }
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 22px;
+      width: 22px;
+      left: 3px;
+      top: 3px;
+      background: rgba(232, 232, 237, 0.92);
+      border-radius: 999px;
+      transition: transform 180ms ease, background 180ms ease;
+      box-shadow: 0 10px 26px rgba(0,0,0,0.42);
+    }
+    .switch input:checked + .slider {
+      background: rgba(0, 212, 170, 0.20);
+      border-color: rgba(0, 212, 170, 0.42);
+    }
+    .switch input:checked + .slider:before {
+      transform: translateX(22px);
+      background: rgba(0, 212, 170, 0.92);
+    }
+    .switch input:disabled + .slider {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
     .action-row {
       display: flex;
       gap: 10px;
@@ -248,7 +309,7 @@
     .terminal-head {
       padding: 14px 16px;
       display: grid;
-      grid-template-columns: minmax(0, 1.6fr) minmax(120px, 0.8fr);
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
       gap: 10px;
       border-bottom: 1px solid rgba(255,255,255,0.08);
       background: rgba(255,255,255,0.03);
@@ -328,9 +389,23 @@
               <label for="weather-profile">Weather Injection</label>
               <input id="weather-profile" value="0s:4.2, 10s:5.0, 18s:8.4, 30s:5.0" spellcheck="false">
             </div>
+            <div class="field field-wide">
+              <label for="remote-sim-toggle">Remote Simulation Mode</label>
+              <div class="toggle-row">
+                <label class="switch" title="Toggle remote simulation execution">
+                  <input id="remote-sim-toggle" type="checkbox">
+                  <span class="slider"></span>
+                </label>
+                <div class="toggle-copy">
+                  <div id="remote-sim-caption" class="toggle-caption">Local execution</div>
+                  <div class="muted" style="font-size:0.82rem;">When enabled, the planner requests remote execution (remote=true) while keeping the same live log terminal and auto-redirect behavior.</div>
+                </div>
+              </div>
+            </div>
           </div>
           <div class="action-row">
             <button id="execute-button" class="button-primary" type="button" disabled>Execute Mission</button>
+            <button id="cancel-button" type="button" disabled>Cancel Job</button>
             <button id="undo-button" type="button">Undo Last</button>
             <button id="clear-button" type="button">Clear Mission</button>
             <button id="showcase-button" type="button">Open Latest Showcase</button>
@@ -353,6 +428,11 @@
             <div class="terminal-head">
               <div class="log-meta"><label>Target</label><strong id="hud-target">udpin://0.0.0.0:14540</strong></div>
               <div class="log-meta"><label>Status</label><strong id="hud-status">Idle</strong></div>
+              <div class="log-meta">
+                <label>Remote</label>
+                <strong id="remote-badge" class="muted">Disabled</strong>
+                <div id="remote-detail" class="muted" style="margin-top:6px; font-size:0.82rem;">-</div>
+              </div>
             </div>
             <div id="terminal-body" class="terminal-body"></div>
           </div>
@@ -375,6 +455,8 @@
       geofenceCircle: null,
       routePolyline: null,
       waypointMarkers: [],
+      remoteMode: false,
+      remotePollTimer: null,
     };
 
     const mapEl = document.getElementById("mission-map");
@@ -382,13 +464,18 @@
     const cruiseSpeedInput = document.getElementById("cruise-speed");
     const waypointAltitudeInput = document.getElementById("waypoint-altitude");
     const weatherProfileInput = document.getElementById("weather-profile");
+    const remoteToggle = document.getElementById("remote-sim-toggle");
+    const remoteCaption = document.getElementById("remote-sim-caption");
     const executeButton = document.getElementById("execute-button");
+    const cancelButton = document.getElementById("cancel-button");
     const undoButton = document.getElementById("undo-button");
     const clearButton = document.getElementById("clear-button");
     const showcaseButton = document.getElementById("showcase-button");
     const terminalBody = document.getElementById("terminal-body");
     const hudTarget = document.getElementById("hud-target");
     const hudStatus = document.getElementById("hud-status");
+    const remoteBadge = document.getElementById("remote-badge");
+    const remoteDetail = document.getElementById("remote-detail");
     const validationAlert = document.getElementById("validation-alert");
     const cursorChip = document.getElementById("map-cursor");
     const mapHomeChip = document.getElementById("map-home");
@@ -612,6 +699,139 @@
       }
     }
 
+    const REMOTE_MODE_STORAGE_KEY = "skylink_planner_remote_sim_mode_v1";
+    function readStoredRemoteMode() {
+      try {
+        return window.localStorage.getItem(REMOTE_MODE_STORAGE_KEY) === "1";
+      } catch (_error) {
+        return false;
+      }
+    }
+
+    function storeRemoteMode(enabled) {
+      try {
+        window.localStorage.setItem(REMOTE_MODE_STORAGE_KEY, enabled ? "1" : "0");
+      } catch (_error) {
+        // ignore storage failures (private browsing, etc.)
+      }
+    }
+
+    function setRemoteBadge(label, className, detail) {
+      if (!remoteBadge || !remoteDetail) { return; }
+      remoteBadge.textContent = label;
+      remoteBadge.className = className || "muted";
+      remoteDetail.textContent = detail || "-";
+    }
+
+    function summarizeRemoteStatus(payload) {
+      if (!payload || typeof payload !== "object") {
+        return { label: "Unavailable", className: "bad", detail: "no payload" };
+      }
+      const raw = payload.status ?? payload.instance_status ?? payload.state ?? payload.health ?? "";
+      const normalized = String(raw).toLowerCase();
+      const ok = payload.ok;
+      let className = "warn";
+      if (ok === true || ["ok", "ready", "active", "running", "alive"].includes(normalized)) { className = "good"; }
+      if (ok === false || ["down", "error", "failed", "unavailable", "stopped"].includes(normalized)) { className = "bad"; }
+
+      const bits = [];
+      const instanceId = payload.instance_id ?? payload.id;
+      if (instanceId !== undefined && instanceId !== null && String(instanceId).length) { bits.push(`id=${instanceId}`); }
+      if (payload.label) { bits.push(String(payload.label)); }
+      if (payload.ssh_ok !== undefined) { bits.push(`ssh=${payload.ssh_ok ? "ok" : "fail"}`); }
+      if (payload.mavlink_ok !== undefined) { bits.push(`mavlink=${payload.mavlink_ok ? "ok" : "fail"}`); }
+      if (payload.px4_running !== undefined) { bits.push(`px4=${payload.px4_running ? "yes" : "no"}`); }
+      const detail = bits.join(" ") || payload.detail || "-";
+
+      const label = raw ? String(raw) : ok === true ? "OK" : ok === false ? "Down" : "Unknown";
+      return { label, className, detail };
+    }
+
+    async function fetchJsonWithTimeout(url, options, timeoutMs) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const response = await fetch(url, { ...(options || {}), signal: controller.signal });
+        const payload = await response.json().catch(() => null);
+        return { response, payload };
+      } finally {
+        clearTimeout(timeout);
+      }
+    }
+
+    async function pollRemoteStatusOnce() {
+      if (!state.remoteMode) { return; }
+      try {
+        const { response, payload } = await fetchJsonWithTimeout("/api/remote/status", null, 2200);
+        if (!response.ok) {
+          setRemoteBadge("Unavailable", "bad", `HTTP ${response.status}`);
+          return;
+        }
+        const summary = summarizeRemoteStatus(payload);
+        setRemoteBadge(summary.label, summary.className, summary.detail);
+      } catch (error) {
+        const detail = error?.name === "AbortError" ? "timeout" : (error?.message || "unknown error");
+        setRemoteBadge("Unavailable", "bad", detail);
+      }
+    }
+
+    function startRemotePolling() {
+      if (state.remotePollTimer) { return; }
+      pollRemoteStatusOnce();
+      state.remotePollTimer = setInterval(pollRemoteStatusOnce, 5000);
+    }
+
+    function stopRemotePolling() {
+      if (!state.remotePollTimer) { return; }
+      clearInterval(state.remotePollTimer);
+      state.remotePollTimer = null;
+    }
+
+    function setRemoteMode(enabled, { persist = true } = {}) {
+      state.remoteMode = Boolean(enabled);
+      if (remoteToggle) {
+        remoteToggle.checked = state.remoteMode;
+      }
+      if (remoteCaption) {
+        remoteCaption.textContent = state.remoteMode ? "Remote execution" : "Local execution";
+      }
+      executeButton.textContent = state.remoteMode ? "Execute Mission (Remote)" : "Execute Mission";
+      if (persist) {
+        storeRemoteMode(state.remoteMode);
+      }
+      if (state.remoteMode) {
+        setRemoteBadge("Checking...", "warn", "polling /api/remote/status");
+        startRemotePolling();
+      } else {
+        stopRemotePolling();
+        setRemoteBadge("Disabled", "muted", "-");
+      }
+    }
+
+    async function cancelMission() {
+      if (!state.jobId) {
+        appendTerminal("[WARN] No active job_id to cancel.", "error");
+        return;
+      }
+      cancelButton.disabled = true;
+      const base = "/api/mission/cancel";
+      const params = new URLSearchParams({ job_id: state.jobId });
+      if (state.remoteMode) { params.set("remote", "true"); }
+      const url = `${base}?${params.toString()}`;
+      appendTerminal(`[STATUS] Sending cancel request to ${url}`, "status");
+      try {
+        const response = await fetch(url, { method: "POST" });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(payload.detail || `Cancel failed (HTTP ${response.status})`);
+        }
+        appendTerminal("[STATUS] Cancel requested. Waiting for backend to stop the job...", "status");
+      } catch (error) {
+        cancelButton.disabled = false;
+        appendTerminal(`[ERROR] ${error.message || "Cancel failed."}`, "error");
+      }
+    }
+
     function connectLogs(jobId) {
       closeEventSource();
       const eventSource = new EventSource(`/api/system/logs?job_id=${encodeURIComponent(jobId)}`);
@@ -637,6 +857,8 @@
         appendTerminal("[STATUS] Mission execution completed. Redirecting to showcase...", "status");
         eventSource.close();
         state.eventSource = null;
+        cancelButton.disabled = true;
+        if (remoteToggle) { remoteToggle.disabled = false; }
         setTimeout(() => {
           window.location.href = payload.redirect_url || "../showcase/latest/index.html";
         }, 1200);
@@ -649,7 +871,26 @@
           appendTerminal("[ERROR] log stream failed.", "error");
         }
         hudStatus.textContent = "Failed";
+        eventSource.close();
+        state.eventSource = null;
         executeButton.disabled = false;
+        cancelButton.disabled = true;
+        if (remoteToggle) { remoteToggle.disabled = false; }
+      });
+      eventSource.addEventListener("cancelled", (event) => {
+        let payload = {};
+        try {
+          payload = JSON.parse(event.data);
+        } catch (_error) {
+          payload = {};
+        }
+        hudStatus.textContent = "Cancelled";
+        appendTerminal(`[STATUS] Mission execution cancelled${payload.detail ? `: ${payload.detail}` : "."}`, "status");
+        eventSource.close();
+        state.eventSource = null;
+        executeButton.disabled = false;
+        cancelButton.disabled = true;
+        if (remoteToggle) { remoteToggle.disabled = false; }
       });
       eventSource.onerror = () => {
         if (state.eventSource === eventSource) {
@@ -661,12 +902,21 @@
     async function executeMission() {
       executeButton.disabled = true;
       hudStatus.textContent = "Launching";
-      appendTerminal("[STATUS] Sending mission to /api/mission/execute", "status");
+      cancelButton.disabled = true;
+      if (remoteToggle) { remoteToggle.disabled = true; }
+      const executeUrl = state.remoteMode ? "/api/mission/execute?remote=true" : "/api/mission/execute";
+      appendTerminal(`[STATUS] Sending mission to ${executeUrl}`, "status");
       try {
-        const response = await fetch("/api/mission/execute", {
+        const payloadBody = missionPayload();
+        if (state.remoteMode) {
+          payloadBody.execution_mode = "remote";
+        }
+        const headers = { "Content-Type": "application/json" };
+        if (state.remoteMode) { headers["X-Skylink-Execution-Mode"] = "remote"; }
+        const response = await fetch(executeUrl, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(missionPayload()),
+          headers,
+          body: JSON.stringify(payloadBody),
         });
         const payload = await response.json();
         if (!response.ok) {
@@ -676,9 +926,12 @@
         hudTarget.textContent = payload.target || hudTarget.textContent;
         hudStatus.textContent = payload.bridge_status || payload.status || "Running";
         appendTerminal(`[STATUS] Mission job ${payload.job_id} started. Connecting log stream...`, "status");
+        cancelButton.disabled = false;
         connectLogs(payload.job_id);
       } catch (error) {
         executeButton.disabled = false;
+        cancelButton.disabled = true;
+        if (remoteToggle) { remoteToggle.disabled = false; }
         hudStatus.textContent = "Idle";
         appendTerminal(`[ERROR] ${error.message || "Mission launch failed."}`, "error");
       }
@@ -695,7 +948,11 @@
     showcaseButton.addEventListener("click", () => {
       window.location.href = "../showcase/latest/index.html";
     });
+    if (remoteToggle) {
+      remoteToggle.addEventListener("change", () => setRemoteMode(remoteToggle.checked));
+    }
     executeButton.addEventListener("click", executeMission);
+    cancelButton.addEventListener("click", cancelMission);
     missionIdInput.addEventListener("input", validateMission);
     cruiseSpeedInput.addEventListener("input", validateMission);
     waypointAltitudeInput.addEventListener("input", syncMap);
@@ -714,6 +971,7 @@
       updateWaypointList();
       syncMap();
       validateMission();
+      setRemoteMode(readStoredRemoteMode(), { persist: false });
     }
 
     initialize().catch((error) => {
