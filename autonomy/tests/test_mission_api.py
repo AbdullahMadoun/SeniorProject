@@ -149,6 +149,7 @@ class MissionApiTests(unittest.TestCase):
         start_job_mock.assert_called_once()
         _, kwargs = start_job_mock.call_args
         self.assertEqual(kwargs["execution_mode"], "local")
+        self.assertTrue(kwargs["replace_running"])
 
     def test_execute_accepts_remote_query_flag(self) -> None:
         fake_job = SimpleNamespace(
@@ -169,6 +170,7 @@ class MissionApiTests(unittest.TestCase):
         self.assertEqual(payload["bridge_status"], "Remote Ready")
         _, kwargs = start_job_mock.call_args
         self.assertEqual(kwargs["execution_mode"], "remote")
+        self.assertTrue(kwargs["replace_running"])
 
     def test_remote_status_endpoint_relays_manager_status(self) -> None:
         fake_status = {
@@ -442,6 +444,44 @@ class MissionApiTests(unittest.TestCase):
         self.assertEqual(job.execution_mode, "remote")
         self.assertEqual(job.target, "ssh://root@ssh4.vast.ai:17126/root/SeniorProject")
         self.assertEqual(job.bridge_status, "Remote Ready (Cached)")
+
+    def test_start_job_replace_running_marks_existing_job_cancelling_and_starts_new_job(self) -> None:
+        manager = mission_api.MissionExecutionManager()
+        spec = mission_api._parse_and_validate(self.valid_payload)
+
+        class _FakeThread:
+            def __init__(self, *args, **kwargs) -> None:
+                self.args = args
+                self.kwargs = kwargs
+
+            def start(self) -> None:
+                return None
+
+        with patch.object(mission_api.threading, "Thread", _FakeThread):
+            first = manager.start_job(spec, execution_mode="local")
+            second = manager.start_job(spec, execution_mode="local", replace_running=True)
+
+        self.assertNotEqual(first.job_id, second.job_id)
+        self.assertTrue(first.cancel_requested)
+        self.assertEqual(first.status, "cancelling")
+        self.assertEqual(second.status, "running")
+
+    def test_cancel_job_marks_running_job_as_cancelling(self) -> None:
+        manager = mission_api.MissionExecutionManager()
+        job = mission_api.MissionExecutionJob(
+            job_id="job-cancel",
+            spec_path=Path("mission_request.json"),
+            created_at="2026-04-18T00:00:00Z",
+            spec=self.valid_payload,
+            status="running",
+        )
+        manager._jobs[job.job_id] = job
+
+        cancelled = manager.cancel_job(job.job_id)
+
+        self.assertIs(cancelled, job)
+        self.assertTrue(job.cancel_requested)
+        self.assertEqual(job.status, "cancelling")
 
     def test_start_job_remote_allows_unreachable_probe_without_cache(self) -> None:
         manager = mission_api.MissionExecutionManager()

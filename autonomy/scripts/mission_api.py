@@ -413,9 +413,25 @@ class MissionExecutionManager:
         finally:
             self._remote_status_lock.release()
 
-    def start_job(self, spec, *, execution_mode: str = "local") -> MissionExecutionJob:
-        with self._lock:
+    def start_job(
+        self,
+        spec,
+        *,
+        execution_mode: str = "local",
+        replace_running: bool = False,
+    ) -> MissionExecutionJob:
+        replaced_job_id: str | None = None
+        if replace_running:
             active = self.active_job()
+            if active is not None:
+                replaced_job_id = active.job_id
+                self.cancel_job(
+                    active.job_id,
+                    detail=f"Mission job {active.job_id} is being replaced by a new launch.",
+                )
+
+        with self._lock:
+            active = self._active_job_locked()
             if active is not None:
                 raise RuntimeError(f"Mission job {active.job_id} is already running.")
             job_id = uuid.uuid4().hex[:12]
@@ -493,6 +509,7 @@ class MissionExecutionManager:
                     "redirect_url": job.redirect_url,
                     "created_at": job.created_at,
                     "spec": job.spec,
+                    "replaced_job_id": replaced_job_id,
                     "remote_status": remote_status,
                 },
             )
@@ -506,16 +523,20 @@ class MissionExecutionManager:
             thread.start()
             return job
 
-    def active_job(self) -> MissionExecutionJob | None:
+    def _active_job_locked(self) -> MissionExecutionJob | None:
         for job in self._jobs.values():
             if job.status == "running":
                 return job
         return None
 
+    def active_job(self) -> MissionExecutionJob | None:
+        with self._lock:
+            return self._active_job_locked()
+
     def get_job(self, job_id: str) -> MissionExecutionJob | None:
         return self._jobs.get(job_id)
 
-    def cancel_job(self, job_id: str) -> MissionExecutionJob:
+    def cancel_job(self, job_id: str, *, detail: str | None = None) -> MissionExecutionJob:
         with self._lock:
             job = self._jobs.get(job_id)
             if job is None:
@@ -523,10 +544,11 @@ class MissionExecutionManager:
             if job.status != "running":
                 return job
             job.cancel_requested = True
+            job.status = "cancelling"
             job.append_event(
                 "status",
                 {
-                    "message": "Cancellation requested.",
+                    "message": detail or "Cancellation requested.",
                     "status": "cancelling",
                 },
             )
@@ -775,7 +797,7 @@ async def execute_mission(
     else:
         spec = _parse_and_validate(body)
     try:
-        job = job_manager.start_job(spec, execution_mode=execution_mode)
+        job = job_manager.start_job(spec, execution_mode=execution_mode, replace_running=True)
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return {
