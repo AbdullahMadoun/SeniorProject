@@ -74,12 +74,8 @@ apt-get install -y --no-install-recommends \
 reset_environment_file
 
 rm -rf /opt/skylink2
-git clone --depth 1 --branch docker-to-vast-experiment https://github.com/AbdullahMadoun/SeniorProject.git /opt/skylink2
+git clone --depth 1 --branch codex-px4-final-20260417 https://github.com/AbdullahMadoun/SeniorProject.git /opt/skylink2
 mkdir -p /opt/skylink2/artifacts/demo
-
-write_status patch 'downloading local recorder patch bundle'
-curl -fsSL 'https://tmpfiles.org/dl/33606928/skylink_px4_demo_patch_v3.bin' -o /tmp/skylink_px4_demo_patch_v3.bin
-tar -xzf /tmp/skylink_px4_demo_patch_v3.bin -C /opt/skylink2
 
 write_status px4_clone 'cloning PX4-Autopilot v1.14.3'
 mkdir -p /opt/skylink2/vendor

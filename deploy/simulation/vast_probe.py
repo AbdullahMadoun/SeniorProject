@@ -421,6 +421,16 @@ def command_create_instance(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_destroy_instance(args: argparse.Namespace) -> int:
+    response = _json_request(
+        "DELETE",
+        f"/instances/{args.instance_id}/",
+        api_key=args.api_key,
+    )
+    print(json.dumps(response, indent=2))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Minimal Vast.ai helper for Skylink2 simulation workflows.")
     parser.add_argument("--api-key", help="Override the Vast.ai API key.")
@@ -499,6 +509,10 @@ def build_parser() -> argparse.ArgumentParser:
     create_instance_parser.add_argument("--vm", action="store_true")
     create_instance_parser.add_argument("--env", help="Docker-style env/port flags.")
     create_instance_parser.set_defaults(func=command_create_instance)
+
+    destroy_instance_parser = subparsers.add_parser("destroy-instance", help="Destroy a Vast.ai instance.")
+    destroy_instance_parser.add_argument("--instance-id", type=int, required=True)
+    destroy_instance_parser.set_defaults(func=command_destroy_instance)
 
     return parser
 
