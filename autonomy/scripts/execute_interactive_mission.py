@@ -153,7 +153,10 @@ async def _monitor_dynamic_weather(
     runtime_start_s: float,
 ) -> tuple[dict[str, object], object]:
     gate = MissionWeatherGate(baseline)
-    engine = MissionSafetyEngine(baseline)
+    engine = MissionSafetyEngine(
+        baseline,
+        low_battery_action=spec.battery.low_battery_action,
+    )
     observations: list[dict[str, object]] = []
     triggered = False
     action_observation: dict[str, object] | None = None
@@ -264,7 +267,10 @@ async def _monitor_nominal_weather(
     runtime_start_s: float,
 ) -> tuple[dict[str, object], object]:
     gate = MissionWeatherGate(baseline)
-    engine = MissionSafetyEngine(baseline)
+    engine = MissionSafetyEngine(
+        baseline,
+        low_battery_action=spec.battery.low_battery_action,
+    )
     elapsed_s = time.monotonic() - runtime_start_s
     reading = weather_reading_at(spec.weather_profile, elapsed_s)
     gate_decision = gate.assess(reading)
@@ -388,7 +394,10 @@ async def main_async(spec_path: Path) -> None:
         print("stage=preflight_weather_gate", flush=True)
         preflight_weather = weather_reading_at(spec.weather_profile, 0.0)
         preflight_gate = MissionWeatherGate(runtime_baseline).assess(preflight_weather)
-        preflight_safety = MissionSafetyEngine(runtime_baseline).assess_preflight(
+        preflight_safety = MissionSafetyEngine(
+            runtime_baseline,
+            low_battery_action=spec.battery.low_battery_action,
+        ).assess_preflight(
             initial_snapshot,
             mission_request,
             wind_mps=preflight_gate.effective_wind_mps,

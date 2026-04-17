@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from types import SimpleNamespace
+import json
 import sys
 import unittest
 from unittest.mock import patch
@@ -131,6 +132,33 @@ class MissionApiTests(unittest.TestCase):
         self.assertEqual(payload["job_id"], "job123")
         self.assertEqual(payload["status"], "running")
         self.assertEqual(payload["bridge_status"], "Bridge Active")
+
+    def test_execute_revalidates_prepared_mission_before_starting_job(self) -> None:
+        mission_api.PREPARED_SPEC_PATH.parent.mkdir(parents=True, exist_ok=True)
+        mission_api.PREPARED_SPEC_PATH.write_text(
+            json.dumps(
+                {
+                    "mission_id": "bad-prepared",
+                    "cruise_speed_mps": 5.0,
+                    "waypoints": [
+                        {"north_m": 0.0, "east_m": 0.0, "altitude_m": 10.0},
+                        {"north_m": 10.0, "east_m": 10.0, "altitude_m": 999.0},
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        try:
+            with patch.object(mission_api.job_manager, "start_job") as start_job_mock:
+                response = self.client.post("/api/mission/execute", json=self.valid_payload)
+
+            self.assertEqual(response.status_code, 400)
+            self.assertIn("Waypoint altitude 999.0 m exceeds 100.0 m.", response.json()["detail"])
+            start_job_mock.assert_not_called()
+            self.assertFalse(mission_api.PREPARED_SPEC_PATH.exists())
+        finally:
+            mission_api.PREPARED_SPEC_PATH.unlink(missing_ok=True)
 
     def test_validate_accepts_full_trip_mode_and_extended_battery_controls(self) -> None:
         response = self.client.post(

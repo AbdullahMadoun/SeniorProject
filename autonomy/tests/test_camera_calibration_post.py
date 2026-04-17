@@ -11,6 +11,7 @@ These tests verify that:
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -84,8 +85,13 @@ class TestOpenCVArucoBackend:
         cv2_mock.aruco.getPredefinedDictionary = MagicMock()
         cv2_mock.aruco.DICT_4X4_50 = 0
 
-        with pytest.raises(RuntimeError, match="calibration"):
-            OpenCVArucoBackend(cv2_mock, calibration_path=None, strict=True)
+        previous = os.environ.pop("SKYLINK_CAMERA_CALIBRATION", None)
+        try:
+            with pytest.raises(RuntimeError, match="calibration"):
+                OpenCVArucoBackend(cv2_mock, calibration_path=None, strict=True)
+        finally:
+            if previous is not None:
+                os.environ["SKYLINK_CAMERA_CALIBRATION"] = previous
 
 
 class TestCalibrateCameraRMS:

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from pathlib import Path
 import sys
 import unittest
@@ -13,7 +12,6 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 CALIBRATION_PATH = AUTONOMY_ROOT / "fixtures" / "sim_calibration.json"
-os.environ.setdefault("SKYLINK_CAMERA_CALIBRATION", str(CALIBRATION_PATH))
 
 from autonomy.companion.aruco_board_detector import ArucoBoardDetectorBackend
 from autonomy.simulation.landing_pad import PadRenderConfig, render_frame

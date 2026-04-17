@@ -157,3 +157,16 @@ class TestRunPreflightChecks:
         calib_check = next((c for c in results.checks if c.name == "camera_calibration"), None)
         assert calib_check is not None
         assert calib_check.passed is True
+
+
+class TestPhysicalPreflightThresholds:
+    def test_rtl_battery_threshold_check_reads_safety_baseline(self):
+        from autonomy.drone_system.preflight_assurance import PreflightAssurance, PreflightMode
+
+        pref = PreflightAssurance(mode=PreflightMode.PHYSICAL)
+        pref._check_rtl_battery_threshold()
+
+        results = pref.results
+        assert len(results) == 1
+        assert results[0].name == "rtl_battery_threshold"
+        assert results[0].passed is True

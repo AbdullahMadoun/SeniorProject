@@ -35,8 +35,14 @@ class SafetyDecision:
 
 
 class MissionSafetyEngine:
-    def __init__(self, baseline: SystemBaseline) -> None:
+    def __init__(
+        self,
+        baseline: SystemBaseline,
+        *,
+        low_battery_action: str = SafetyAction.RETURN_TO_LAUNCH.value,
+    ) -> None:
         self._baseline = baseline
+        self._low_battery_action = low_battery_action.strip().lower() or SafetyAction.RETURN_TO_LAUNCH.value
 
     def assess_preflight(
         self,
@@ -46,19 +52,26 @@ class MissionSafetyEngine:
     ) -> SafetyDecision:
         reasons: list[SafetyReason] = []
         details: list[str] = []
+        non_warning_reasons: list[SafetyReason] = []
 
         if not snapshot.connected:
-            reasons.append(SafetyReason.VEHICLE_DISCONNECTED)
+            reason = SafetyReason.VEHICLE_DISCONNECTED
+            reasons.append(reason)
+            non_warning_reasons.append(reason)
             details.append("Vehicle is not connected.")
 
         try:
             validate_mission_request(request, self._baseline)
         except ValueError as exc:
-            reasons.append(SafetyReason.MISSION_INVALID)
+            reason = SafetyReason.MISSION_INVALID
+            reasons.append(reason)
+            non_warning_reasons.append(reason)
             details.append(str(exc))
 
         if wind_mps > self._baseline.safety.max_operating_wind_mps:
-            reasons.append(SafetyReason.WIND_LIMIT_EXCEEDED)
+            reason = SafetyReason.WIND_LIMIT_EXCEEDED
+            reasons.append(reason)
+            non_warning_reasons.append(reason)
             details.append(
                 f"Wind {wind_mps:.1f} m/s exceeds "
                 f"{self._baseline.safety.max_operating_wind_mps:.1f} m/s."
@@ -66,27 +79,34 @@ class MissionSafetyEngine:
 
         battery = snapshot.battery_percent
         if battery is None:
-            reasons.append(SafetyReason.BATTERY_TELEMETRY_UNAVAILABLE)
+            reason = SafetyReason.BATTERY_TELEMETRY_UNAVAILABLE
+            reasons.append(reason)
+            non_warning_reasons.append(reason)
             details.append("Battery telemetry is unavailable.")
         elif battery <= self._baseline.safety.battery_rtl_percent:
-            reasons.append(SafetyReason.BATTERY_RTL_THRESHOLD)
+            reason = SafetyReason.BATTERY_RTL_THRESHOLD
+            reasons.append(reason)
+            non_warning_reasons.append(reason)
             details.append(
                 f"Battery {battery:.1f}% is at or below RTL threshold "
                 f"{self._baseline.safety.battery_rtl_percent:.1f}%."
             )
         elif battery <= self._baseline.safety.battery_warn_percent:
-            return SafetyDecision(
-                action=SafetyAction.WARN,
-                reasons=(SafetyReason.BATTERY_WARN_THRESHOLD,),
-                details=(
-                    f"Battery {battery:.1f}% is below warn threshold "
-                    f"{self._baseline.safety.battery_warn_percent:.1f}%.",
-                ),
+            reasons.append(SafetyReason.BATTERY_WARN_THRESHOLD)
+            details.append(
+                f"Battery {battery:.1f}% is below warn threshold "
+                f"{self._baseline.safety.battery_warn_percent:.1f}%."
             )
 
-        if reasons:
+        if non_warning_reasons:
             return SafetyDecision(
                 action=SafetyAction.ABORT_LAUNCH,
+                reasons=tuple(reasons),
+                details=tuple(details),
+            )
+        if reasons:
+            return SafetyDecision(
+                action=SafetyAction.WARN,
                 reasons=tuple(reasons),
                 details=tuple(details),
             )
@@ -123,12 +143,14 @@ class MissionSafetyEngine:
             )
 
         if battery <= self._baseline.safety.battery_rtl_percent:
+            action = self._rtl_low_battery_action()
             return SafetyDecision(
-                action=SafetyAction.RETURN_TO_LAUNCH,
+                action=action,
                 reasons=(SafetyReason.BATTERY_RTL_THRESHOLD,),
                 details=(
                     f"Battery {battery:.1f}% is at or below RTL threshold "
-                    f"{self._baseline.safety.battery_rtl_percent:.1f}%.",
+                    f"{self._baseline.safety.battery_rtl_percent:.1f}%; "
+                    f"configured action={action.value}.",
                 ),
             )
 
@@ -143,6 +165,15 @@ class MissionSafetyEngine:
             )
 
         return SafetyDecision(action=SafetyAction.CONTINUE)
+
+    def _rtl_low_battery_action(self) -> SafetyAction:
+        if self._low_battery_action in {SafetyAction.WARN.value, "warning"}:
+            return SafetyAction.WARN
+        if self._low_battery_action == SafetyAction.LAND_NOW.value:
+            return SafetyAction.LAND_NOW
+        if self._low_battery_action in {"land"}:
+            return SafetyAction.LAND_NOW
+        return SafetyAction.RETURN_TO_LAUNCH
 
     async def assess_preflight_from_gateway(
         self,

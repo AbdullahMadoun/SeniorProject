@@ -428,10 +428,15 @@ async def validate_mission(body: Any = Body(...)) -> dict[str, Any]:
 @app.post("/api/mission/execute")
 async def execute_mission(body: Any = Body(...)) -> dict[str, Any]:
     if PREPARED_SPEC_PATH.exists():
-        spec_dict = json.loads(PREPARED_SPEC_PATH.read_text(encoding="utf-8-sig"))
-        PREPARED_SPEC_PATH.unlink()
-        baseline = load_system_baseline()
-        spec = interactive_mission_spec_from_dict(spec_dict, baseline)
+        try:
+            spec_dict = json.loads(PREPARED_SPEC_PATH.read_text(encoding="utf-8-sig"))
+            baseline = load_system_baseline()
+            spec = interactive_mission_spec_from_dict(spec_dict, baseline)
+            validate_interactive_mission(spec, baseline)
+        except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        finally:
+            PREPARED_SPEC_PATH.unlink(missing_ok=True)
     else:
         spec = _parse_and_validate(body)
     try:

@@ -319,7 +319,7 @@ class MavsdkVehicleGateway(VehicleGateway):
             stop_server()
 
     async def get_snapshot(self) -> VehicleSnapshot:
-        VEHICLE_SNAPSHOT_DISCONNECTED = VehicleSnapshot(
+        vehicle_snapshot_disconnected = VehicleSnapshot(
             connected=False,
             armed=False,
             in_air=False,
@@ -327,7 +327,7 @@ class MavsdkVehicleGateway(VehicleGateway):
         )
 
         if self._drone is None:
-            return VEHICLE_SNAPSHOT_DISCONNECTED
+            return vehicle_snapshot_disconnected
 
         try:
             async with self._telemetry_lock:
@@ -393,25 +393,8 @@ class MavsdkVehicleGateway(VehicleGateway):
                 mission_progress=mission_progress,
             )
 
-        except TelemetryStreamClosed as exc:
-            self._consecutive_failures += 1
-            _logger.warning(
-                f"Telemetry stream failure #{self._consecutive_failures}: {exc}"
-            )
-
-            if self._consecutive_failures >= self.TELEMETRY_MAX_CONSECUTIVE_FAILURES:
-                _logger.critical(
-                    f"Max telemetry failures ({self.TELEMETRY_MAX_CONSECUTIVE_FAILURES}) reached. "
-                    "Marking stream as closed, initiating reconnection..."
-                )
-                self._telemetry_stream_closed = True
-
-                if self._telemetry_reconnect_task is None or self._telemetry_reconnect_task.done():
-                    self._telemetry_reconnect_task = asyncio.create_task(
-                        self._attempt_telemetry_reconnect()
-                    )
-
-            return VEHICLE_SNAPSHOT_DISCONNECTED
+        except TelemetryError as exc:
+            return self._handle_telemetry_failure(exc, disconnected_snapshot=vehicle_snapshot_disconnected)
 
     async def get_local_pose(self) -> VehicleLocalPose | None:
         if self._drone is None:
@@ -429,7 +412,7 @@ class MavsdkVehicleGateway(VehicleGateway):
                     default=None,
                     timeout_s=3.0,
                 )
-        except TelemetryStreamClosed:
+        except TelemetryError:
             return None
 
         if position_velocity_ned is None or attitude_euler is None:
@@ -458,7 +441,7 @@ class MavsdkVehicleGateway(VehicleGateway):
                     default=None,
                     timeout_s=3.0,
                 )
-        except TelemetryStreamClosed:
+        except TelemetryError:
             return {}
 
         if position is None:
@@ -649,16 +632,44 @@ class MavsdkVehicleGateway(VehicleGateway):
         transform=lambda item: item,
         timeout_s: float = 3.0,
     ):
-        try:
+        async def _consume():
             async for item in stream:
                 return transform(item)
             raise TelemetryStreamClosed("Stream ended before a value was received")
+
+        try:
+            return await asyncio.wait_for(_consume(), timeout=timeout_s)
         except asyncio.TimeoutError:
             raise TelemetryStreamClosed(f"Stream timed out after {timeout_s}s")
         except TelemetryStreamClosed:
             raise  # Re-raise our own exceptions
         except Exception as exc:
             raise TelemetryError(f"Unexpected stream error: {exc}") from exc
+
+    def _handle_telemetry_failure(
+        self,
+        exc: TelemetryError,
+        *,
+        disconnected_snapshot: VehicleSnapshot,
+    ) -> VehicleSnapshot:
+        self._consecutive_failures += 1
+        _logger.warning(
+            f"Telemetry stream failure #{self._consecutive_failures}: {exc}"
+        )
+
+        if self._consecutive_failures >= self.TELEMETRY_MAX_CONSECUTIVE_FAILURES:
+            _logger.critical(
+                f"Max telemetry failures ({self.TELEMETRY_MAX_CONSECUTIVE_FAILURES}) reached. "
+                "Marking stream as closed, initiating reconnection..."
+            )
+            self._telemetry_stream_closed = True
+
+            if self._telemetry_reconnect_task is None or self._telemetry_reconnect_task.done():
+                self._telemetry_reconnect_task = asyncio.create_task(
+                    self._attempt_telemetry_reconnect()
+                )
+
+        return disconnected_snapshot
 
     async def _attempt_telemetry_reconnect(self) -> None:
         """Background task to reconnect after telemetry failures."""

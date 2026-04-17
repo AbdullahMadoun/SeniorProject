@@ -320,7 +320,7 @@ class PreflightAssurance:
             from autonomy.drone_system.config import load_system_baseline
             baseline = load_system_baseline()
 
-            if baseline.battery.rtl_threshold_percent < 15.0:
+            if baseline.safety.battery_rtl_percent < 15.0:
                 self.results.append(CheckResult(
                     name="rtl_battery_threshold",
                     passed=False,
@@ -332,7 +332,7 @@ class PreflightAssurance:
                     name="rtl_battery_threshold",
                     passed=True,
                     severity=CheckSeverity.CRITICAL,
-                    message=f"RTL battery threshold: {baseline.battery.rtl_threshold_percent}%"
+                    message=f"RTL battery threshold: {baseline.safety.battery_rtl_percent}%"
                 ))
         except Exception as exc:
             self.results.append(CheckResult(

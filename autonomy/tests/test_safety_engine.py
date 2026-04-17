@@ -52,6 +52,13 @@ class SafetyEngineTests(unittest.TestCase):
         self.assertEqual(decision.action, SafetyAction.WARN)
         self.assertEqual(decision.reasons, (SafetyReason.BATTERY_WARN_THRESHOLD,))
 
+    def test_preflight_does_not_downgrade_disconnect_to_warning(self) -> None:
+        snapshot = replace(self.snapshot, connected=False, mode=VehicleMode.DISCONNECTED, battery_percent=25.0)
+        decision = self.engine.assess_preflight(snapshot, self.request, wind_mps=3.0)
+        self.assertEqual(decision.action, SafetyAction.ABORT_LAUNCH)
+        self.assertIn(SafetyReason.VEHICLE_DISCONNECTED, decision.reasons)
+        self.assertIn(SafetyReason.BATTERY_WARN_THRESHOLD, decision.reasons)
+
     def test_inflight_returns_to_launch_at_rtl_threshold(self) -> None:
         snapshot = replace(self.snapshot, battery_percent=20.0, armed=True, in_air=True, mode=VehicleMode.MISSION)
         decision = self.engine.assess_inflight(snapshot, wind_mps=3.0)
@@ -63,6 +70,13 @@ class SafetyEngineTests(unittest.TestCase):
         decision = self.engine.assess_inflight(snapshot, wind_mps=3.0)
         self.assertEqual(decision.action, SafetyAction.LAND_NOW)
         self.assertEqual(decision.reasons, (SafetyReason.BATTERY_EMERGENCY_THRESHOLD,))
+
+    def test_inflight_respects_warning_only_low_battery_action(self) -> None:
+        engine = MissionSafetyEngine(self.baseline, low_battery_action="warning")
+        snapshot = replace(self.snapshot, battery_percent=20.0, armed=True, in_air=True, mode=VehicleMode.MISSION)
+        decision = engine.assess_inflight(snapshot, wind_mps=3.0)
+        self.assertEqual(decision.action, SafetyAction.WARN)
+        self.assertEqual(decision.reasons, (SafetyReason.BATTERY_RTL_THRESHOLD,))
 
     def test_enforce_inflight_policy_updates_gateway_mode(self) -> None:
         async def _run() -> None:
