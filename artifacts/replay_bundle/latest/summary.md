@@ -19,7 +19,7 @@
 - dock proof status: `streamed_without_full_receiver_match`
 - dock stream record count: `60`
 - dock receiver count: `0`
-- dock final horizontal distance: `0.031079112700935607` m
+- dock final horizontal distance: `0.018740627425885687` m
 - dock final in_air: `True`
 - precision profile `RTL_PLD_MD`: `2`
 - landing-target consumption count: `50`

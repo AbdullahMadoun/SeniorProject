@@ -1,38 +1,38 @@
 {
-  "mission_id": "dashboard-live-mission",
+  "mission_id": "interactive-mission",
   "weather_profile_mode": "proof",
   "weather_profile": [
     {
       "t_s": 0.0,
-      "steady_wind_mps": 1.4,
-      "gust_wind_mps": 1.7
+      "steady_wind_mps": 3.2,
+      "gust_wind_mps": 4.2
     },
     {
       "t_s": 5.0,
-      "steady_wind_mps": 2.2,
-      "gust_wind_mps": 2.6
+      "steady_wind_mps": 4.2,
+      "gust_wind_mps": 5.2
     },
     {
       "t_s": 12.0,
-      "steady_wind_mps": 7.8,
-      "gust_wind_mps": 9.3
+      "steady_wind_mps": 9.2,
+      "gust_wind_mps": 10.2
     },
     {
       "t_s": 36.0,
-      "steady_wind_mps": 4.2,
-      "gust_wind_mps": 5.0
+      "steady_wind_mps": 4.5,
+      "gust_wind_mps": 5.5
     }
   ],
   "trigger_timeout_s": 45.0,
   "dock_wait_timeout_s": 30.0,
   "observations": [
     {
-      "elapsed_s": 24.969,
+      "elapsed_s": 22.02,
       "weather": {
-        "steady_wind_mps": 7.8,
-        "gust_wind_mps": 9.3,
+        "steady_wind_mps": 9.2,
+        "gust_wind_mps": 10.2,
         "source": "profile@12.0s",
-        "effective_wind_mps": 9.3
+        "effective_wind_mps": 10.2
       },
       "gate_decision": {
         "launch_allowed": false,
@@ -42,7 +42,7 @@
           "wind_limit_exceeded"
         ],
         "details": [
-          "Effective wind 9.3 m/s exceeds configured limit 7.0 m/s."
+          "Effective wind 10.2 m/s exceeds configured limit 7.0 m/s."
         ]
       },
       "inflight_decision": {
@@ -51,7 +51,7 @@
           "wind_limit_exceeded"
         ],
         "details": [
-          "Wind 9.3 m/s exceeds 7.0 m/s."
+          "Wind 10.2 m/s exceeds 7.0 m/s."
         ]
       },
       "snapshot_before": {
@@ -61,22 +61,22 @@
         "mode": "mission",
         "battery_percent": 100.0,
         "position": {
-          "lat": 26.3070368,
-          "lon": 50.1455596,
-          "alt_m": 4.932000160217285
+          "lat": 47.3977936,
+          "lon": 8.545570999999999,
+          "alt_m": 13.254000663757324
         },
         "mission_progress": {
-          "current": 5,
-          "total": 5
+          "current": 0,
+          "total": 2
         }
       },
       "local_pose_before": {
-        "north_m": -25.92599105834961,
-        "east_m": -28.198678970336914,
-        "down_m": -4.99896240234375,
-        "yaw_deg": 152.4196014404297,
-        "roll_deg": -2.739320755004883,
-        "pitch_deg": 2.916222333908081
+        "north_m": 5.14456033706665,
+        "east_m": -1.6908029317855835,
+        "down_m": -14.364472389221191,
+        "yaw_deg": -16.31662940979004,
+        "roll_deg": 0.07780053466558456,
+        "pitch_deg": -1.8579614162445068
       },
       "snapshot_after": {
         "connected": true,
@@ -85,42 +85,198 @@
         "mode": "return_to_launch",
         "battery_percent": 100.0,
         "position": {
-          "lat": 26.3068843,
-          "lon": 50.145601199999994,
-          "alt_m": 27.96200180053711
+          "lat": 47.3978007,
+          "lon": 8.545567,
+          "alt_m": 13.054000854492188
         },
         "mission_progress": {
           "current": 0,
-          "total": 0
+          "total": 2
         }
       },
       "local_pose_after": {
-        "north_m": -18.62529945373535,
-        "east_m": -20.901355743408203,
-        "down_m": -29.79486083984375,
-        "yaw_deg": 63.66735076904297,
-        "roll_deg": 0.2646411061286926,
-        "pitch_deg": -2.9455621242523193
+        "north_m": 5.961853504180908,
+        "east_m": -1.9986974000930786,
+        "down_m": -14.130850791931152,
+        "yaw_deg": -16.401880264282227,
+        "roll_deg": 0.7082670331001282,
+        "pitch_deg": -2.0626282691955566
       }
     }
   ],
   "dock_weather_observations": [
     {
-      "elapsed_s": 49.859,
+      "elapsed_s": 24.043,
       "weather": {
-        "steady_wind_mps": 4.2,
-        "gust_wind_mps": 5.0,
+        "steady_wind_mps": 9.2,
+        "gust_wind_mps": 10.2,
+        "source": "profile@12.0s",
+        "effective_wind_mps": 10.2
+      },
+      "dock_allowed": false,
+      "details": [
+        "Effective wind 10.2 m/s exceeds configured limit 7.0 m/s."
+      ]
+    },
+    {
+      "elapsed_s": 25.044,
+      "weather": {
+        "steady_wind_mps": 9.2,
+        "gust_wind_mps": 10.2,
+        "source": "profile@12.0s",
+        "effective_wind_mps": 10.2
+      },
+      "dock_allowed": false,
+      "details": [
+        "Effective wind 10.2 m/s exceeds configured limit 7.0 m/s."
+      ]
+    },
+    {
+      "elapsed_s": 26.046,
+      "weather": {
+        "steady_wind_mps": 9.2,
+        "gust_wind_mps": 10.2,
+        "source": "profile@12.0s",
+        "effective_wind_mps": 10.2
+      },
+      "dock_allowed": false,
+      "details": [
+        "Effective wind 10.2 m/s exceeds configured limit 7.0 m/s."
+      ]
+    },
+    {
+      "elapsed_s": 27.047,
+      "weather": {
+        "steady_wind_mps": 9.2,
+        "gust_wind_mps": 10.2,
+        "source": "profile@12.0s",
+        "effective_wind_mps": 10.2
+      },
+      "dock_allowed": false,
+      "details": [
+        "Effective wind 10.2 m/s exceeds configured limit 7.0 m/s."
+      ]
+    },
+    {
+      "elapsed_s": 28.047,
+      "weather": {
+        "steady_wind_mps": 9.2,
+        "gust_wind_mps": 10.2,
+        "source": "profile@12.0s",
+        "effective_wind_mps": 10.2
+      },
+      "dock_allowed": false,
+      "details": [
+        "Effective wind 10.2 m/s exceeds configured limit 7.0 m/s."
+      ]
+    },
+    {
+      "elapsed_s": 29.048,
+      "weather": {
+        "steady_wind_mps": 9.2,
+        "gust_wind_mps": 10.2,
+        "source": "profile@12.0s",
+        "effective_wind_mps": 10.2
+      },
+      "dock_allowed": false,
+      "details": [
+        "Effective wind 10.2 m/s exceeds configured limit 7.0 m/s."
+      ]
+    },
+    {
+      "elapsed_s": 30.049,
+      "weather": {
+        "steady_wind_mps": 9.2,
+        "gust_wind_mps": 10.2,
+        "source": "profile@12.0s",
+        "effective_wind_mps": 10.2
+      },
+      "dock_allowed": false,
+      "details": [
+        "Effective wind 10.2 m/s exceeds configured limit 7.0 m/s."
+      ]
+    },
+    {
+      "elapsed_s": 31.05,
+      "weather": {
+        "steady_wind_mps": 9.2,
+        "gust_wind_mps": 10.2,
+        "source": "profile@12.0s",
+        "effective_wind_mps": 10.2
+      },
+      "dock_allowed": false,
+      "details": [
+        "Effective wind 10.2 m/s exceeds configured limit 7.0 m/s."
+      ]
+    },
+    {
+      "elapsed_s": 32.05,
+      "weather": {
+        "steady_wind_mps": 9.2,
+        "gust_wind_mps": 10.2,
+        "source": "profile@12.0s",
+        "effective_wind_mps": 10.2
+      },
+      "dock_allowed": false,
+      "details": [
+        "Effective wind 10.2 m/s exceeds configured limit 7.0 m/s."
+      ]
+    },
+    {
+      "elapsed_s": 33.051,
+      "weather": {
+        "steady_wind_mps": 9.2,
+        "gust_wind_mps": 10.2,
+        "source": "profile@12.0s",
+        "effective_wind_mps": 10.2
+      },
+      "dock_allowed": false,
+      "details": [
+        "Effective wind 10.2 m/s exceeds configured limit 7.0 m/s."
+      ]
+    },
+    {
+      "elapsed_s": 34.053,
+      "weather": {
+        "steady_wind_mps": 9.2,
+        "gust_wind_mps": 10.2,
+        "source": "profile@12.0s",
+        "effective_wind_mps": 10.2
+      },
+      "dock_allowed": false,
+      "details": [
+        "Effective wind 10.2 m/s exceeds configured limit 7.0 m/s."
+      ]
+    },
+    {
+      "elapsed_s": 35.054,
+      "weather": {
+        "steady_wind_mps": 9.2,
+        "gust_wind_mps": 10.2,
+        "source": "profile@12.0s",
+        "effective_wind_mps": 10.2
+      },
+      "dock_allowed": false,
+      "details": [
+        "Effective wind 10.2 m/s exceeds configured limit 7.0 m/s."
+      ]
+    },
+    {
+      "elapsed_s": 36.054,
+      "weather": {
+        "steady_wind_mps": 4.5,
+        "gust_wind_mps": 5.5,
         "source": "profile@36.0s",
-        "effective_wind_mps": 5.0
+        "effective_wind_mps": 5.5
       },
       "dock_allowed": true,
       "details": [
-        "Effective wind 5.0 m/s is within configured limit 7.0 m/s."
+        "Effective wind 5.5 m/s is within configured limit 7.0 m/s."
       ]
     }
   ],
   "triggered_action": "return_to_launch",
-  "triggered_at_s": 24.969,
-  "dock_recovered_at_s": 49.859,
+  "triggered_at_s": 22.02,
+  "dock_recovered_at_s": 36.054,
   "proof_status": "rtl_triggered_by_live_weather_injection"
 }
