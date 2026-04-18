@@ -36,6 +36,7 @@ deploy/backend/ssh/*
 *.log
 companion_video_logger/*.npy
 companion_video_logger/*.csv
+autonomy/companion/artifacts/latest/
 diff_check_utf8.patch
 
 # IDE/OS

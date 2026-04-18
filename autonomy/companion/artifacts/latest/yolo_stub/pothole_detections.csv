@@ -1,4 +1,0 @@
-frame_id,label,confidence,x_min,y_min,x_max,y_max
-frame-0001,pothole,0.82,40,55,180,145
-frame-0002,pothole,0.82,45,59,185,149
-frame-0003,pothole,0.82,50,63,190,153
