@@ -13,5 +13,6 @@ services:
       SKYLINK_MISSION_API_PORT: 8625
     ports:
       - "${SKYLINK_MISSION_API_PORT:-8625}:8625"
+      - "${SKYLINK_COMPANION_MJPEG_PORT:-8765}:8765"
     volumes:
       - ./artifacts:/opt/skylink2/artifacts

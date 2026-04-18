@@ -94,6 +94,8 @@ class ArucoBoardDetectorBackend:
         quality = _compute_detection_quality(corners, ids, _rejected, image_shape, self.primary_marker_id)
         
         if ids is None or len(ids) == 0:
+            self._last_rvec = None
+            self._last_tvec = None
             return []
 
         observations: list[LandingTargetObservation] = []

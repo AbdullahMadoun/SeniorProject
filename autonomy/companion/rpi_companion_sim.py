@@ -6,15 +6,16 @@ import os
 import tempfile
 import threading
 import time
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import cv2
+import numpy as np
 
 from autonomy.companion.aruco_board_detector import ArucoBoardDetectorBackend
 from autonomy.companion.aruco_detector import LandingTargetSender
 from autonomy.drone_system.landing_target_stream import connection_string_for_endpoint
-from autonomy.simulation.landing_pad import PadRenderConfig, annotate_frame, render_frame
+from autonomy.simulation.landing_pad import IMG_H, IMG_W, PadRenderConfig, annotate_frame, render_frame
 
 
 AUTONOMY_ROOT = Path(__file__).resolve().parents[1]
@@ -128,8 +129,8 @@ class MJPEGHandler(BaseHTTPRequestHandler):
             return
 
 
-def _start_mjpeg_server() -> HTTPServer:
-    server = HTTPServer(("0.0.0.0", MJPEG_PORT), MJPEGHandler)
+def _start_mjpeg_server() -> ThreadingHTTPServer:
+    server = ThreadingHTTPServer(("0.0.0.0", MJPEG_PORT), MJPEGHandler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     print(f"[companion] MJPEG stream ready at http://0.0.0.0:{MJPEG_PORT}/camera", flush=True)
@@ -151,11 +152,15 @@ async def run_companion() -> None:
             loop_start_s = time.monotonic()
             config = _read_drone_state()
             frame = render_frame(config)
-            if frame is not None:
+            if frame is None:
+                frame = np.full((IMG_H, IMG_W, 3), 40, dtype=np.uint8)
+                detection = {"detected": False, "confidence": 0.0, "corners": []}
+            else:
                 observations = detector.detect(frame)
                 if observations:
                     sender.send(observations[0])
                 detection = _build_detection_debug(detector, frame, len(observations))
+            if frame is not None:
                 annotated = annotate_frame(frame, config, detection)
                 ok, buffer = cv2.imencode(".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, 80])
                 if ok:

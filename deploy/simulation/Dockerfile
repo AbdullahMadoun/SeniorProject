@@ -18,12 +18,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     iproute2 \
     jq \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
     lsb-release \
     net-tools \
     python3 \
     python3-pip \
     python3-venv \
     rsync \
+    sudo \
     wget \
     && rm -rf /var/lib/apt/lists/*
 

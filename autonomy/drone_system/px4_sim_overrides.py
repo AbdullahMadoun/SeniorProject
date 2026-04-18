@@ -93,7 +93,11 @@ def write_generated_gz_world(
     wind_vector_enu_mps: tuple[float, float, float],
 ) -> Path:
     if not template_path.exists():
-        raise RuntimeError(f"Gazebo wind template not found: {template_path}")
+        fallback_path = template_path.with_name("default.sdf")
+        if fallback_path.exists():
+            template_path = fallback_path
+        else:
+            raise RuntimeError(f"Gazebo wind template not found: {template_path}")
     output_dir.mkdir(parents=True, exist_ok=True)
     output_path = output_dir / f"{world_name}.sdf"
 

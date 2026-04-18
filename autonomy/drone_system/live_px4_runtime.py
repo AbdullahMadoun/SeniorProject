@@ -244,11 +244,14 @@ async def stream_live_projected_targets(
     *,
     rate_hz: float,
     duration_s: float,
+    require_touchdown: bool = True,
+    touchdown_altitude_m: float = 0.2,
 ) -> list[dict[str, object]]:
     interval_s = 1.0 / rate_hz
     iterations = max(1, int(duration_s * rate_hz))
     records: list[dict[str, object]] = []
     ground_record_streak = 0
+    touchdown_confirmed = False
     for index in range(iterations):
         loop_start = time.monotonic()
         local_pose = await gateway.get_local_pose()
@@ -271,13 +274,20 @@ async def stream_live_projected_targets(
                 "sample": sample_to_dict(sample),
             }
         )
-        if not snapshot.in_air and altitude_agl_m <= 0.5:
+        if not snapshot.in_air and altitude_agl_m <= touchdown_altitude_m:
             ground_record_streak += 1
         else:
             ground_record_streak = 0
         if ground_record_streak >= 3:
+            touchdown_confirmed = True
             break
         remaining_s = interval_s - (time.monotonic() - loop_start)
         if remaining_s > 0.0:
             await asyncio.sleep(remaining_s)
+    if require_touchdown and not touchdown_confirmed:
+        last_record = records[-1] if records else {}
+        raise RuntimeError(
+            "Vehicle did not reach confirmed touchdown during landing-target streaming "
+            f"within {duration_s:.1f}s. Last record: {last_record}"
+        )
     return records

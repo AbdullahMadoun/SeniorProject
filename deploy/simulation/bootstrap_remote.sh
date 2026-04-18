@@ -69,7 +69,7 @@ install_os_packages() {
   log "Installing OS packages required for PX4 SITL and Python tooling"
   as_root apt-get update
   as_root apt-get install -y --no-install-recommends \
-    bash ca-certificates curl git iproute2 jq lsb-release net-tools python3 python3-pip python3-venv rsync wget
+    bash ca-certificates curl git iproute2 jq lsb-release net-tools python3 python3-pip python3-venv rsync sudo wget
 }
 
 sync_submodules() {
@@ -97,8 +97,11 @@ ensure_venv() {
   fi
   # shellcheck disable=SC1091
   source "$VENV_DIR/bin/activate"
-  python -m pip install --upgrade pip wheel "setuptools<82"
-  python -m pip install mavsdk pymavlink psutil numpy pyulog fastapi uvicorn
+  python -m pip install --upgrade "pip<24.1" wheel "setuptools<82"
+  python -m pip install mavsdk pymavlink psutil numpy pyulog fastapi uvicorn tomli opencv-python
+  if [ -f "$PX4_REPO/Tools/setup/requirements.txt" ]; then
+    python -m pip install -r "$PX4_REPO/Tools/setup/requirements.txt"
+  fi
   python -m pip install --force-reinstall "empy==3.3.4"
 }
 
@@ -106,7 +109,7 @@ build_px4() {
   log "Building PX4 SITL (first build can take several minutes)"
   (
     cd "$PX4_REPO"
-    env HEADLESS=1 make px4_sitl gz_x500
+    env HEADLESS=1 make px4_sitl_default
   )
 }
 
