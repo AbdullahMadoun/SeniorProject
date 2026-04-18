@@ -5,7 +5,7 @@ This is the repeatable remote-only path for the current `model_server` deploymen
 Scope:
 
 - remote GPU host on Vast.ai
-- Docker VM deployment
+- standard container deployment on Vast.ai
 - ensemble detector first
 - optional VLM mode:
   - `local`: run Qwen on the same remote GPU
@@ -24,6 +24,51 @@ Optional but supported:
 If `external/yolov12/` is missing, the remote bootstrap clones the YOLO12 fork from:
 
 - `https://github.com/sunsmarterjie/yolov12.git`
+
+## Fast Standard Path — Native Container Mode (Recommended)
+
+The standard approach is **native container mode** with Cloudflare quick tunnel. **VMs were too slow to boot and are not used.**
+
+Key characteristics:
+
+- **No KVM VM** — the server runs directly on the bare GPU host via a standard container
+- **Cloudflare quick tunnel** — provides a public `*.trycloudflare.com` URL immediately at startup without manual tunnel setup
+- **Boot speed** — containers start in seconds vs. the multi-minute VM boot penalty observed during early testing
+- **DeploymentMode** — `native` (not `docker_vm`)
+
+```
+DeploymentMode = "native"
+EnableTunnel   = true   (Cloudflare quick tunnel via cloudflared)
+```
+
+This is the fastest path from Vast contract start to a live, publicly reachable API.
+
+## Methods That Worked
+
+These methods were re-verified on `2026-04-18`.
+
+1. Vast standard container instance, not a KVM VM
+2. Remote deploy in `native` mode
+3. Cloudflare quick tunnel started on the remote model server
+4. Local bridge on Windows pointing to the remote Cloudflare model URL
+5. Dashboard using `bridge proxy active`
+6. Remote ensemble detector with:
+   - `rezzzq_yolo12s_rdd2022`
+   - `ozair_yolov8_rdd2022`
+   - `oracl4_yolov8_rdd2022`
+7. Detector-only remote serving with permissive recall-oriented thresholds
+
+The currently verified live pattern is:
+
+- remote model API on Vast:
+  - `/health`
+  - `/analyze`
+- public remote model URL via quick tunnel:
+  - `https://<random>.trycloudflare.com`
+- local dashboard bridge:
+  - `http://127.0.0.1:8001`
+- optional local public bridge URL via quick tunnel:
+  - `https://<random>.trycloudflare.com`
 
 ## Why YOLO12 Previously Failed
 
@@ -44,10 +89,10 @@ Without that sequence, the remote server can degrade to the weaker YOLOv8-only s
 Minimum important variables:
 
 ```env
-REMOTE_DEPLOY_MODE=docker_vm
+REMOTE_DEPLOY_MODE=native
 DETECTOR_MODE=ensemble
 ENSEMBLE_ENABLED=true
-ENSEMBLE_MEMBERS=rezzzq_yolo12s_rdd2022,ozair_yolov8_rdd2022,oracl4_yolov8_rdd2022
+ENSEMBLE_MEMBERS='["rezzzq_yolo12s_rdd2022","ozair_yolov8_rdd2022","oracl4_yolov8_rdd2022"]'
 ENSEMBLE_MODEL_REZZZQ=/opt/skylink-model-server/training_pilot/weights/rdd_trained_local/yolo12s_rezzzq_v5align/best.pt
 ENSEMBLE_MODEL_OZAIR=/opt/skylink-model-server/training_pilot/weights/rdd_trained_local/ozair_yolov8_custom/best.pt
 ENSEMBLE_MODEL_ORACL4=/opt/skylink-model-server/training_pilot/weights/rdd_trained_local/oracl4_yolov8_custom/best.pt
@@ -75,6 +120,11 @@ VLM_API_KEY=...
 
 `INSTALL_LOCAL_VLM=false` is important for API mode because it keeps the remote image on the lighter YOLO-side dependency set.
 
+Important:
+
+- `vlm_mode=api` on requests only works if the remote server was started with `ENABLE_VLM=true` and `VLM_API_URL` set.
+- If the remote server is running detector-only (`ENABLE_VLM=false`), the server now degrades cleanly to detector-only instead of throwing an API VLM error.
+
 ## One-Shot Deployment
 
 From Windows PowerShell:
@@ -83,7 +133,7 @@ From Windows PowerShell:
 .\deploy\model_server\deploy_remote.ps1 `
   -Server YOUR_SSH_HOST `
   -SshPort YOUR_SSH_PORT `
-  -DeploymentMode docker_vm `
+  -DeploymentMode native `
   -VlmBackend api `
   -BridgeEnvFile .\app\.env
 ```
@@ -111,6 +161,13 @@ Expected:
 - `ensemble_loaded: true`
 
 If `rezzzq` is healthy, it should appear in the ensemble selection instead of failing at request time.
+
+For detector-only bring-up, a healthy response may still report:
+
+- `enable_vlm: false`
+- `vlm_backend: disabled`
+
+That is acceptable for the fast serving path.
 
 ## Shutdown
 
@@ -148,6 +205,10 @@ Current local state after cleanup:
   - `training_pilot/data/datasyn_rdd2022_retrain_50_20_30`
 - the earlier 3090 datasyn experiment contract `35137381` was destroyed on `2026-04-18`
 
-## Current Caveat
+## Current Caveats
 
-This runbook fixes the remote bootstrap path in code, but the full remote smoke test still has to be re-run on a fresh Vast VM after recreation.
+1. The current verified fast path is detector-only on the remote model server.
+2. API VLM mode requires a real external VLM endpoint and credentials in the remote `.env`.
+3. The Cloudflare quick-tunnel URL changes every restart.
+4. Standard containers are the correct path here; KVM VMs were too slow to justify.
+5. The current live box is an `RTX 3060 12 GB`. That is acceptable for ensemble detector serving and API-VLM forwarding, but it is not the right target for hosting local Qwen VLM on the same server.

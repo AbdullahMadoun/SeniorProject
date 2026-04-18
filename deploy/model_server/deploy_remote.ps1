@@ -146,7 +146,11 @@ if ($HuggingFaceToken) {
 }
 
 $tempEnv = Join-Path ([System.IO.Path]::GetTempPath()) ("skylink-model-{0}.env" -f [guid]::NewGuid().ToString("N"))
-Set-Content -Path $tempEnv -Value $envLines -Encoding UTF8
+[System.IO.File]::WriteAllLines(
+        $tempEnv,
+        $envLines,
+        [System.Text.UTF8Encoding]::new($false)
+    )
 
 try {
     ssh -p $SshPort $remote "mkdir -p $RemotePath $remoteDeployRoot $RemotePath/training_pilot $RemotePath/external"

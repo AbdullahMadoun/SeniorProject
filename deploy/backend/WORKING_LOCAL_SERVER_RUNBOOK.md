@@ -17,6 +17,22 @@ It is the correct fallback when:
 5. `/api/runtime-config` and `/api/health` through the public tunnel
 6. `/api/analyze` through the bridge using JSON `image_b64` payloads
 7. The direct model server and the bridge both return the analysis payload nested under `report`
+8. Local bridge proxying to a remote Vast model URL through `SKYLINK_VLM_API_URL`
+
+## Additional Verified Method
+
+Another working path is:
+
+1. Vast remote model server running the ensemble
+2. Remote Cloudflare quick tunnel on the model server itself
+3. Local bridge on Windows configured with:
+   - `SKYLINK_VLM_API_URL=https://<remote-model>.trycloudflare.com/analyze`
+   - `SKYLINK_VLM_API_KEY=<remote-api-key>`
+   - `SKYLINK_USE_BRIDGE_PROXY=true`
+   - `SKYLINK_FRONTEND_DIRECT_MODEL=false`
+4. Browser talking only to the local bridge, never directly to Vast
+
+This is the current best workaround when campus Wi-Fi blocks awkward direct remote access paths.
 
 ## Start
 
@@ -76,6 +92,7 @@ Notes:
 - The dashboard already sends raw base64, not a `data:` URI.
 - The bridge now also accepts multipart uploads and converts them into the model server's JSON contract.
 - `vlm_mode=disabled` is the fastest path to validate detector-only serving.
+- If the remote model server is running detector-only, selecting `api` or `local` in the dashboard will now degrade to detector-only instead of hard-failing.
 - The model server response shape is:
 
 ```json
@@ -143,6 +160,31 @@ On the local sample `app/src/static/history_images/thumb_483abe8b7890.jpg`, both
 - `resolved_vlm_mode = "disabled"`
 
 This is only a serving sanity check, not a benchmark claim.
+
+## Why API VLM Refused
+
+Observed cause:
+
+- the currently live Vast remote model server was intentionally started with:
+  - `ENABLE_VLM=false`
+  - `VLM_BACKEND=disabled`
+- there is no remote `VLM_API_URL` configured right now
+
+So `api` VLM was not actually available on the remote server.
+
+Current behavior after the code fix:
+
+- requesting `vlm_mode=api` without a configured remote VLM API no longer throws
+- the server falls back to detector-only mode
+
+For real API VLM mode on the remote server, the remote deployment must include:
+
+```text
+ENABLE_VLM=true
+VLM_BACKEND=api
+VLM_API_URL=https://your-vlm-endpoint/analyze
+VLM_API_KEY=...
+```
 
 ## Supabase Status
 

@@ -26,6 +26,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const actionsList = document.getElementById('recommendedActionsList');
     const boxesTableBody = document.querySelector('#boxesTable tbody');
     const canvas = document.getElementById('resultCanvas');
+    const resultImage = document.getElementById('resultImage');
 
     const connectionMode = document.getElementById('connectionMode');
     const bridgeEndpoint = document.getElementById('bridgeEndpoint');
@@ -323,6 +324,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function drawImageOnCanvas(source) {
         if (!source) {
+            if (resultImage) {
+                resultImage.removeAttribute('src');
+            }
             return;
         }
         const ctx = canvas.getContext('2d');
@@ -332,6 +336,15 @@ document.addEventListener('DOMContentLoaded', () => {
             canvas.height = img.height;
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             ctx.drawImage(img, 0, 0);
+            if (resultImage) {
+                resultImage.src = source;
+            }
+        };
+        img.onerror = () => {
+            if (resultImage) {
+                resultImage.removeAttribute('src');
+            }
+            console.error('Failed to render annotated image source.');
         };
         img.src = source;
     }
@@ -439,7 +452,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         renderVideoFrameButtons(session, selectedIndex);
         const mediaSource = frame.annotated_url || frame.frame_url || '';
-        const metaText = `Video session • frame ${selectedIndex + 1}/${session.frames.length} • ${frame.processing_seconds || '-'}s • VLM ${selectedVlmMode()}`;
+        const resolvedMode = frame.detector_debug?.resolved_vlm_mode || selectedVlmMode();
+        const metaText = `Video session • frame ${selectedIndex + 1}/${session.frames.length} • ${frame.processing_seconds || '-'}s • VLM ${resolvedMode}`;
         renderReport(
             frame.summary || summarizeVideoSession(session),
             frame.report_markdown || '_No per-frame report returned._',
@@ -457,7 +471,8 @@ document.addEventListener('DOMContentLoaded', () => {
         videoFramesStrip.classList.add('hidden');
         videoFramesStrip.innerHTML = '';
         const mediaSource = ensureImageSource(report.annotated_image_b64) || currentImageDataUrl;
-        const metaText = `Photo analysis • detector ensemble • VLM ${selectedVlmMode()} • ${report.boxes?.length || 0} box(es)`;
+        const resolvedMode = report.detector_debug?.resolved_vlm_mode || selectedVlmMode();
+        const metaText = `Photo analysis • detector ensemble • VLM ${resolvedMode} • ${report.boxes?.length || 0} box(es)`;
         renderReport(
             report.summary || 'Analysis complete',
             report.report_markdown || '_No report text returned._',

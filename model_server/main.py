@@ -306,13 +306,25 @@ def init_models():
 
 def resolve_vlm_mode(requested_mode: Optional[str]) -> str:
     raw = (requested_mode or "").strip().lower()
-    if raw in {"local", "api", "disabled"}:
-        return raw
+    if raw == "disabled":
+        return "disabled"
     if not ENABLE_VLM:
         return "disabled"
-    if config.VLM_BACKEND in {"local", "api"}:
-        return config.VLM_BACKEND
-    return "local"
+    if raw == "local":
+        if config.VLM_BACKEND == "local" and vlm_engine and vlm_processor and process_vision_info and SamplingParams:
+            return "local"
+        return "disabled"
+    if raw == "api":
+        if config.VLM_API_URL:
+            return "api"
+        return "disabled"
+    if config.VLM_BACKEND == "local":
+        if vlm_engine and vlm_processor and process_vision_info and SamplingParams:
+            return "local"
+        return "disabled"
+    if config.VLM_BACKEND == "api" and config.VLM_API_URL:
+        return "api"
+    return "disabled"
 
 
 def build_vlm_prompt(

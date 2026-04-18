@@ -470,11 +470,17 @@ input[type="password"]:focus {
     background: #000;
 }
 
+#resultImage,
 #resultCanvas {
     max-width: 100%;
     height: auto !important;
     border-radius: 4px;
     box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.7);
+    display: block;
+}
+
+#resultCanvas {
+    display: none;
 }
 
 .video-frames-strip {
