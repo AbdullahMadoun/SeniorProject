@@ -51,6 +51,7 @@ Thumbs.db
 # Local upstream simulator checkouts
 vendor/**
 !vendor/README.md
+!vendor/PATCHES.md
 
 # Generated autonomy artifacts (track curated latest evidence only)
 artifacts/**
