@@ -1,0 +1,10 @@
+{
+  "marker_id": 0,
+  "dictionary": "DICT_4X4_50",
+  "side_pixels": 400,
+  "marker_path": "autonomy/companion/calibration_assets/aruco_id_0.pgm",
+  "generation_source": "opencv_aruco",
+  "used_mock_cv2": false,
+  "flight_ready": true,
+  "note": "Generated with OpenCV aruco backend."
+}
