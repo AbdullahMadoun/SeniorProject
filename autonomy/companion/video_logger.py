@@ -430,7 +430,10 @@ class VideoLoggerService:
                 camera.release()
             self.telemetry_source.close()
             if hasattr(self.cv2, "destroyAllWindows"):
-                self.cv2.destroyAllWindows()
+                try:
+                    self.cv2.destroyAllWindows()
+                except self.cv2.error:
+                    pass  # headless opencv raises; no windows to destroy on companion Pi
 
         summary = {
             "config": {
