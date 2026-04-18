@@ -8,3 +8,5 @@ pillow
 pydantic-settings
 huggingface_hub
 numpy
+requests
+ensemble-boxes

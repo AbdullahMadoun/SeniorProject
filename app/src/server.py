@@ -16,15 +16,24 @@ from typing import Any, Dict, Tuple
 import httpx
 import uvicorn
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
+
+try:
+    from analyze_video_pipeline import analyze_video_session, init_supabase
+    VIDEO_PIPELINE_IMPORT_ERROR = ""
+except Exception as exc:  # pragma: no cover
+    analyze_video_session = None
+    init_supabase = None
+    VIDEO_PIPELINE_IMPORT_ERROR = str(exc)
+
 from managed_remote_model import ManagedRemoteModelState
 from remote_model_helpers import resolve_frontend_connection
 
 
-ROOT_DIR = Path(__file__).resolve().parents[1]
+ROOT_DIR = Path(__file__).resolve().parents[2]
 STATIC_DIR = Path(__file__).parent / "static"
 STATIC_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -60,7 +69,9 @@ EXPOSE_VLM_API_KEY_TO_FRONTEND = os.getenv("SKYLINK_EXPOSE_VLM_API_KEY_TO_FRONTE
     "yes",
     "on",
 }
+DEFAULT_VLM_MODE = os.getenv("SKYLINK_DEFAULT_VLM_MODE", "local").strip().lower() or "local"
 CLOUDFLARED_BIN = os.getenv("SKYLINK_CLOUDFLARED_BIN", "cloudflared").strip() or "cloudflared"
+CLOUDFLARED_CONFIG_FILE = os.getenv("SKYLINK_CLOUDFLARED_CONFIG_FILE", "").strip()
 TUNNEL_INFO_FILE = Path(os.getenv("SKYLINK_TUNNEL_INFO_FILE", HISTORY_FILE.parent / "tunnel_info.json"))
 TUNNEL_LOG_FILE = Path(os.getenv("SKYLINK_TUNNEL_LOG_FILE", HISTORY_FILE.parent / "cloudflared.log"))
 REMOTE_MODEL_INFO_FILE = Path(
@@ -145,13 +156,17 @@ class TunnelState:
         TUNNEL_LOG_FILE.write_text("", encoding="utf-8")
         self._write_info()
 
-        command = [
-            CLOUDFLARED_BIN,
-            "tunnel",
-            "--no-autoupdate",
-            "--url",
-            f"http://127.0.0.1:{port}",
-        ]
+        command = [CLOUDFLARED_BIN]
+        if CLOUDFLARED_CONFIG_FILE:
+            command.extend(["--config", CLOUDFLARED_CONFIG_FILE])
+        command.extend(
+            [
+                "tunnel",
+                "--no-autoupdate",
+                "--url",
+                f"http://127.0.0.1:{port}",
+            ]
+        )
         try:
             process = subprocess.Popen(
                 command,
@@ -235,6 +250,14 @@ def _masked_key(value: str) -> str:
     return f"{value[:4]}{'*' * max(0, len(value) - 8)}{value[-4:]}"
 
 
+def _video_pipeline_available() -> bool:
+    return analyze_video_session is not None and init_supabase is not None
+
+
+def _supabase_configured() -> bool:
+    return bool(os.getenv("SUPABASE_URL") and (os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_KEY")))
+
+
 def _resolved_model_target() -> tuple[str, str, str, dict[str, Any]]:
     remote_snapshot = remote_model_state.snapshot()
     remote_url = ""
@@ -251,12 +274,14 @@ def _resolved_model_target() -> tuple[str, str, str, dict[str, Any]]:
 
 
 def _runtime_config(request: Request | None = None) -> dict[str, Any]:
-    remote_model_state.start()
+    # removed blocking start() call here to fix slow UI load
     request_base = _request_base_url(request)
     tunnel = tunnel_state.snapshot()
+
     public_bridge_url = PUBLIC_BASE_URL or tunnel["public_url"]
     bridge_base_url = request_base or public_bridge_url
     model_api_url, model_api_key, model_source, remote_snapshot = _resolved_model_target()
+    autostart_enabled = os.getenv("SKYLINK_REMOTE_MODEL_AUTOSTART", "false").strip().lower() in {"1", "true", "yes", "on"}
     frontend_connection = resolve_frontend_connection(
         bridge_base_url=bridge_base_url,
         model_api_url=model_api_url,
@@ -267,6 +292,7 @@ def _runtime_config(request: Request | None = None) -> dict[str, Any]:
     )
     remote_status = remote_snapshot.get("status") or ("ready" if model_api_url else "disabled")
     remote_error = remote_snapshot.get("error") or ""
+    show_remote_details = bool(autostart_enabled or model_source == "managed-remote")
     if remote_snapshot.get("public_base_url"):
         model_public_url = str(remote_snapshot.get("public_base_url"))
     elif model_api_url.endswith("/analyze"):
@@ -287,15 +313,18 @@ def _runtime_config(request: Request | None = None) -> dict[str, Any]:
         "MODEL_SERVER_SOURCE": model_source,
         "MODEL_SERVER_STATUS": remote_status if model_source == "managed-remote" else ("ready" if model_api_url else remote_status),
         "MODEL_SERVER_ERROR": remote_error,
-        "MODEL_SERVER_PROVIDER": remote_snapshot.get("provider") or os.getenv("SKYLINK_REMOTE_MODEL_PROVIDER", "ssh"),
+        "MODEL_SERVER_PROVIDER": (remote_snapshot.get("provider") or os.getenv("SKYLINK_REMOTE_MODEL_PROVIDER", "ssh")) if show_remote_details else "",
         "MODEL_SERVER_PUBLIC_URL": model_public_url,
-        "MODEL_SERVER_REMOTE_HOST": remote_snapshot.get("remote_host") or os.getenv("SKYLINK_REMOTE_MODEL_SSH_HOST", ""),
-        "MODEL_SERVER_REMOTE_PORT": remote_snapshot.get("remote_port") or int(os.getenv("SKYLINK_REMOTE_MODEL_SSH_PORT", "22")),
-        "MODEL_SERVER_INSTANCE_ID": remote_snapshot.get("instance_id")
-        or os.getenv("SKYLINK_VAST_INSTANCE_ID", ""),
-        "MODEL_SERVER_AUTOSTART": os.getenv("SKYLINK_REMOTE_MODEL_AUTOSTART", "false").strip().lower()
-        in {"1", "true", "yes", "on"},
-        "MODEL_SERVER_OUTPUT_TAIL": remote_snapshot.get("output_tail") or [],
+        "MODEL_SERVER_REMOTE_HOST": (remote_snapshot.get("remote_host") or os.getenv("SKYLINK_REMOTE_MODEL_SSH_HOST", "")) if show_remote_details else "",
+        "MODEL_SERVER_REMOTE_PORT": (remote_snapshot.get("remote_port") or int(os.getenv("SKYLINK_REMOTE_MODEL_SSH_PORT", "22"))) if show_remote_details else 22,
+        "MODEL_SERVER_INSTANCE_ID": (remote_snapshot.get("instance_id") or os.getenv("SKYLINK_VAST_INSTANCE_ID", "")) if show_remote_details else "",
+        "MODEL_SERVER_AUTOSTART": autostart_enabled,
+        "MODEL_SERVER_OUTPUT_TAIL": (remote_snapshot.get("output_tail") or []) if show_remote_details else [],
+        "DEFAULT_VLM_MODE": DEFAULT_VLM_MODE,
+        "VLM_MODE_OPTIONS": ["local", "api", "disabled"],
+        "VIDEO_ANALYSIS_ENABLED": _video_pipeline_available(),
+        "VIDEO_ANALYSIS_ERROR": VIDEO_PIPELINE_IMPORT_ERROR,
+        "SUPABASE_CONFIGURED": _supabase_configured(),
     }
 
 
@@ -305,6 +334,7 @@ async def lifespan(_: FastAPI):
     remote_model_state.start()
     yield
     tunnel_state.stop()
+
 
 app = FastAPI(title="SkyLink Bridge", lifespan=lifespan)
 app.add_middleware(
@@ -362,6 +392,8 @@ def _normalize_severity(value: str) -> str:
     lowered = (value or "").strip().lower()
     if lowered in {"high", "high severity", "critical"}:
         return "High Severity"
+    if lowered in {"medium", "moderate"}:
+        return "Moderate"
     return "Low Severity"
 
 
@@ -398,6 +430,97 @@ def _bridge_image_name(raw_name: Any, saved_name: str) -> str:
     return f"bridge_{name}"
 
 
+def _coerce_bool(raw: Any, default: bool = False) -> bool:
+    if raw is None:
+        return default
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _safe_stem(name: str, fallback: str = "artifact") -> str:
+    stem = re.sub(r"[^A-Za-z0-9._-]+", "_", Path(name).stem or fallback).strip("._")
+    return stem or fallback
+
+
+def _processed_url(path: Path) -> str:
+    relative = path.resolve().relative_to(PROCESSED_HISTORY_DIR.resolve())
+    return f"/processed_history/{relative.as_posix()}"
+
+
+async def _save_upload_file(upload: UploadFile, destination: Path) -> None:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with destination.open("wb") as handle:
+        while True:
+            chunk = await upload.read(1024 * 1024)
+            if not chunk:
+                break
+            handle.write(chunk)
+    await upload.close()
+
+
+def _materialize_video_result(session_dir: Path, result: dict[str, Any]) -> dict[str, Any]:
+    annotated_dir = session_dir / "annotated"
+    frames_out: list[dict[str, Any]] = []
+    total_boxes = 0
+    frames_with_detections = 0
+    max_confidence = 0.0
+
+    for index, frame_record in enumerate(result.get("frames", [])):
+        frame_path = Path(str(frame_record.get("frame_path", "")))
+        report = frame_record.get("report") or {}
+        boxes = list(report.get("boxes", []))
+        total_boxes += len(boxes)
+        if boxes:
+            frames_with_detections += 1
+            max_confidence = max(max_confidence, _max_confidence_from_boxes(boxes, 0.0))
+
+        annotated_url = ""
+        annotated_payload = str(report.get("annotated_image_b64", "")).strip()
+        if annotated_payload:
+            annotated_file = _decode_image_to_file(
+                annotated_payload,
+                annotated_dir,
+                prefix=f"annotated_{index:04d}",
+            )
+            annotated_url = _processed_url(annotated_file)
+
+        frame_url = _processed_url(frame_path) if frame_path.exists() else ""
+        frames_out.append(
+            {
+                "frame_index": index,
+                "frame_name": frame_path.name or f"frame_{index:04d}",
+                "frame_url": frame_url,
+                "annotated_url": annotated_url,
+                "thumb_url": annotated_url or frame_url,
+                "timestamp_utc": frame_record.get("timestamp_utc"),
+                "processing_seconds": frame_record.get("processing_seconds"),
+                "public_url": frame_record.get("public_url", ""),
+                "summary": report.get("summary", ""),
+                "boxes": boxes,
+                "report_markdown": report.get("report_markdown", ""),
+                "detector_debug": report.get("detector_debug", {}),
+                "error": frame_record.get("error", ""),
+            }
+        )
+
+    payload = {
+        "session_id": session_dir.name,
+        "mission_id": result.get("mission_id"),
+        "mission_name": result.get("mission_name"),
+        "video_path": result.get("video_path"),
+        "video_url": _processed_url(Path(result["video_path"])) if result.get("video_path") else "",
+        "output_dir": result.get("output_dir"),
+        "frame_count": int(result.get("frame_count") or 0),
+        "processed_count": int(result.get("processed_count") or 0),
+        "elapsed_seconds": result.get("elapsed_seconds"),
+        "frames_with_detections": frames_with_detections,
+        "total_boxes": total_boxes,
+        "max_confidence": max_confidence,
+        "frames": frames_out,
+    }
+    (session_dir / "session_result.json").write_text(json.dumps(payload, ensure_ascii=True, indent=2), encoding="utf-8")
+    return payload
+
+
 @app.get("/api/health")
 async def health(request: Request) -> Dict[str, Any]:
     runtime = _runtime_config(request)
@@ -410,6 +533,8 @@ async def health(request: Request) -> Dict[str, Any]:
         "model_api_configured": runtime["MODEL_API_CONFIGURED"],
         "model_server_status": runtime["MODEL_SERVER_STATUS"],
         "model_server_source": runtime["MODEL_SERVER_SOURCE"],
+        "video_analysis_enabled": runtime["VIDEO_ANALYSIS_ENABLED"],
+        "supabase_configured": runtime["SUPABASE_CONFIGURED"],
     }
 
 
@@ -449,9 +574,45 @@ async def save_history(request: Request) -> Dict[str, str]:
 @app.post("/api/analyze")
 async def analyze(request: Request) -> Any:
     try:
-        payload = await request.json()
-        request_url = str(payload.pop("api_url", "")).strip()
-        request_key = str(payload.pop("api_key", "")).strip()
+        content_type = str(request.headers.get("content-type", "")).lower()
+        request_url = ""
+        request_key = ""
+        forward_json: dict[str, Any] | None = None
+
+        if "multipart/form-data" in content_type:
+            form = await request.form()
+            upload = form.get("file")
+            if upload is None or not hasattr(upload, "read") or not hasattr(upload, "filename"):
+                raise HTTPException(status_code=400, detail="Multipart analyze requests must include a file field.")
+
+            request_url = str(form.get("api_url", "")).strip()
+            request_key = str(form.get("api_key", "")).strip()
+            file_bytes = await upload.read()
+            content_type_hint = str(upload.content_type or "application/octet-stream")
+            image_b64 = base64.b64encode(file_bytes).decode("ascii")
+            if content_type_hint.startswith("image/"):
+                image_b64 = f"data:{content_type_hint};base64,{image_b64}"
+
+            forward_json = {
+                key: value
+                for key, value in (
+                    (
+                        key,
+                        json.loads(str(value))
+                        if str(value).strip()[:1] in {"[", "{"}
+                        else str(value)
+                    )
+                    for key, value in form.multi_items()
+                    if key not in {"file", "api_url", "api_key"} and value is not None
+                )
+            }
+            forward_json["image_b64"] = image_b64
+        else:
+            payload = await request.json()
+            request_url = str(payload.pop("api_url", "")).strip()
+            request_key = str(payload.pop("api_key", "")).strip()
+            forward_json = payload
+
         configured_url, configured_key, _, _ = _resolved_model_target()
         forward_url = request_url or configured_url
         forward_key = request_key or configured_key
@@ -466,12 +627,13 @@ async def analyze(request: Request) -> Any:
                 ),
             )
         async with httpx.AsyncClient(timeout=180.0) as client:
+            headers = {"X-API-Key": forward_key} if forward_key else {}
+            json_headers = dict(headers)
+            json_headers["Content-Type"] = "application/json"
             response = await client.post(
                 forward_url,
-                json=payload,
-                headers={"X-API-Key": forward_key, "Content-Type": "application/json"}
-                if forward_key
-                else {"Content-Type": "application/json"},
+                json=forward_json or {},
+                headers=json_headers,
             )
         if response.status_code != 200:
             raise HTTPException(status_code=response.status_code, detail=response.text)
@@ -482,9 +644,83 @@ async def analyze(request: Request) -> Any:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
+@app.post("/api/analyze-video")
+async def analyze_video(
+    request: Request,
+    video: UploadFile = File(...),
+    mission_name: str = Form("SkyLink Video Mission"),
+    vlm_mode: str = Form(""),
+    speed_mps: float = Form(5.0),
+    altitude_m: float = Form(10.0),
+    fov: float = Form(82.6),
+    overlap_fraction: float = Form(0.10),
+    dedup_distance: int = Form(4),
+    max_frames: int | None = Form(None),
+    persist_db: str = Form("true"),
+) -> dict[str, Any]:
+    if not _video_pipeline_available():
+        raise HTTPException(
+            status_code=503,
+            detail=f"Video analysis pipeline is unavailable: {VIDEO_PIPELINE_IMPORT_ERROR or 'missing dependencies'}",
+        )
+    if not str(video.content_type or "").lower().startswith("video/"):
+        raise HTTPException(status_code=400, detail="Uploaded file is not recognized as a video.")
+
+    configured_url, configured_key, _, _ = _resolved_model_target()
+    if not configured_url:
+        runtime = _runtime_config(request)
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Model API is not ready yet. "
+                f"Managed model status: {runtime['MODEL_SERVER_STATUS']}. "
+                f"{runtime['MODEL_SERVER_ERROR'] or 'Startup is still in progress.'}"
+            ),
+        )
+
+    session_id = f"video_{time.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
+    session_dir = PROCESSED_HISTORY_DIR / session_id
+    frames_dir = session_dir / "frames"
+    session_dir.mkdir(parents=True, exist_ok=True)
+
+    original_name = video.filename or "upload.mp4"
+    saved_video_path = session_dir / f"{_safe_stem(original_name, 'video')}{Path(original_name).suffix or '.mp4'}"
+    await _save_upload_file(video, saved_video_path)
+
+    request_overrides = {}
+    if vlm_mode.strip():
+        request_overrides["vlm_mode"] = vlm_mode.strip().lower()
+
+    supabase = init_supabase() if (_coerce_bool(persist_db, True) and _supabase_configured()) else None
+    try:
+        result = analyze_video_session(
+            video_path=saved_video_path,
+            mission_name=mission_name,
+            speed_mps=speed_mps,
+            altitude_m=altitude_m,
+            fov=fov,
+            overlap_fraction=overlap_fraction,
+            max_frames=max_frames,
+            dedup_hamming_threshold=(None if dedup_distance < 0 else dedup_distance),
+            api_url=configured_url,
+            api_key=configured_key,
+            supabase=supabase,
+            request_overrides=request_overrides or None,
+            output_dir=frames_dir,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Video analysis failed: {exc}") from exc
+
+    result["video_path"] = str(saved_video_path)
+    payload = _materialize_video_result(session_dir, result)
+    payload["persisted_to_supabase"] = bool(supabase)
+    return payload
+
 
 app.mount("/history_images", StaticFiles(directory=HISTORY_IMAGES_DIR), name="history_images")
+app.mount("/processed_history", StaticFiles(directory=PROCESSED_HISTORY_DIR), name="processed_history")
 app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")
+
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=BRIDGE_PORT)

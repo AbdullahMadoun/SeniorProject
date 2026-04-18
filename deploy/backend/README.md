@@ -2,6 +2,8 @@
 
 This path containerizes the FastAPI bridge in `app/src/server.py`.
 
+For the verified local bridge + quick-tunnel path, see [WORKING_LOCAL_SERVER_RUNBOOK.md](./WORKING_LOCAL_SERVER_RUNBOOK.md).
+
 The bridge can now operate in three modes:
 
 1. Static external model URL via `SKYLINK_VLM_API_URL`
@@ -9,6 +11,14 @@ The bridge can now operate in three modes:
 3. Fully autonomous Vast.ai leasing plus SSH bootstrap via `SKYLINK_VAST_*`
 
 The container starts a Cloudflare quick tunnel by default and reports the public bridge URL to the frontend runtime. When autonomous model startup is enabled, the same bridge also publishes model bootstrap state and, once ready, can switch the frontend into a direct model connection automatically.
+
+For campus or enterprise Wi-Fi that blocks direct browser access to the remote GPU host, keep the frontend behind the bridge:
+
+- `SKYLINK_USE_BRIDGE_PROXY=true`
+- `SKYLINK_FRONTEND_DIRECT_MODEL=false`
+- `SKYLINK_ENABLE_QUICK_TUNNEL=true` or provide a stable `SKYLINK_PUBLIC_BASE_URL`
+
+In that mode the browser only talks to the bridge over normal HTTPS, and the bridge performs the upstream model call server-side.
 
 ## Local Docker Run
 

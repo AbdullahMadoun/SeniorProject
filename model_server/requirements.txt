@@ -9,6 +9,7 @@ qwen-vl-utils
 transformers
 pillow
 pydantic-settings
+ensemble-boxes
 # Full Dependency Freeze Below:
 absl-py==2.3.1
 aiohappyeyeballs==2.6.1

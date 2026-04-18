@@ -11,9 +11,7 @@
 </head>
 
 <body>
-
     <div class="app-shell">
-        <!-- Sidebar Navigation -->
         <nav class="sidebar glass">
             <div class="brand">
                 <div class="logo">🛰️</div>
@@ -35,27 +33,21 @@
             </ul>
         </nav>
 
-        <!-- Main Content Area -->
         <main class="content-area">
-
-            <!-- Live Scan Tab -->
             <div id="scan" class="tab-content active">
                 <div class="glass-container mx-auto">
                     <header>
                         <h1>Road Inspection AI</h1>
-                        <p class="subtitle">Powered by Qwen2.5-VL-7B-Instruct</p>
+                        <p class="subtitle">Ensemble detector first, optional Qwen VLM second</p>
                     </header>
 
                     <div class="scan-layout">
-                        <!-- Left side: Form -->
                         <div class="scan-left">
                             <div class="form-section">
-
-
                                 <div class="input-group">
                                     <div class="model-status-simple">
                                         <span class="status-dot"></span>
-                                        <strong>Active Model:</strong> Qwen2.5-VL-7B-Instruct
+                                        <strong>Active Detector:</strong> Road-damage ensemble
                                     </div>
                                 </div>
 
@@ -89,15 +81,68 @@
                                         <span class="runtime-label">Model Key</span>
                                         <span class="runtime-value" id="modelApiKeyStatus">Starting...</span>
                                     </div>
+                                    <div class="runtime-row">
+                                        <span class="runtime-label">Supabase</span>
+                                        <span class="runtime-value" id="supabaseStatus">Checking...</span>
+                                    </div>
                                     <div id="tunnelError" class="runtime-error hidden"></div>
                                     <div id="modelError" class="runtime-error hidden"></div>
                                 </div>
 
+                                <div class="input-group">
+                                    <label for="vlmModeSelect">VLM Backend</label>
+                                    <div class="model-selector model-selector-three">
+                                        <input type="radio" id="vlmLocal" name="vlmMode" value="local" checked>
+                                        <label for="vlmLocal" class="model-option">
+                                            <span class="model-name">Local</span>
+                                            <span class="model-desc">Remote Qwen on server</span>
+                                        </label>
+
+                                        <input type="radio" id="vlmApi" name="vlmMode" value="api">
+                                        <label for="vlmApi" class="model-option">
+                                            <span class="model-name">API</span>
+                                            <span class="model-desc">External VLM endpoint</span>
+                                        </label>
+
+                                        <input type="radio" id="vlmDisabled" name="vlmMode" value="disabled">
+                                        <label for="vlmDisabled" class="model-option">
+                                            <span class="model-name">Detector Only</span>
+                                            <span class="model-desc">Skip VLM report</span>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div class="input-group">
+                                    <label for="missionNameInput">Mission / Session Name</label>
+                                    <input type="text" id="missionNameInput" placeholder="Inspection session name" />
+                                </div>
+
+                                <div class="input-group settings-grid">
+                                    <div>
+                                        <label for="videoOverlapInput">Video Overlap</label>
+                                        <input type="text" id="videoOverlapInput" value="0.10" />
+                                    </div>
+                                    <div>
+                                        <label for="videoDedupInput">Dedup Distance</label>
+                                        <input type="text" id="videoDedupInput" value="4" />
+                                    </div>
+                                    <div>
+                                        <label for="videoMaxFramesInput">Max Frames</label>
+                                        <input type="text" id="videoMaxFramesInput" value="24" />
+                                    </div>
+                                    <div class="toggle-cell">
+                                        <label class="toggle-row">
+                                            <input type="checkbox" id="persistDbToggle" checked />
+                                            <span>Persist to DB</span>
+                                        </label>
+                                    </div>
+                                </div>
+
                                 <div class="input-group file-upload-wrapper">
-                                    <input type="file" id="imageInput" accept="image/*" class="file-input" />
+                                    <input type="file" id="imageInput" accept="image/*,video/*" class="file-input" />
                                     <label for="imageInput" class="file-label">
                                         <span class="file-icon">📁</span>
-                                        <span class="file-text">Choose an image or drag & drop</span>
+                                        <span class="file-text">Choose a photo or video, or drag & drop</span>
                                     </label>
                                 </div>
 
@@ -105,7 +150,11 @@
                                     <img id="imagePreview" src="" alt="Image Preview" />
                                 </div>
 
-                                <button id="analyzeBtn" class="btn-primary" disabled>Analyze Image</button>
+                                <div id="videoPreviewContainer" class="hidden">
+                                    <video id="videoPreview" controls preload="metadata"></video>
+                                </div>
+
+                                <button id="analyzeBtn" class="btn-primary" disabled>Analyze Media</button>
                             </div>
 
                             <div id="loadingIndicator" class="hidden">
@@ -116,12 +165,17 @@
                             <div id="errorContainer" class="error-box hidden"></div>
                         </div>
 
-                        <!-- Right side: Results -->
                         <div class="scan-right">
+                            <div id="emptyState" class="empty-state glass">
+                                <h3>Analysis Ready</h3>
+                                <p>Upload a road image or a drone video. The detector ensemble runs first, then the selected VLM mode generates the report.</p>
+                            </div>
+
                             <div id="resultSection" class="result-section hidden" style="margin-top:0;">
                                 <div class="result-header">
-                                    <h2>Inspection Analysis <small id="finalTime"
-                                            style="font-size: 0.8rem; opacity: 0.6; font-weight: normal; margin-left: 10px;"></small>
+                                    <h2>
+                                        Inspection Analysis
+                                        <small id="finalTime" style="font-size: 0.8rem; opacity: 0.6; font-weight: normal; margin-left: 10px;"></small>
                                     </h2>
                                     <div class="summary-badge" id="reportSummary"></div>
                                 </div>
@@ -129,11 +183,13 @@
                                 <div class="result-container" style="grid-template-columns: 1fr;">
                                     <div class="image-viewer">
                                         <div class="view-header">
-                                            <h3>Annotated Road View</h3>
+                                            <h3 id="resultViewerTitle">Annotated Road View</h3>
                                         </div>
+                                        <div class="result-meta-line" id="resultMetaLine"></div>
                                         <div class="canvas-wrapper">
                                             <canvas id="resultCanvas"></canvas>
                                         </div>
+                                        <div id="videoFramesStrip" class="video-frames-strip hidden"></div>
                                     </div>
 
                                     <div class="report-sidebar">
@@ -146,6 +202,7 @@
                                                             <th>ID</th>
                                                             <th>Defect</th>
                                                             <th>Severity</th>
+                                                            <th>Conf</th>
                                                         </tr>
                                                     </thead>
                                                     <tbody></tbody>
@@ -160,181 +217,127 @@
                                             <h3>Maintenance Plan</h3>
                                             <ul id="recommendedActionsList" class="actions-list"></ul>
                                         </div>
+                                        <div class="sidebar-section">
+                                            <h3>Detector Debug</h3>
+                                            <pre id="detectorDebugPanel" class="debug-panel">No inference yet.</pre>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
-            </div> <!-- End Scan Tab -->
+            </div>
 
-            <!-- Waypoint Control Tab -->
             <div id="waypoints" class="tab-content">
                 <div class="mission-layout">
                     <div id="waypointMap" class="map-container glass" style="cursor: crosshair;"></div>
                     <div class="mission-sidebar glass" style="overflow-y:auto;">
                         <h3>Flight Plan Console</h3>
 
-                        <div class="stat-box"
-                            style="margin-top:1rem; border:1px solid var(--surface-border); padding:1rem; border-radius:8px;">
+                        <div class="stat-box" style="margin-top:1rem; border:1px solid var(--surface-border); padding:1rem; border-radius:8px;">
                             <span class="label">Calculated Survey Area</span>
-                            <span class="value" id="areaValue"
-                                style="color:var(--text-primary); font-size:1.5rem;">0m²</span>
-                            <div id="areaWarning" class="text-error hidden" style="font-size:0.8rem; margin-top:5px;">
-                                Area
-                                exceeds 50m² limit!</div>
+                            <span class="value" id="areaValue" style="color:var(--text-primary); font-size:1.5rem;">0m²</span>
+                            <div id="areaWarning" class="text-error hidden" style="font-size:0.8rem; margin-top:5px;">Area exceeds 50m² limit!</div>
                         </div>
 
                         <div style="margin-top:1rem; display:flex; gap:0.5rem;">
-                            <button class="btn-primary" id="btnClearWaypoints" style="padding:0.5rem; flex:1;">Clear
-                                Points</button>
-                            <button class="btn-primary" id="btnRTL" style="padding:0.5rem; flex:1;" disabled>Close Loop
-                                /
-                                RTL</button>
+                            <button class="btn-primary" id="btnClearWaypoints" style="padding:0.5rem; flex:1;">Clear Points</button>
+                            <button class="btn-primary" id="btnRTL" style="padding:0.5rem; flex:1;" disabled>Close Loop / RTL</button>
                         </div>
 
                         <h3 style="margin-top:2rem;">System Constraints</h3>
-                        <div class="constraints-list"
-                            style="font-size:0.85rem; color:var(--text-secondary); display:flex; flex-direction:column; gap:0.5rem;">
-                            <div class="constraint-item">
-                                <strong>Flight Range:</strong> ≤ 800m
-                            </div>
-                            <div class="constraint-item">
-                                <strong>GACA Compliance:</strong> Enforced by GeoFence
-                            </div>
-                            <div class="constraint-item">
-                                <strong>Charging:</strong> 220V Contact-Based (50W max)
-                            </div>
-                            <div class="constraint-item">
-                                <strong>Docking Height:</strong> ≤ 2m
-                            </div>
-                            <div class="constraint-item">
-                                <strong>Test Area:</strong> ≤ 50x50m Open Field
-                            </div>
-                            <div class="constraint-item">
-                                <strong>Wind Safety:</strong> ≤ 3 m/s Operational Limit
-                            </div>
-                            <div class="constraint-item">
-                                <strong>Altitude Limit:</strong> ≤ 100m AGL
-                            </div>
-                            <div class="constraint-item">
-                                <strong>Flight Time:</strong> ≥ 20 mins verified
-                            </div>
-                            <div class="constraint-item">
-                                <strong>Camera Res:</strong> ≥ 1080p verified
-                            </div>
-                            <div class="constraint-item">
-                                <strong>Visual Acc:</strong> ≥ 75% Conf. validated
-                            </div>
-                            <div class="constraint-item">
-                                <strong>GPS Accuracy:</strong> ≤ 10m target met
-                            </div>
-                            <div class="constraint-item">
-                                <strong>Drone Speed:</strong> 3-7 m/s nominal
-                            </div>
-                            <div class="constraint-item">
-                                <strong>Recharge Time:</strong> ≤ 120 minutes
-                            </div>
-                            <div class="constraint-item">
-                                <strong>Data Link:</strong> ≥ 1 Mbps Up
-                            </div>
-                            <div class="constraint-item">
-                                <strong>Landing Precision:</strong> ≤ 0.4m
-                            </div>
-                            <div class="constraint-item">
-                                <strong>Analysis Latency:</strong>
-                                < 5 mins </div>
-                                    <div class="constraint-item">
-                                        <strong>Map Localization:</strong> ≤ 20m error
-                                    </div>
-                                    <div class="constraint-item">
-                                        <strong>Comm Range:</strong> ≥ 100m validated
-                                    </div>
-                            </div>
+                        <div class="constraints-list" style="font-size:0.85rem; color:var(--text-secondary); display:flex; flex-direction:column; gap:0.5rem;">
+                            <div class="constraint-item"><strong>Flight Range:</strong> ≤ 800m</div>
+                            <div class="constraint-item"><strong>GACA Compliance:</strong> Enforced by GeoFence</div>
+                            <div class="constraint-item"><strong>Charging:</strong> 220V Contact-Based (50W max)</div>
+                            <div class="constraint-item"><strong>Docking Height:</strong> ≤ 2m</div>
+                            <div class="constraint-item"><strong>Test Area:</strong> ≤ 50x50m Open Field</div>
+                            <div class="constraint-item"><strong>Wind Safety:</strong> ≤ 3 m/s Operational Limit</div>
+                            <div class="constraint-item"><strong>Altitude Limit:</strong> ≤ 100m AGL</div>
+                            <div class="constraint-item"><strong>Flight Time:</strong> ≥ 20 mins verified</div>
+                            <div class="constraint-item"><strong>Camera Res:</strong> ≥ 1080p verified</div>
+                            <div class="constraint-item"><strong>Visual Acc:</strong> ≥ 75% Conf. validated</div>
+                            <div class="constraint-item"><strong>GPS Accuracy:</strong> ≤ 10m target met</div>
+                            <div class="constraint-item"><strong>Drone Speed:</strong> 3-7 m/s nominal</div>
+                            <div class="constraint-item"><strong>Recharge Time:</strong> ≤ 120 minutes</div>
+                            <div class="constraint-item"><strong>Data Link:</strong> ≥ 1 Mbps Up</div>
+                            <div class="constraint-item"><strong>Landing Precision:</strong> ≤ 0.4m</div>
+                            <div class="constraint-item"><strong>Analysis Latency:</strong> &lt; 5 mins</div>
+                            <div class="constraint-item"><strong>Map Localization:</strong> ≤ 20m error</div>
+                            <div class="constraint-item"><strong>Comm Range:</strong> ≥ 100m validated</div>
                         </div>
                     </div>
                 </div>
+            </div>
 
-                <!-- Mission Control Tab -->
-                <div id="mission" class="tab-content">
-                    <div class="mission-layout">
-                        <div id="map" class="map-container glass"></div>
-                        <div class="mission-sidebar glass">
-                            <h3>Live Telemetry</h3>
-                            <div class="telemetry-grid">
-                                <div class="stat-box">
-                                    <span class="label">Altitude</span>
-                                    <span class="value">95m</span>
-                                </div>
-                                <div class="stat-box">
-                                    <span class="label">Speed</span>
-                                    <span class="value">6.5 m/s</span>
-                                </div>
-                                <div class="stat-box">
-                                    <span class="label">Battery</span>
-                                    <span class="value">84%</span>
-                                </div>
-                                <div class="stat-box">
-                                    <span class="label">Wind Speed</span>
-                                    <span class="value">2.1 m/s</span>
-                                </div>
+            <div id="mission" class="tab-content">
+                <div class="mission-layout">
+                    <div id="map" class="map-container glass"></div>
+                    <div class="mission-sidebar glass">
+                        <h3>Live Telemetry</h3>
+                        <div class="telemetry-grid">
+                            <div class="stat-box">
+                                <span class="label">Altitude</span>
+                                <span class="value">95m</span>
                             </div>
-                            <h3 style="margin-top:2rem;">Stream Feed</h3>
-                            <div class="drone-feed">
-                                <div class="feed-overlay">
-                                    <span class="rec-indicator">REC</span>
-                                    <span>1080p 60fps</span>
-                                </div>
-                                <div class="mock-feed">
-                                    Camera feed disabled.
-                                </div>
+                            <div class="stat-box">
+                                <span class="label">Speed</span>
+                                <span class="value">6.5 m/s</span>
                             </div>
+                            <div class="stat-box">
+                                <span class="label">Battery</span>
+                                <span class="value">84%</span>
+                            </div>
+                            <div class="stat-box">
+                                <span class="label">Wind Speed</span>
+                                <span class="value">2.1 m/s</span>
+                            </div>
+                        </div>
+                        <h3 style="margin-top:2rem;">Stream Feed</h3>
+                        <div class="drone-feed">
+                            <div class="feed-overlay">
+                                <span class="rec-indicator">REC</span>
+                                <span>1080p 60fps</span>
+                            </div>
+                            <div class="mock-feed">Camera feed disabled.</div>
                         </div>
                     </div>
                 </div>
+            </div>
 
-                <!-- KPI Dashboard Tab -->
-                <div id="dashboard" class="tab-content">
-                    <div class="dashboard-grid">
-                        <div class="kpi-card glass">
-                            <h3>Total Scans</h3>
-                            <div class="kpi-value" id="kpiTotal">0</div>
-                        </div>
-                        <div class="kpi-card glass">
-                            <h3>Critical Defects</h3>
-                            <div class="kpi-value text-error" id="kpiCritical">0</div>
-                        </div>
-                        <div class="kpi-card glass">
-                            <h3>Avg Confidence</h3>
-                            <div class="kpi-value warning" id="kpiAvgConf" style="color:var(--warning)">Moderate</div>
-                        </div>
+            <div id="dashboard" class="tab-content">
+                <div class="dashboard-grid">
+                    <div class="kpi-card glass">
+                        <h3>Total Scans</h3>
+                        <div class="kpi-value" id="kpiTotal">0</div>
+                    </div>
+                    <div class="kpi-card glass">
+                        <h3>Critical Defects</h3>
+                        <div class="kpi-value text-error" id="kpiCritical">0</div>
+                    </div>
+                    <div class="kpi-card glass">
+                        <h3>Avg Confidence</h3>
+                        <div class="kpi-value warning" id="kpiAvgConf" style="color:var(--warning)">Moderate</div>
+                    </div>
 
-                        <div class="chart-container glass"
-                            style="grid-column: 1 / -1; height:600px; display:flex; flex-direction:column; gap:1rem;">
-                            <h3>Geospatial Analytics (Al-Khobar Region)</h3>
-                            <div id="kpiMap" class="map-container"
-                                style="flex:1; width:100%; border-radius:var(--radius-md);"></div>
-                        </div>
+                    <div class="chart-container glass" style="grid-column: 1 / -1; height:600px; display:flex; flex-direction:column; gap:1rem;">
+                        <h3>Geospatial Analytics (Al-Khobar Region)</h3>
+                        <div id="kpiMap" class="map-container" style="flex:1; width:100%; border-radius:var(--radius-md);"></div>
+                    </div>
 
-                        <div class="history-container glass"
-                            style="grid-column: 1 / -1; display:flex; flex-direction:column; gap:1.5rem; margin-top:1rem;">
-                            <div style="display:flex; justify-content:space-between; align-items:center;">
-                                <h3>Analysis History</h3>
-                                <span style="font-size:0.8rem; color:var(--text-secondary);">Local storage (last 10
-                                    items)</span>
-                            </div>
-                            <div id="historyGrid"
-                                style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1.5rem;">
-                                <!-- History cards populate here -->
-                            </div>
+                    <div class="history-container glass" style="grid-column: 1 / -1; display:flex; flex-direction:column; gap:1.5rem; margin-top:1rem;">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <h3>Analysis History</h3>
+                            <span style="font-size:0.8rem; color:var(--text-secondary);">Bridge-backed history projection</span>
                         </div>
+                        <div id="historyGrid" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1.5rem;"></div>
                     </div>
                 </div>
-
+            </div>
         </main>
     </div>
 
-    <!-- Leaflet for Maps (Mission Control & Waypoints) -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="config.js"></script>

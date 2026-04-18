@@ -154,6 +154,21 @@ def compute_capture_interval(params: DroneParams) -> float:
     return interval_s
 
 
+def _average_hash(frame: cv2.typing.MatLike, hash_size: int = 8) -> int:
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    small = cv2.resize(gray, (hash_size, hash_size), interpolation=cv2.INTER_AREA)
+    mean = float(small.mean())
+    bits = (small >= mean).astype("uint8").flatten().tolist()
+    value = 0
+    for bit in bits:
+        value = (value << 1) | int(bit)
+    return value
+
+
+def _hamming_distance(value_a: int, value_b: int) -> int:
+    return int((value_a ^ value_b).bit_count())
+
+
 # ---------------------------------------------------------------------------
 # Frame extraction
 # ---------------------------------------------------------------------------
@@ -166,6 +181,7 @@ def extract_frames(
     image_format: str = "jpg",
     jpeg_quality: int = 95,
     max_frames: int | None = None,
+    dedup_hamming_threshold: int | None = 4,
     verbose: bool = True,
 ) -> List[Path]:
     # Validate jpeg_quality early so the error is clear before we open the video.
@@ -245,6 +261,7 @@ def extract_frames(
     saved_paths: List[Path] = []
     frame_idx = 0        # current frame position inside the video
     capture_count = 0    # number of frames we have saved
+    accepted_hash: int | None = None
     ext = image_format.lstrip(".")
     stem = video_path.stem
 
@@ -266,6 +283,22 @@ def extract_frames(
                 # End of video or read error — clean exit
                 break
 
+            if dedup_hamming_threshold is not None and dedup_hamming_threshold >= 0:
+                frame_hash = _average_hash(frame)
+                if accepted_hash is not None and _hamming_distance(accepted_hash, frame_hash) <= dedup_hamming_threshold:
+                    if verbose:
+                        timestamp_s = frame_idx / video_fps
+                        mm = int(timestamp_s // 60)
+                        ss = timestamp_s % 60
+                        print(
+                            f"  [SKIP] Near-duplicate frame @{mm:02d}:{ss:05.2f} "
+                            f"(hash distance <= {dedup_hamming_threshold})"
+                        )
+                    frame_idx += interval_frames
+                    continue
+            else:
+                frame_hash = None
+
             filename = f"{stem}_frame{capture_count:05d}.{ext}"
             dest = output_dir / filename
 
@@ -279,6 +312,8 @@ def extract_frames(
 
             saved_paths.append(dest)
             capture_count += 1
+            if frame_hash is not None:
+                accepted_hash = frame_hash
 
             if verbose:
                 timestamp_s = frame_idx / video_fps
@@ -452,6 +487,13 @@ Examples:
         help="Hard limit on extracted frames. Useful for quick tests.",
     )
     parser.add_argument(
+        "--dedup-distance",
+        type=int,
+        default=4,
+        metavar="HAMMING",
+        help="Perceptual dedupe distance against the last accepted frame. Negative disables visual dedupe.",
+    )
+    parser.add_argument(
         "--quiet",
         action="store_true",
         help="Suppress progress output.",
@@ -481,6 +523,7 @@ def main() -> None:
             image_format=args.image_format,
             jpeg_quality=args.quality,
             max_frames=args.max_frames,
+            dedup_hamming_threshold=(None if args.dedup_distance < 0 else args.dedup_distance),
             verbose=not args.quiet,
         )
     except (FileNotFoundError, RuntimeError) as exc:

@@ -10,7 +10,9 @@ import pandas as pd
 import streamlit as st
 from dotenv import load_dotenv
 
-from dotenv import load_dotenvROOT_DIR = Path(__file__).resolve().parents[1]
+from dotenv import load_dotenv
+
+ROOT_DIR = Path(__file__).resolve().parents[1]
 CSV_PATH = ROOT_DIR / "data" / "processed" / "detections.csv"
 RAW_DIR = ROOT_DIR / "data" / "raw"
 PROCESSED_DIR = ROOT_DIR / "data" / "processed"

@@ -1,0 +1,37 @@
+services:
+  model-server:
+    container_name: ${DOCKER_CONTAINER_NAME:-skylink-model-server}
+    image: ${DOCKER_IMAGE_NAME:-skylink-model-server:latest}
+    build:
+      context: ${DOCKER_BUILD_CONTEXT:-./docker-context}
+      dockerfile: ${DEPLOY_DIR}/Dockerfile
+      args:
+        INSTALL_VLM: ${INSTALL_LOCAL_VLM:-true}
+        ENSEMBLE_MEMBERS: ${ENSEMBLE_MEMBERS:-rezzzq_yolo12s_rdd2022,ozair_yolov8_rdd2022,oracl4_yolov8_rdd2022}
+        YOLO12_REPO_URL: ${YOLO12_REPO_URL:-https://github.com/sunsmarterjie/yolov12.git}
+        YOLO12_REPO_REF: ${YOLO12_REPO_REF:-}
+    env_file:
+      - ${ENV_FILE}
+    environment:
+      HOST: 0.0.0.0
+      PORT: ${PORT:-17612}
+      HF_HOME: /opt/skylink-model-server/.cache/huggingface
+      PYTHONUNBUFFERED: "1"
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+    working_dir: /opt/skylink-model-server/model_server
+    command: ["/opt/skylink-model-server/model_server/run.sh"]
+    ports:
+      - "${PORT:-17612}:${PORT:-17612}"
+    volumes:
+      - "${ROOT_DIR}/runtime:/opt/skylink-model-server/runtime"
+      - "${ROOT_DIR}/.cache/huggingface:/opt/skylink-model-server/.cache/huggingface"
+      - "${ROOT_DIR}/model_server/models:/opt/skylink-model-server/model_server/models"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:${PORT:-17612}/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    gpus: all
+    restart: unless-stopped

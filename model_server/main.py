@@ -14,6 +14,7 @@ import secrets
 import sys
 import textwrap
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any, Optional, Union, List
 
 import cv2
@@ -24,9 +25,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import APIKeyHeader
 from PIL import Image
 from pydantic import BaseModel, Field, field_validator
-from ultralytics import YOLO
 
 from config import config
+from ensemble_runtime import EnsembleDetector, EnsembleSettings
+from vlm_api_client import request_vlm_report
 
 try:
     from qwen_vl_utils import process_vision_info
@@ -111,6 +113,7 @@ class LocationModel(BaseModel):
 class AnalyzeRequest(BaseModel):
     image_b64: str
     location: Optional[Union[LocationModel, List[float]]] = None
+    vlm_mode: Optional[str] = None
 
     @field_validator("location", mode="before")
     @classmethod
@@ -120,11 +123,6 @@ class AnalyzeRequest(BaseModel):
                 raise ValueError("Location list must have exactly 2 elements [lat, lon]")
             return LocationModel(lat=v[0], lon=v[1])
         return v
-
-
-class AnalyzeResponse(BaseModel):
-    image_b64_out: str
-    report: dict
 
 
 # ---------------------------------------------------------------------------
@@ -163,11 +161,10 @@ async def lifespan(app: FastAPI):
     init_models()
     yield
     # Cleanup
-    global vlm_engine, vlm_processor, yolo_model_v8, yolo_model_v12
+    global vlm_engine, vlm_processor, ensemble_detector
     vlm_engine = None
     vlm_processor = None
-    yolo_model_v8 = None
-    yolo_model_v12 = None
+    ensemble_detector = None
 
 
 # ---------------------------------------------------------------------------
@@ -230,18 +227,18 @@ def pil_to_cv2(pil_image: Image.Image) -> np.ndarray:
 
 
 # ---------------------------------------------------------------------------
-# ML Models (YOLO & VLM)
+# ML Models (ensemble detector & VLM)
 # ---------------------------------------------------------------------------
-yolo_model_v8: Optional[YOLO] = None
-yolo_model_v12: Optional[YOLO] = None
+ensemble_detector: Optional[EnsembleDetector] = None
 vlm_engine: Optional[LLM] = None
 vlm_processor: Optional[AutoProcessor] = None
 
 def init_models():
-    """Initialize YOLO models and vLLM engine."""
-    global yolo_model_v8, yolo_model_v12, vlm_engine, vlm_processor
+    """Initialize the ensemble detector and VLM backend."""
+    global ensemble_detector, vlm_engine, vlm_processor
 
-    if ENABLE_VLM:
+    should_load_local_vlm = ENABLE_VLM and config.VLM_BACKEND == "local"
+    if should_load_local_vlm:
         if AutoProcessor is None or LLM is None or SamplingParams is None or process_vision_info is None:
             raise RuntimeError("ENABLE_VLM=true but VLM dependencies are not installed on this host.")
         print(f"[INIT] Loading VLM model: {MODEL_NAME}")
@@ -255,210 +252,271 @@ def init_models():
             max_num_seqs=4,
         )
     else:
-        print("[INIT] ENABLE_VLM=false, skipping VLM load and running in YOLO-only mode.")
+        if ENABLE_VLM and config.VLM_BACKEND == "api":
+            print("[INIT] VLM backend set to API mode; skipping local VLM load.")
+        else:
+            print("[INIT] ENABLE_VLM=false, skipping VLM load and running in detector-only mode.")
         vlm_processor = None
         vlm_engine = None
-    
-    if ENABLE_YOLO_V8:
-        print(f"[INIT] Loading YOLOv8 model: {config.YOLO_MODEL_V8}")
-        yolo_model_v8 = YOLO(config.YOLO_MODEL_V8)
-    else:
-        print("[INIT] ENABLE_YOLO_V8=false, skipping YOLOv8 load.")
-        yolo_model_v8 = None
 
-    print(f"[INIT] Loading YOLOv12 model: {config.YOLO_MODEL_V12}")
+    if config.DETECTOR_MODE != "ensemble" or not config.ENSEMBLE_ENABLED:
+        raise RuntimeError(
+            "This server build expects DETECTOR_MODE=ensemble. "
+            "Legacy dual-YOLO loading has been removed from the active runtime path."
+        )
+
+    explicit_alias_weights: dict[str, float] = {}
+    if config.ENSEMBLE_ALIAS_WEIGHTS:
+        try:
+            explicit_alias_weights = {
+                str(key): float(value)
+                for key, value in json.loads(config.ENSEMBLE_ALIAS_WEIGHTS).items()
+            }
+        except Exception as exc:
+            raise RuntimeError(f"Invalid ENSEMBLE_ALIAS_WEIGHTS JSON: {exc}") from exc
+
+    settings = EnsembleSettings(
+        members=list(config.ENSEMBLE_MEMBERS),
+        alias_paths={
+            "rezzzq_yolo12s_rdd2022": config.ENSEMBLE_MODEL_REZZZQ,
+            "ozair_yolov8_rdd2022": config.ENSEMBLE_MODEL_OZAIR,
+            "oracl4_yolov8_rdd2022": config.ENSEMBLE_MODEL_ORACL4,
+            "obc_slot_weight": config.ENSEMBLE_MODEL_OBC,
+        },
+        mode=config.ENSEMBLE_MODE,
+        weight_mode=config.ENSEMBLE_WEIGHT_MODE,
+        wbf_iou=config.ENSEMBLE_WBF_IOU,
+        wbf_skip=config.ENSEMBLE_WBF_SKIP,
+        final_threshold=config.ENSEMBLE_FINAL_THRESHOLD,
+        min_support=config.ENSEMBLE_MIN_SUPPORT,
+        base_conf=config.ENSEMBLE_BASE_CONF,
+        base_iou=config.ENSEMBLE_BASE_IOU,
+        max_det=config.ENSEMBLE_MAX_DET,
+        tta_wbf_iou=config.ENSEMBLE_TTA_WBF_IOU,
+        tta_wbf_skip=config.ENSEMBLE_TTA_WBF_SKIP,
+        support_iou=config.ENSEMBLE_SUPPORT_IOU,
+        calibration_manifest=Path(config.ENSEMBLE_CALIBRATION_MANIFEST) if config.ENSEMBLE_CALIBRATION_MANIFEST else None,
+        selection_summary=Path(config.ENSEMBLE_SELECTION_SUMMARY) if config.ENSEMBLE_SELECTION_SUMMARY else None,
+        selection_key=config.ENSEMBLE_SELECTION_KEY,
+        explicit_alias_weights=explicit_alias_weights,
+    )
+    ensemble_detector = EnsembleDetector(settings)
+    print("[INIT] Ensemble detector loaded successfully!")
+
+
+def resolve_vlm_mode(requested_mode: Optional[str]) -> str:
+    raw = (requested_mode or "").strip().lower()
+    if raw in {"local", "api", "disabled"}:
+        return raw
+    if not ENABLE_VLM:
+        return "disabled"
+    if config.VLM_BACKEND in {"local", "api"}:
+        return config.VLM_BACKEND
+    return "local"
+
+
+def build_vlm_prompt(
+    detections: list[dict[str, Any]],
+    *,
+    width: int,
+    height: int,
+    lat: Optional[float],
+    lon: Optional[float],
+) -> str:
+    box_infos: list[str] = []
+    for detection in detections:
+        x1, y1, x2, y2 = detection["bbox_xyxy"]
+        w_px = max(1, x2 - x1)
+        h_px = max(1, y2 - y1)
+        area = w_px * h_px
+        conf = round(float(detection.get("confidence", 0.0)) * 100.0, 1)
+        support = int(detection.get("support", 1))
+        label = detection.get("label", "Damage")
+        info = (
+            f"- ID: {detection['id']}, Type: {label}, Ensemble Confidence: {conf}%, "
+            f"Support: {support} model(s), Dimensions: {w_px}x{h_px} pixels "
+            f"(Area: {area}), Coords: [x1:{x1}, y1:{y1}, x2:{x2}, y2:{y2}]"
+        )
+        box_infos.append(info)
+
+    box_list_str = "\n".join(box_infos) if box_infos else "No defects detected by the ensemble detector."
+    gps_str = f"GPS location (lat, lon): {lat}, {lon}." if lat is not None and lon is not None else "GPS location: Not provided."
+    return (
+        USER_PROMPT_TEMPLATE
+        + f"\n\n{gps_str}\nImage resolution: {width} x {height} pixels.\n\n"
+        + "### DETECTED BOUNDING BOXES (From YOLO ensemble):\n"
+        + box_list_str
+    )
+
+
+def run_local_vlm_report(temp_pil: Image.Image, user_prompt: str) -> dict[str, Any]:
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {
+            "role": "user",
+            "content": [
+                {"type": "image", "image": temp_pil},
+                {"type": "text", "text": user_prompt},
+            ],
+        },
+    ]
+
+    image_inputs, _ = process_vision_info(messages)
+    text_prompt = vlm_processor.apply_chat_template(
+        messages, tokenize=False, add_generation_prompt=True
+    )
+
+    sampling_params = SamplingParams(
+        temperature=config.VLM_TEMP,
+        top_p=config.VLM_TOP_P,
+        max_tokens=1500,
+        repetition_penalty=1.2,
+    )
+
+    outputs = vlm_engine.generate(
+        [{"prompt": text_prompt, "multi_modal_data": {"image": image_inputs}}],
+        sampling_params=sampling_params,
+    )
+    raw_vlm_text = outputs[0].outputs[0].text
     try:
-        from huggingface_hub import hf_hub_download
-        if "rezzzq" in config.YOLO_MODEL_V12:
-            path = hf_hub_download(repo_id=config.YOLO_MODEL_V12, filename="yolo12s_RDD2022_best.pt")
-        else:
-            path = hf_hub_download(repo_id=config.YOLO_MODEL_V12, filename="best.pt")
-        yolo_model_v12 = YOLO(path)
-    except Exception as e:
-        print(f"[INIT] Falling back to standard YOLO load due to: {e}")
-        yolo_model_v12 = YOLO(config.YOLO_MODEL_V12)
+        return extract_json_from_text(raw_vlm_text)
+    except Exception as exc:
+        print(f"[PIPELINE] Failed to parse local VLM JSON: {exc}")
+        return {"report_markdown": raw_vlm_text, "severities": {}}
 
-    print("[INIT] Models loaded successfully!")
+
+def run_external_vlm_report(
+    *,
+    temp_pil: Image.Image,
+    user_prompt: str,
+    detections: list[dict[str, Any]],
+    lat: Optional[float],
+    lon: Optional[float],
+) -> dict[str, Any]:
+    if not config.VLM_API_URL:
+        raise RuntimeError("VLM_BACKEND=api but VLM_API_URL is not configured.")
+    payload = request_vlm_report(
+        api_url=config.VLM_API_URL,
+        api_key=config.VLM_API_KEY,
+        auth_scheme=config.VLM_API_AUTH_SCHEME,
+        image=temp_pil,
+        system_prompt=SYSTEM_PROMPT,
+        user_prompt=user_prompt,
+        detections=detections,
+        lat=lat,
+        lon=lon,
+        timeout=config.VLM_API_TIMEOUT,
+        api_type=config.VLM_API_TYPE,
+        model=config.VLM_MODEL,
+    )
+    if "raw_text" in payload:
+        try:
+            return extract_json_from_text(str(payload["raw_text"]))
+        except Exception as exc:
+            print(f"[PIPELINE] Failed to parse external VLM JSON: {exc}")
+            return {"report_markdown": str(payload["raw_text"]), "severities": {}}
+    return {
+        "report_markdown": payload.get("report_markdown", ""),
+        "severities": payload.get("severities", {}),
+    }
 
 # ---------------------------------------------------------------------------
 # Inference Pipeline
 # ---------------------------------------------------------------------------
-def run_hybrid_inference(pil_image: Image.Image, lat: Optional[float] = None, lon: Optional[float] = None) -> tuple[Image.Image, dict, list]:
-    """Run BOTH YOLO models for boxes -> NMS merge -> Draw -> Run VLM for report."""
-    if not yolo_model_v8 and not yolo_model_v12:
-        raise RuntimeError("No YOLO model is initialized")
+def run_hybrid_inference(
+    pil_image: Image.Image,
+    lat: Optional[float] = None,
+    lon: Optional[float] = None,
+    requested_vlm_mode: Optional[str] = None,
+) -> tuple[Image.Image, dict, list]:
+    """Run the YOLO ensemble first, then optional VLM reporting."""
+    if not ensemble_detector:
+        raise RuntimeError("Ensemble detector is not initialized")
 
     w, h = pil_image.size
     cv2_img = pil_to_cv2(pil_image)
 
-    # 1. YOLO Detection
-    print("[PIPELINE] Running YOLO detection...")
-    res_v8 = None
-    res_v12 = None
-    if yolo_model_v8:
-        print("[PIPELINE] Running YOLOv8 detection...")
-        res_v8 = yolo_model_v8(cv2_img, conf=config.YOLO_CONF_THRESH, iou=config.YOLO_IOU_THRESH, verbose=False)[0]
-    if yolo_model_v12:
-        print("[PIPELINE] Running YOLOv12 detection...")
-        res_v12 = yolo_model_v12(cv2_img, conf=config.YOLO_CONF_THRESH, iou=config.YOLO_IOU_THRESH, verbose=False)[0]
-    
-    all_boxes = []
-    all_scores = []
-    all_labels = []
-    
-    # Process YOLO boxes into normalized NMS format
-    def extract_res(results):
-        for box in results.boxes:
-            x1, y1, x2, y2 = map(int, box.xyxy[0])
-            cls_id = int(box.cls[0])
-            conf = float(box.conf[0])
-            
-            if hasattr(results.names, 'get'):
-                raw_label = results.names.get(cls_id, str(cls_id))
-            else:
-                raw_label = results.names[cls_id]
-                 
-            label = config.YOLO_CLASSES.get(raw_label, raw_label)
-            all_boxes.append([x1, y1, x2 - x1, y2 - y1]) # NMS expects [x, y, w, h]
-            all_scores.append(conf)
-            all_labels.append(label)
-
-    if res_v8 is not None:
-        extract_res(res_v8)
-    if res_v12 is not None:
-        extract_res(res_v12)
-    
-    detections = []
+    print("[PIPELINE] Running ensemble detection...")
+    detections, detector_debug = ensemble_detector.predict(cv2_img)
     draw_items = []
-    
-    # Apply unified NMS
-    if len(all_boxes) > 0:
-        indices = cv2.dnn.NMSBoxes(all_boxes, all_scores, config.YOLO_CONF_THRESH, config.YOLO_IOU_THRESH)
-        if len(indices) > 0:
-            for idx_enum, i in enumerate(indices.flatten()):
-                x, y, bw, bh = all_boxes[i]
-                x1, y1, x2, y2 = x, y, x + bw, y + bh
-                label = all_labels[i]
-                box_id = f"D{idx_enum}"
-                
-                det = {
-                    "id": box_id,
-                    "label": label,
-                    "bbox_xyxy": [x1, y1, x2, y2],
-                    "confidence": all_scores[i],
-                    "severity": "unknown" 
-                }
-                detections.append(det)
-                
-                draw_items.append({
-                    "id": box_id,
-                    "label": label,
-                    "severity": "unknown",
-                    "category": "crack",
-                    "location": {"approx_bbox_px": [x1, y1, x2, y2]}
-                })
 
-    # 2. Draw boxes for VLM (without severity)
-    print(f"[PIPELINE] Drawing {len(detections)} YOLO boxes...")
+    for detection in detections:
+        x1, y1, x2, y2 = detection["bbox_xyxy"]
+        draw_items.append(
+            {
+                "id": detection["id"],
+                "label": detection.get("label", "Damage"),
+                "severity": "unknown",
+                "category": "damage",
+                "location": {"approx_bbox_px": [x1, y1, x2, y2]},
+            }
+        )
 
-    if ENABLE_VLM and vlm_engine and vlm_processor:
+    print(f"[PIPELINE] Drawing {len(detections)} ensemble boxes...")
+    resolved_vlm_mode = resolve_vlm_mode(requested_vlm_mode)
+    if resolved_vlm_mode in {"local", "api"} and detections:
         temp_cv2 = draw_boxes_on_image(cv2_img, draw_items)
         temp_pil = Image.fromarray(cv2.cvtColor(temp_cv2, cv2.COLOR_BGR2RGB))
+        user_prompt = build_vlm_prompt(detections, width=w, height=h, lat=lat, lon=lon)
+        print(f"[PIPELINE] Running VLM backend: {resolved_vlm_mode}")
+        if resolved_vlm_mode == "local":
+            if not (vlm_engine and vlm_processor and process_vision_info and SamplingParams):
+                raise RuntimeError("VLM mode requested local inference but the local VLM is not initialized.")
+            report_json = run_local_vlm_report(temp_pil, user_prompt)
+        else:
+            report_json = run_external_vlm_report(
+                temp_pil=temp_pil,
+                user_prompt=user_prompt,
+                detections=detections,
+                lat=lat,
+                lon=lon,
+            )
 
-        # 3. VLM Reporting
-        print("[PIPELINE] Running VLM for report generation...")
-        
-        box_infos = []
-        for d in detections:
-            x1, y1, x2, y2 = d['bbox_xyxy']
-            w_px = max(1, x2 - x1)
-            h_px = max(1, y2 - y1)
-            area = w_px * h_px
-            conf = round(d.get('confidence', 0.0) * 100, 1)
-            
-            info = f"- ID: {d['id']}, Type: {d['label']}, YOLO Confidence: {conf}%, Dimensions: {w_px}x{h_px} pixels (Area: {area}), Coords: [x1:{x1}, y1:{y1}, x2:{x2}, y2:{y2}]"
-            box_infos.append(info)
-            
-        box_list_str = "\n".join(box_infos)
-        if not box_list_str:
-            box_list_str = "No defects detected by YOLO."
-        
-        gps_str = f"GPS location (lat, lon): {lat}, {lon}." if lat is not None and lon is not None else "GPS location: Not provided."
-        user_prompt = USER_PROMPT_TEMPLATE + f"\n\n{gps_str}\nImage resolution: {w} x {h} pixels.\n\n### DETECTED BOUNDING BOXES (From YOLO):\n{box_list_str}"
-
-        messages = [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {
-                "role": "user",
-                "content": [
-                    {"type": "image", "image": temp_pil},
-                    {"type": "text", "text": user_prompt},
-                ],
-            },
-        ]
-
-        image_inputs, _ = process_vision_info(messages)
-        text_prompt = vlm_processor.apply_chat_template(
-            messages, tokenize=False, add_generation_prompt=True
-        )
-
-        sampling_params = SamplingParams(
-            temperature=config.VLM_TEMP,
-            top_p=config.VLM_TOP_P,
-            max_tokens=1500,
-            repetition_penalty=1.2,
-        )
-
-        outputs = vlm_engine.generate(
-            [{"prompt": text_prompt, "multi_modal_data": {"image": image_inputs}}],
-            sampling_params=sampling_params,
-        )
-        raw_vlm_text = outputs[0].outputs[0].text
-
-        try:
-            report_json = extract_json_from_text(raw_vlm_text)
-        except Exception as e:
-            print(f"[PIPELINE] Failed to parse VLM JSON: {e}")
-            report_json = {"report_markdown": raw_vlm_text, "severities": {}}
-
-        severities = report_json.get("severities", {})
-        for d in detections:
-            d["severity"] = severities.get(d["id"], "unknown")
-            
+        severities = report_json.get("severities", {}) if isinstance(report_json, dict) else {}
+        for detection in detections:
+            detection["severity"] = severities.get(detection["id"], "unknown")
         for item in draw_items:
             item["severity"] = severities.get(item["id"], "unknown")
-        report_markdown = report_json.get("report_markdown", "")
+        report_markdown = str(report_json.get("report_markdown", "")) if isinstance(report_json, dict) else ""
     else:
-        print("[PIPELINE] ENABLE_VLM=false, producing YOLO-only report.")
+        print(f"[PIPELINE] VLM mode `{resolved_vlm_mode}` skipped; producing detector-only report.")
         image_area = max(1, w * h)
         summary_lines = []
-        for d, item in zip(detections, draw_items):
-            x1, y1, x2, y2 = d["bbox_xyxy"]
+        for detection, item in zip(detections, draw_items):
+            x1, y1, x2, y2 = detection["bbox_xyxy"]
             bbox_area = max(1, (x2 - x1) * (y2 - y1))
             ratio = bbox_area / image_area
             severity = "high" if ratio >= 0.08 else "low"
-            d["severity"] = severity
+            detection["severity"] = severity
             item["severity"] = severity
             summary_lines.append(
-                f"- {d['id']}: {d['label']} at [{x1}, {y1}, {x2}, {y2}] "
+                f"- {detection['id']}: {detection['label']} at [{x1}, {y1}, {x2}, {y2}] "
                 f"covering {ratio:.1%} of the image, severity={severity}"
             )
 
         if not summary_lines:
-            summary_lines.append("- No defects detected by YOLO.")
+            summary_lines.append("- No defects detected by the ensemble detector.")
 
         report_markdown = (
-            "# YOLO-Only Inspection Report\n\n"
-            "This run skipped the VLM and validated remote startup plus YOLO inference only.\n\n"
+            "# Detector-Only Inspection Report\n\n"
+            "This run skipped the VLM and returned only the ensemble detector output.\n\n"
             f"Detected items: {len(detections)}\n\n"
             + "\n".join(summary_lines)
         )
 
-    # 5. Draw FINAL boxes containing the severity label
     annotated_cv2 = draw_boxes_on_image(cv2_img, draw_items)
     annotated_pil = Image.fromarray(cv2.cvtColor(annotated_cv2, cv2.COLOR_BGR2RGB))
+    annotated_b64 = encode_image_to_base64(annotated_cv2)
 
-    return annotated_pil, {"report_markdown": report_markdown}, detections
+    report_payload = {
+        "report_markdown": report_markdown,
+        "annotated_image_b64": annotated_b64,
+        "detector_debug": {
+            **detector_debug,
+            "resolved_vlm_mode": resolved_vlm_mode,
+        },
+    }
+    return annotated_pil, report_payload, detections
 
 
 # ---------------------------------------------------------------------------
@@ -655,8 +713,7 @@ async def analyze(req: AnalyzeRequest, api_key: str = Security(verify_api_key)):
     """
     # 1) Decode
     try:
-        image_data = base64.b64decode(req.image_b64)
-        pil_image = Image.open(io.BytesIO(image_data)).convert("RGB")
+        pil_image = decode_base64_image(req.image_b64)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid base64 image: {e}")
 
@@ -670,7 +727,7 @@ async def analyze(req: AnalyzeRequest, api_key: str = Security(verify_api_key)):
     print("[ANALYZE] Running hybrid YOLO + VLM inference...")
     try:
         annotated_pil, report_dict, detections = run_hybrid_inference(
-            pil_image, lat, lon
+            pil_image, lat, lon, req.vlm_mode
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Inference pipeline failed: {e}")
@@ -678,13 +735,22 @@ async def analyze(req: AnalyzeRequest, api_key: str = Security(verify_api_key)):
     # 3) Merge response
     boxes = []
     for d in detections:
-        category = "pothole" if "pothole" in d["label"].lower() else "crack"
+        label = str(d.get("label", "damage")).lower()
+        if "pothole" in label:
+            category = "pothole"
+        elif "crack" in label:
+            category = "crack"
+        else:
+            category = "damage"
         boxes.append({
             "id": d["id"],
             "class": category,
             "label": d["label"],
             "bbox_xyxy": d["bbox_xyxy"],
             "severity": d["severity"],
+            "confidence": d.get("confidence", 0.0),
+            "support": d.get("support", 1),
+            "member_votes": d.get("member_votes", []),
         })
 
     n_boxes = len(boxes)
@@ -697,6 +763,8 @@ async def analyze(req: AnalyzeRequest, api_key: str = Security(verify_api_key)):
         "summary": " ".join(summary_parts),
         "boxes": boxes,
         "report_markdown": report_dict.get("report_markdown", ""),
+        "annotated_image_b64": report_dict.get("annotated_image_b64", ""),
+        "detector_debug": report_dict.get("detector_debug", {}),
     }
 
     print(f"[ANALYZE] Done: {n_boxes} boxes")
@@ -719,14 +787,26 @@ async def analyze(req: AnalyzeRequest, api_key: str = Security(verify_api_key)):
 # ---------------------------------------------------------------------------
 @app.get("/health")
 async def health():
+    selection = {}
+    if ensemble_detector is not None:
+        selection = {
+            "members": list(ensemble_detector.models.keys()),
+            "mode": ensemble_detector.selection.get("mode"),
+            "weight_mode": ensemble_detector.selection.get("weight_mode"),
+            "wbf_iou": ensemble_detector.selection.get("wbf_iou"),
+            "wbf_skip": ensemble_detector.selection.get("wbf_skip"),
+            "final_threshold": ensemble_detector.selection.get("final_threshold"),
+            "min_support": ensemble_detector.selection.get("min_support"),
+        }
     return {
         "status": "ok",
         "model": MODEL_NAME,
         "vlm_loaded": vlm_engine is not None,
         "enable_vlm": ENABLE_VLM,
-        "enable_yolo_v8": ENABLE_YOLO_V8,
-        "yolo_v8_loaded": yolo_model_v8 is not None,
-        "yolo_v12_loaded": yolo_model_v12 is not None,
+        "vlm_backend": config.VLM_BACKEND,
+        "detector_mode": config.DETECTOR_MODE,
+        "ensemble_loaded": ensemble_detector is not None,
+        "ensemble_selection": selection,
     }
 
 

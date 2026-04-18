@@ -3,11 +3,14 @@ set -euo pipefail
 
 ROOT_DIR="${ROOT_DIR:-/opt/skylink-model-server}"
 APP_DIR="${APP_DIR:-$ROOT_DIR/model_server}"
+DEPLOY_DIR="${DEPLOY_DIR:-$ROOT_DIR/deploy/model_server}"
 VENV_DIR="${VENV_DIR:-$ROOT_DIR/venv}"
 RUNTIME_DIR="${RUNTIME_DIR:-$ROOT_DIR/runtime}"
 ENV_FILE="${ENV_FILE:-$ROOT_DIR/.env}"
 BIN_DIR="${BIN_DIR:-$ROOT_DIR/bin}"
 CLOUDFLARED_BIN="${CLOUDFLARED_BIN:-$BIN_DIR/cloudflared}"
+DOCKER_COMPOSE_FILE="${DOCKER_COMPOSE_FILE:-$DEPLOY_DIR/docker-compose.vm.yml}"
+DOCKER_BUILD_CONTEXT="${DOCKER_BUILD_CONTEXT:-$DEPLOY_DIR/docker-context}"
 STATUS_FILE="$RUNTIME_DIR/status.json"
 SERVER_LOG="$RUNTIME_DIR/server.log"
 TUNNEL_LOG="$RUNTIME_DIR/tunnel.log"
@@ -28,10 +31,27 @@ load_env() {
     source "$ENV_FILE"
     set +a
   fi
+
+  export ROOT_DIR APP_DIR DEPLOY_DIR VENV_DIR RUNTIME_DIR ENV_FILE BIN_DIR CLOUDFLARED_BIN
+  export DOCKER_COMPOSE_FILE="${DOCKER_COMPOSE_FILE:-$DEPLOY_DIR/docker-compose.vm.yml}"
+  export DOCKER_BUILD_CONTEXT="${DOCKER_BUILD_CONTEXT:-$DEPLOY_DIR/docker-context}"
   export API_KEY="${API_KEY:-road-inspector-secret-key-2024}"
   export HOST="${HOST:-0.0.0.0}"
   export PORT="${PORT:-17612}"
   export ENABLE_VLM="${ENABLE_VLM:-true}"
+  export VLM_BACKEND="${VLM_BACKEND:-local}"
+  if [ -z "${INSTALL_LOCAL_VLM:-}" ]; then
+    if [ "$ENABLE_VLM" = "true" ] && [ "$VLM_BACKEND" = "local" ]; then
+      export INSTALL_LOCAL_VLM="true"
+    else
+      export INSTALL_LOCAL_VLM="false"
+    fi
+  else
+    export INSTALL_LOCAL_VLM="${INSTALL_LOCAL_VLM}"
+  fi
+  export REMOTE_DEPLOY_MODE="${REMOTE_DEPLOY_MODE:-native}"
+  export DOCKER_IMAGE_NAME="${DOCKER_IMAGE_NAME:-skylink-model-server:latest}"
+  export DOCKER_CONTAINER_NAME="${DOCKER_CONTAINER_NAME:-skylink-model-server}"
   if [ -z "${ENABLE_YOLO_V8:-}" ]; then
     if [ "$ENABLE_VLM" = "true" ]; then
       export ENABLE_YOLO_V8="true"
@@ -50,6 +70,10 @@ load_env() {
   export YOLO_MODEL_V12="${YOLO_MODEL_V12:-rezzzq/yolo12s-road-damage-rdd2022}"
   export YOLO_V8_WEIGHTS_URL="${YOLO_V8_WEIGHTS_URL:-https://huggingface.co/oracl4/YOLOv8_Small_RDD/resolve/main/YOLOv8_Small_RDD.pt}"
   export HF_HOME="${HF_HOME:-$ROOT_DIR/.cache/huggingface}"
+  export ENSEMBLE_MEMBERS="${ENSEMBLE_MEMBERS:-rezzzq_yolo12s_rdd2022,ozair_yolov8_rdd2022,oracl4_yolov8_rdd2022}"
+  export YOLO12_REPO_DIR="${YOLO12_REPO_DIR:-$ROOT_DIR/external/yolov12}"
+  export YOLO12_REPO_URL="${YOLO12_REPO_URL:-https://github.com/sunsmarterjie/yolov12.git}"
+  export YOLO12_REPO_REF="${YOLO12_REPO_REF:-}"
   export ENABLE_QUICK_TUNNEL="${ENABLE_QUICK_TUNNEL:-true}"
   export WAIT_FOR_HEALTH="${WAIT_FOR_HEALTH:-true}"
   export WAIT_FOR_TUNNEL="${WAIT_FOR_TUNNEL:-true}"
@@ -59,15 +83,133 @@ load_env() {
   export PROMPT_FILE="${PROMPT_FILE:-$APP_DIR/prompt.txt}"
 }
 
-ensure_requirements() {
+yolo12_member_enabled() {
+  case ",${ENSEMBLE_MEMBERS}," in
+    *,rezzzq_yolo12s_rdd2022,*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+ensure_base_packages() {
+  local need_install="false"
+  if ! command -v python3 >/dev/null 2>&1; then
+    need_install="true"
+  elif ! python3 -m venv --help >/dev/null 2>&1; then
+    need_install="true"
+  fi
+  for binary in curl wget git lsof; do
+    if ! command -v "$binary" >/dev/null 2>&1; then
+      need_install="true"
+      break
+    fi
+  done
+
+  if [ "$need_install" = "false" ]; then
+    return
+  fi
+
   if command -v apt-get >/dev/null 2>&1 && [ "$(id -u)" -eq 0 ]; then
-    log "Installing OS packages"
+    log "Installing base OS packages"
     apt-get update
     apt-get install -y --no-install-recommends \
       python3 python3-pip python3-venv git curl wget ca-certificates \
       ffmpeg libsm6 libxext6 libglib2.0-0 lsof
     rm -rf /var/lib/apt/lists/*
+    return
   fi
+
+  log "Missing required host packages and cannot install them automatically"
+  return 1
+}
+
+ensure_docker() {
+  if command -v docker >/dev/null 2>&1; then
+    if docker compose version >/dev/null 2>&1 || command -v docker-compose >/dev/null 2>&1; then
+      return
+    fi
+  fi
+
+  if ! command -v apt-get >/dev/null 2>&1 || [ "$(id -u)" -ne 0 ]; then
+    log "Docker/Compose is required for docker_vm mode and could not be installed automatically"
+    return 1
+  fi
+
+  log "Installing Docker and Compose support"
+  apt-get update
+  if ! apt-get install -y --no-install-recommends docker.io docker-compose-plugin; then
+    apt-get install -y --no-install-recommends docker.io docker-compose
+  fi
+  rm -rf /var/lib/apt/lists/*
+
+  if command -v systemctl >/dev/null 2>&1; then
+    systemctl enable --now docker >/dev/null 2>&1 || systemctl start docker >/dev/null 2>&1 || true
+  fi
+  if command -v service >/dev/null 2>&1; then
+    service docker start >/dev/null 2>&1 || true
+  fi
+
+  if ! command -v docker >/dev/null 2>&1; then
+    log "Docker install completed but docker binary is still unavailable"
+    return 1
+  fi
+  if ! docker compose version >/dev/null 2>&1 && ! command -v docker-compose >/dev/null 2>&1; then
+    log "Docker Compose is still unavailable after installation"
+    return 1
+  fi
+}
+
+compose() {
+  if docker compose version >/dev/null 2>&1; then
+    (
+      cd "$DEPLOY_DIR"
+      docker compose -f "$DOCKER_COMPOSE_FILE" "$@"
+    )
+    return
+  fi
+  if command -v docker-compose >/dev/null 2>&1; then
+    (
+      cd "$DEPLOY_DIR"
+      docker-compose -f "$DOCKER_COMPOSE_FILE" "$@"
+    )
+    return
+  fi
+  log "Docker Compose command not found"
+  return 1
+}
+
+ensure_docker_assets() {
+  if [ ! -f "$DOCKER_COMPOSE_FILE" ]; then
+    log "Missing Docker Compose file at $DOCKER_COMPOSE_FILE"
+    return 1
+  fi
+  if [ ! -f "$DEPLOY_DIR/Dockerfile" ]; then
+    log "Missing Dockerfile at $DEPLOY_DIR/Dockerfile"
+    return 1
+  fi
+  if [ ! -d "$APP_DIR" ]; then
+    log "Missing model_server source at $APP_DIR"
+    return 1
+  fi
+}
+
+prepare_docker_context() {
+  load_env
+  ensure_docker_assets
+  mkdir -p "$DOCKER_BUILD_CONTEXT/model_server"
+  rm -rf "$DOCKER_BUILD_CONTEXT/model_server"
+  mkdir -p "$DOCKER_BUILD_CONTEXT/model_server"
+  rm -rf "$DOCKER_BUILD_CONTEXT/external"
+  mkdir -p "$DOCKER_BUILD_CONTEXT/external"
+  tar \
+    --exclude='models' \
+    --exclude='__pycache__' \
+    --exclude='.pytest_cache' \
+    -C "$APP_DIR" \
+    -cf - . | tar -C "$DOCKER_BUILD_CONTEXT/model_server" -xf -
+  if [ -d "$ROOT_DIR/external/yolov12" ]; then
+    tar -C "$ROOT_DIR/external" -cf - yolov12 | tar -C "$DOCKER_BUILD_CONTEXT/external" -xf -
+  fi
+  cp "$DEPLOY_DIR/patch_yolo12_flash_fallback.py" "$DOCKER_BUILD_CONTEXT/patch_yolo12_flash_fallback.py"
 }
 
 ensure_venv() {
@@ -80,20 +222,57 @@ ensure_venv() {
   python -m pip install --upgrade pip wheel "setuptools<82"
 }
 
-install_deps() {
-  load_env
-  ensure_requirements
+install_deps_native() {
+  ensure_base_packages
   ensure_venv
   local requirements_file="$APP_DIR/requirements.txt"
-  if [ "$ENABLE_VLM" != "true" ]; then
+  if [ "$INSTALL_LOCAL_VLM" != "true" ]; then
     requirements_file="$APP_DIR/requirements-yolo.txt"
   fi
   log "Installing Python dependencies from $requirements_file"
   python -m pip install -r "$requirements_file"
+  if yolo12_member_enabled; then
+    local repo_dir="$YOLO12_REPO_DIR"
+    mkdir -p "$(dirname "$repo_dir")"
+    if [ ! -d "$repo_dir" ] || [ ! -f "$repo_dir/ultralytics/nn/modules/block.py" ]; then
+      if [ -z "$YOLO12_REPO_URL" ]; then
+        log "YOLO12 fork is required for the rezzzq member but no bundled repo or YOLO12_REPO_URL was provided."
+        return 1
+      fi
+      log "Cloning YOLO12 fork from $YOLO12_REPO_URL"
+      rm -rf "$repo_dir"
+      git clone "$YOLO12_REPO_URL" "$repo_dir"
+    fi
+    if [ -n "$YOLO12_REPO_REF" ] && [ -d "$repo_dir/.git" ]; then
+      log "Checking out YOLO12 ref $YOLO12_REPO_REF"
+      git -C "$repo_dir" fetch --all --tags || true
+      git -C "$repo_dir" checkout "$YOLO12_REPO_REF"
+    fi
+    if [ -f "$repo_dir/requirements.txt" ]; then
+      sed -i 's|.*flash_attn.*\.whl.*|# removed local wheel - using runtime patch instead|' "$repo_dir/requirements.txt" || true
+    fi
+    python "$DEPLOY_DIR/patch_yolo12_flash_fallback.py" "$repo_dir"
+    log "Installing YOLO12 fork from $repo_dir"
+    python -m pip install -e "$repo_dir"
+  fi
 }
 
-prefetch_models() {
+install_deps_docker() {
+  ensure_base_packages
+  ensure_docker
+  ensure_docker_assets
+}
+
+install_deps() {
   load_env
+  if [ "$REMOTE_DEPLOY_MODE" = "docker_vm" ]; then
+    install_deps_docker
+  else
+    install_deps_native
+  fi
+}
+
+prefetch_models_native() {
   ensure_venv
   # shellcheck disable=SC1091
   source "$VENV_DIR/bin/activate"
@@ -108,7 +287,7 @@ prefetch_models() {
     --yolo-v8-url "$YOLO_V8_WEIGHTS_URL" \
     --yolo-v8-dest "$YOLO_MODEL_V8" \
     --cache-dir "$HF_HOME")
-  if [ "$ENABLE_VLM" != "true" ]; then
+  if [ "$INSTALL_LOCAL_VLM" != "true" ]; then
     cmd+=(--skip-vlm)
   fi
   if [ "$ENABLE_YOLO_V8" != "true" ]; then
@@ -120,7 +299,45 @@ prefetch_models() {
   "${cmd[@]}"
 }
 
-stop_server() {
+prefetch_models_docker() {
+  ensure_docker
+  prepare_docker_context
+  mkdir -p "$HF_HOME" "$(dirname "$YOLO_MODEL_V8")"
+  log "Building Docker image for remote model server"
+  compose build model-server
+  if [ "$PREFETCH_MODELS" != "true" ]; then
+    log "Skipping model prefetch"
+    return
+  fi
+  log "Prefetching model assets in Docker"
+  cmd=(python /opt/skylink-model-server/model_server/prefetch_models.py \
+    --vlm-model "$VLM_MODEL" \
+    --yolo-v12-repo "$YOLO_MODEL_V12" \
+    --yolo-v8-url "$YOLO_V8_WEIGHTS_URL" \
+    --yolo-v8-dest "$YOLO_MODEL_V8" \
+    --cache-dir "$HF_HOME")
+  if [ "$INSTALL_LOCAL_VLM" != "true" ]; then
+    cmd+=(--skip-vlm)
+  fi
+  if [ "$ENABLE_YOLO_V8" != "true" ]; then
+    cmd+=(--skip-yolo-v8)
+  fi
+  if [ -n "${HUGGINGFACE_HUB_TOKEN:-}" ]; then
+    cmd+=(--hf-token "$HUGGINGFACE_HUB_TOKEN")
+  fi
+  compose run --rm --no-deps model-server "${cmd[@]}"
+}
+
+prefetch_models() {
+  load_env
+  if [ "$REMOTE_DEPLOY_MODE" = "docker_vm" ]; then
+    prefetch_models_docker
+  else
+    prefetch_models_native
+  fi
+}
+
+stop_server_native() {
   if [ -f "$SERVER_PID_FILE" ]; then
     local pid
     pid="$(cat "$SERVER_PID_FILE" 2>/dev/null || true)"
@@ -130,6 +347,40 @@ stop_server() {
       wait "$pid" || true
     fi
     rm -f "$SERVER_PID_FILE"
+  fi
+}
+
+sync_docker_server_state() {
+  if docker container inspect "$DOCKER_CONTAINER_NAME" >/dev/null 2>&1; then
+    local pid
+    pid="$(docker inspect -f '{{.State.Pid}}' "$DOCKER_CONTAINER_NAME" 2>/dev/null || true)"
+    if [[ "$pid" =~ ^[0-9]+$ ]] && [ "$pid" -gt 0 ]; then
+      printf '%s\n' "$pid" > "$SERVER_PID_FILE"
+    else
+      rm -f "$SERVER_PID_FILE"
+    fi
+    docker logs --tail 200 "$DOCKER_CONTAINER_NAME" >"$SERVER_LOG" 2>&1 || true
+  else
+    rm -f "$SERVER_PID_FILE"
+  fi
+}
+
+stop_server_docker() {
+  ensure_docker
+  ensure_docker_assets
+  if compose ps -q model-server >/dev/null 2>&1; then
+    log "Stopping Docker Compose model server"
+    compose down --remove-orphans || true
+  fi
+  rm -f "$SERVER_PID_FILE"
+}
+
+stop_server() {
+  load_env
+  if [ "$REMOTE_DEPLOY_MODE" = "docker_vm" ]; then
+    stop_server_docker
+  else
+    stop_server_native
   fi
 }
 
@@ -190,10 +441,9 @@ wait_for_tunnel() {
   return 1
 }
 
-start_server() {
-  load_env
+start_server_native() {
   ensure_venv
-  stop_server
+  stop_server_native
   mkdir -p "$(dirname "$YOLO_MODEL_V8")"
   : > "$SERVER_LOG"
   chmod +x "$APP_DIR/run.sh"
@@ -204,6 +454,29 @@ start_server() {
     echo $! > "$SERVER_PID_FILE"
   )
   wait_for_health
+}
+
+start_server_docker() {
+  ensure_docker
+  ensure_docker_assets
+  prepare_docker_context
+  mkdir -p "$HF_HOME" "$(dirname "$YOLO_MODEL_V8")"
+  stop_server_docker
+  : > "$SERVER_LOG"
+  log "Starting Docker Compose model server"
+  compose up -d --build model-server
+  sync_docker_server_state
+  wait_for_health
+  sync_docker_server_state
+}
+
+start_server() {
+  load_env
+  if [ "$REMOTE_DEPLOY_MODE" = "docker_vm" ]; then
+    start_server_docker
+  else
+    start_server_native
+  fi
 }
 
 start_tunnel() {
@@ -224,7 +497,10 @@ start_tunnel() {
 
 write_status() {
   load_env
-  python3 - "$STATUS_FILE" "$PORT" "$SERVER_PID_FILE" "$TUNNEL_PID_FILE" "$TUNNEL_URL_FILE" "$PUBLIC_BASE_URL" "$PUBLIC_HOST" "$MODEL_NAME" <<'PY'
+  if [ "$REMOTE_DEPLOY_MODE" = "docker_vm" ]; then
+    sync_docker_server_state
+  fi
+  python3 - "$STATUS_FILE" "$PORT" "$SERVER_PID_FILE" "$TUNNEL_PID_FILE" "$TUNNEL_URL_FILE" "$PUBLIC_BASE_URL" "$PUBLIC_HOST" "$MODEL_NAME" "$REMOTE_DEPLOY_MODE" "$DOCKER_CONTAINER_NAME" "$DOCKER_IMAGE_NAME" <<'PY'
 from __future__ import annotations
 
 import json
@@ -241,6 +517,9 @@ tunnel_url_file = Path(sys.argv[5])
 public_base_url = sys.argv[6].strip()
 public_host = sys.argv[7].strip()
 model_name = sys.argv[8].strip()
+deployment_mode = sys.argv[9].strip()
+docker_container = sys.argv[10].strip()
+docker_image = sys.argv[11].strip()
 
 
 def read_pid(path: Path) -> int | None:
@@ -280,6 +559,9 @@ payload = {
     "status": "ready" if ready else "starting",
     "model": model_name,
     "enable_vlm": os.getenv("ENABLE_VLM", "true").strip().lower() in {"1", "true", "yes", "on"},
+    "deployment_mode": deployment_mode,
+    "docker_container": docker_container if deployment_mode == "docker_vm" else "",
+    "docker_image": docker_image if deployment_mode == "docker_vm" else "",
     "local_health_url": health_url,
     "local_analyze_url": f"http://127.0.0.1:{port}/analyze",
     "reachable_base_url": reachable_base_url.rstrip("/"),

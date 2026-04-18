@@ -116,6 +116,29 @@ class ManagedRemoteModelState:
     started_at: float | None = None
     last_attempt_at: float | None = None
     thread: threading.Thread | None = None
+ 
+    def __post_init__(self) -> None:
+        """Load last known state from disk immediately on instantiation."""
+        if self.state_file.exists():
+            try:
+                import json
+                data = json.loads(self.state_file.read_text(encoding="utf-8"))
+                with self.lock:
+                    self.status = data.get("status", "disabled")
+                    self.error = data.get("error", "")
+                    self.provider = data.get("provider", "ssh")
+                    self.remote_host = data.get("remote_host", "")
+                    self.remote_port = data.get("remote_port", 22)
+                    self.analyze_url = data.get("analyze_url", "")
+                    # Initialize masking from persisted masked key if available
+                    self.api_key = data.get("api_key_masked", "")
+                    self.instance_id = data.get("instance_id")
+                    self.started_at = data.get("started_at")
+                    self.output_tail = data.get("output_tail") or []
+            except Exception:
+                pass
+
+
 
     def _write_state(self) -> None:
         payload = {
@@ -176,6 +199,16 @@ class ManagedRemoteModelState:
                 self.status = "disabled"
                 self.error = ""
                 self.provider = str(os.getenv("SKYLINK_REMOTE_MODEL_PROVIDER", "ssh")).strip().lower()
+                self.remote_host = ""
+                self.remote_port = 22
+                self.remote_user = str(os.getenv("SKYLINK_REMOTE_MODEL_SSH_USER", "root")).strip() or "root"
+                self.analyze_url = ""
+                self.public_base_url = ""
+                self.api_key = ""
+                self.instance_id = None
+                self.started_at = None
+                self.last_attempt_at = None
+                self.output_tail = []
             self._write_state()
             return
 
@@ -197,6 +230,17 @@ class ManagedRemoteModelState:
         self._write_state()
         self.thread = threading.Thread(target=self._worker, name="skylink-remote-model", daemon=True)
         self.thread.start()
+
+    def stop(self) -> None:
+        """Signaling the worker to stop is handled via object destruction in this simplistic impl,
+        but we provide the method to satisfy the server lifespan protocol."""
+        with self.lock:
+            if self.status == "starting":
+                self.status = "disabled"
+                self.error = "Bridge shutdown before completion."
+            self._write_state()
+
+
 
     def _worker(self) -> None:
         try:
@@ -322,6 +366,7 @@ class ManagedRemoteModelState:
         return candidates
 
     def _reuse_or_create_vast_instance(self, client: VastAiClient) -> int:
+        deploy_mode = str(os.getenv("SKYLINK_REMOTE_MODEL_DEPLOY_MODE", "docker_vm")).strip().lower()
         configured_id = str(os.getenv("SKYLINK_VAST_INSTANCE_ID", "")).strip()
         if configured_id:
             self._append_output(f"Using configured Vast.ai instance id {configured_id}.")
@@ -373,6 +418,8 @@ class ManagedRemoteModelState:
         min_gpu_ram = float(os.getenv("SKYLINK_VAST_MIN_GPU_RAM_GB", "24"))
         if min_gpu_ram > 0:
             filters["gpu_total_ram"] = {"gte": int(min_gpu_ram * 1024)}
+        if deploy_mode == "docker_vm":
+            filters["vms_enabled"] = {"eq": True}
 
         self._append_output("Searching Vast.ai offers.")
         offers = client.search_offers(filters)
@@ -392,14 +439,25 @@ class ManagedRemoteModelState:
         self._append_output(
             f"Selected Vast.ai offer {offer_id} ({offer.get('gpu_name', 'unknown GPU')}, ${offer.get('dph_total', '?')}/h)."
         )
-        create_payload = {
-            "image": str(os.getenv("SKYLINK_VAST_IMAGE", "vastai/base-image:@vastai-automatic-tag")).strip(),
-            "label": label,
-            "disk": int(os.getenv("SKYLINK_VAST_DISK_GB", "64")),
-            "runtype": str(os.getenv("SKYLINK_VAST_RUNTYPE", "ssh_direct")).strip(),
-            "target_state": "running",
-            "cancel_unavail": True,
-        }
+        if deploy_mode == "docker_vm":
+            create_payload = {
+                "image": str(os.getenv("SKYLINK_VAST_VM_IMAGE", "docker.io/vastai/kvm:ubuntu_terminal")).strip(),
+                "label": label,
+                "disk": int(os.getenv("SKYLINK_VAST_DISK_GB", "96")),
+                "runtype": "ssh",
+                "target_state": "running",
+                "cancel_unavail": True,
+                "vm": True,
+            }
+        else:
+            create_payload = {
+                "image": str(os.getenv("SKYLINK_VAST_IMAGE", "vastai/base-image:@vastai-automatic-tag")).strip(),
+                "label": label,
+                "disk": int(os.getenv("SKYLINK_VAST_DISK_GB", "64")),
+                "runtype": str(os.getenv("SKYLINK_VAST_RUNTYPE", "ssh_direct")).strip(),
+                "target_state": "running",
+                "cancel_unavail": True,
+            }
         instance_id = client.create_instance(offer_id, create_payload)
         self._append_output(f"Created Vast.ai instance {instance_id}.")
         self.instance_file.write_text(str(instance_id), encoding="utf-8")
@@ -428,9 +486,16 @@ class ManagedRemoteModelState:
             raise RuntimeError("OpenSSH client tools (ssh/scp) are required for managed remote startup.")
 
         model_server_dir = self._resolve_existing_path("model_server")
+        training_weights_dir = self._resolve_existing_path("training_pilot/weights")
+        deploy_model_dir = self._resolve_existing_path("deploy/model_server")
         bootstrap_script = self._resolve_existing_path("deploy/model_server/bootstrap_remote.sh")
+        external_yolo12_dir = self._resolve_existing_path("external/yolov12")
         if not model_server_dir:
             raise RuntimeError("model_server bundle is missing from the runtime image.")
+        if not training_weights_dir:
+            raise RuntimeError("training_pilot/weights is missing from the runtime image.")
+        if not deploy_model_dir:
+            raise RuntimeError("deploy/model_server is missing from the runtime image.")
         if not bootstrap_script:
             raise RuntimeError("deploy/model_server/bootstrap_remote.sh is missing from the runtime image.")
 
@@ -445,11 +510,38 @@ class ManagedRemoteModelState:
         try:
             ssh_args = self._ssh_base_args(port)
             target = f"{user}@{host}"
+            quoted_remote_path = shlex.quote(remote_path)
+            quoted_training_path = shlex.quote(f"{remote_path}/training_pilot")
+            quoted_external_path = shlex.quote(f"{remote_path}/external")
             self._append_output(f"Creating remote directory {remote_path}.")
-            _run_command([ssh_command, *ssh_args, target, f"mkdir -p {shlex.quote(remote_path)}"], timeout=120)
+            _run_command(
+                [
+                    ssh_command,
+                    *ssh_args,
+                    target,
+                    f"mkdir -p {quoted_remote_path} {quoted_training_path} {quoted_external_path}",
+                ],
+                timeout=120,
+            )
 
             self._append_output("Uploading model_server bundle.")
             _run_command([scp_command, *self._scp_base_args(port), "-r", str(model_server_dir), f"{target}:{remote_path}"], timeout=900)
+            self._append_output("Uploading training weights bundle.")
+            _run_command(
+                [scp_command, *self._scp_base_args(port), "-r", str(training_weights_dir), f"{target}:{remote_path}/training_pilot"],
+                timeout=1800,
+            )
+            if external_yolo12_dir:
+                self._append_output("Uploading bundled YOLO12 fork.")
+                _run_command(
+                    [scp_command, *self._scp_base_args(port), "-r", str(external_yolo12_dir), f"{target}:{remote_path}/external"],
+                    timeout=1800,
+                )
+            self._append_output("Uploading deploy/model_server assets.")
+            _run_command(
+                [scp_command, *self._scp_base_args(port), "-r", str(deploy_model_dir), f"{target}:{remote_path}/deploy"],
+                timeout=900,
+            )
             self._append_output("Uploading remote bootstrap script.")
             _run_command([scp_command, *self._scp_base_args(port), str(bootstrap_script), f"{target}:{remote_path}/bootstrap_remote.sh"], timeout=120)
             self._append_output("Uploading runtime environment.")
@@ -528,6 +620,11 @@ class ManagedRemoteModelState:
         remote_path = str(os.getenv("SKYLINK_REMOTE_MODEL_REMOTE_PATH", "/opt/skylink-model-server")).strip()
         model_dir = f"{remote_path}/model_server"
         enable_vlm = _env_flag("SKYLINK_REMOTE_MODEL_ENABLE_VLM", True)
+        vlm_backend = os.getenv("SKYLINK_REMOTE_MODEL_VLM_BACKEND", "local").strip().lower()
+        if vlm_backend not in {"local", "api", "disabled"}:
+            vlm_backend = "local"
+        install_local_vlm = enable_vlm and vlm_backend == "local"
+        remote_deploy_mode = os.getenv("SKYLINK_REMOTE_MODEL_DEPLOY_MODE", "docker_vm").strip().lower() or "docker_vm"
         raw_enable_yolo_v8 = os.getenv("SKYLINK_REMOTE_MODEL_ENABLE_YOLO_V8")
         if raw_enable_yolo_v8 is None or not str(raw_enable_yolo_v8).strip():
             enable_yolo_v8 = enable_vlm
@@ -538,18 +635,56 @@ class ManagedRemoteModelState:
             "HOST": "0.0.0.0",
             "PORT": os.getenv("SKYLINK_REMOTE_MODEL_PORT", "17612"),
             "ENABLE_VLM": str(enable_vlm).lower(),
+            "VLM_BACKEND": vlm_backend,
+            "INSTALL_LOCAL_VLM": str(install_local_vlm).lower(),
             "ENABLE_YOLO_V8": str(enable_yolo_v8).lower(),
             "MODEL_NAME": os.getenv("SKYLINK_REMOTE_MODEL_VLM_MODEL", "Qwen/Qwen2.5-VL-7B-Instruct-AWQ"),
             "VLM_MODEL": os.getenv("SKYLINK_REMOTE_MODEL_VLM_MODEL", "Qwen/Qwen2.5-VL-7B-Instruct-AWQ"),
             "GPU_MEM_UTIL": os.getenv("SKYLINK_REMOTE_MODEL_GPU_MEM_UTIL", "0.80"),
             "MAX_MODEL_LEN": os.getenv("SKYLINK_REMOTE_MODEL_MAX_MODEL_LEN", "16384"),
             "MAX_OUTPUT_TOKENS": os.getenv("SKYLINK_REMOTE_MODEL_MAX_OUTPUT_TOKENS", "16384"),
+            "DETECTOR_MODE": "ensemble",
+            "ENSEMBLE_ENABLED": "true",
+            "ENSEMBLE_MEMBERS": os.getenv(
+                "SKYLINK_REMOTE_MODEL_ENSEMBLE_MEMBERS",
+                "rezzzq_yolo12s_rdd2022,ozair_yolov8_rdd2022,oracl4_yolov8_rdd2022",
+            ),
+            "ENSEMBLE_MODE": os.getenv("SKYLINK_REMOTE_MODEL_ENSEMBLE_MODE", "msflip"),
+            "ENSEMBLE_WEIGHT_MODE": os.getenv("SKYLINK_REMOTE_MODEL_ENSEMBLE_WEIGHT_MODE", "equal"),
+            "ENSEMBLE_WBF_IOU": os.getenv("SKYLINK_REMOTE_MODEL_ENSEMBLE_WBF_IOU", "0.40"),
+            "ENSEMBLE_WBF_SKIP": os.getenv("SKYLINK_REMOTE_MODEL_ENSEMBLE_WBF_SKIP", "0.05"),
+            "ENSEMBLE_FINAL_THRESHOLD": os.getenv("SKYLINK_REMOTE_MODEL_ENSEMBLE_FINAL_THRESHOLD", "0.30"),
+            "ENSEMBLE_MIN_SUPPORT": os.getenv("SKYLINK_REMOTE_MODEL_ENSEMBLE_MIN_SUPPORT", "2"),
+            "ENSEMBLE_MODEL_REZZZQ": str(
+                os.getenv("SKYLINK_REMOTE_MODEL_ENSEMBLE_MODEL_REZZZQ")
+                or f"{remote_path}/training_pilot/weights/rdd_trained_local/yolo12s_rezzzq_v5align/best.pt"
+            ).strip(),
+            "ENSEMBLE_MODEL_OZAIR": str(
+                os.getenv("SKYLINK_REMOTE_MODEL_ENSEMBLE_MODEL_OZAIR")
+                or f"{remote_path}/training_pilot/weights/rdd_trained_local/ozair_yolov8_custom/best.pt"
+            ).strip(),
+            "ENSEMBLE_MODEL_ORACL4": str(
+                os.getenv("SKYLINK_REMOTE_MODEL_ENSEMBLE_MODEL_ORACL4")
+                or f"{remote_path}/training_pilot/weights/rdd_trained_local/oracl4_yolov8_custom/best.pt"
+            ).strip(),
+            "ENSEMBLE_MODEL_OBC": str(os.getenv("SKYLINK_REMOTE_MODEL_ENSEMBLE_MODEL_OBC", "")).strip(),
+            "ENSEMBLE_CALIBRATION_MANIFEST": str(os.getenv("SKYLINK_REMOTE_MODEL_ENSEMBLE_CALIBRATION_MANIFEST", "")).strip(),
+            "ENSEMBLE_SELECTION_SUMMARY": str(os.getenv("SKYLINK_REMOTE_MODEL_ENSEMBLE_SELECTION_SUMMARY", "")).strip(),
             "YOLO_MODEL_V8": str(os.getenv("SKYLINK_REMOTE_MODEL_YOLO_V8") or f"{model_dir}/models/YOLOv8_Small_RDD.pt").strip(),
             "YOLO_MODEL_V12": str(os.getenv("SKYLINK_REMOTE_MODEL_YOLO_V12") or "rezzzq/yolo12s-road-damage-rdd2022").strip(),
+            "YOLO12_REPO_DIR": str(os.getenv("SKYLINK_REMOTE_MODEL_YOLO12_REPO_DIR") or f"{remote_path}/external/yolov12").strip(),
+            "YOLO12_REPO_URL": str(
+                os.getenv("SKYLINK_REMOTE_MODEL_YOLO12_REPO_URL")
+                or "https://github.com/sunsmarterjie/yolov12.git"
+            ).strip(),
+            "YOLO12_REPO_REF": str(os.getenv("SKYLINK_REMOTE_MODEL_YOLO12_REPO_REF", "")).strip(),
             "YOLO_V8_WEIGHTS_URL": os.getenv(
                 "SKYLINK_REMOTE_MODEL_YOLO_V8_WEIGHTS_URL",
                 "https://huggingface.co/oracl4/YOLOv8_Small_RDD/resolve/main/YOLOv8_Small_RDD.pt",
             ),
+            "VLM_API_URL": os.getenv("SKYLINK_REMOTE_MODEL_VLM_API_URL", ""),
+            "VLM_API_KEY": os.getenv("SKYLINK_REMOTE_MODEL_VLM_API_KEY", ""),
+            "VLM_API_AUTH_SCHEME": os.getenv("SKYLINK_REMOTE_MODEL_VLM_API_AUTH_SCHEME", "x-api-key"),
             "HF_HOME": str(os.getenv("SKYLINK_REMOTE_MODEL_HF_HOME") or f"{remote_path}/.cache/huggingface").strip(),
             "HUGGINGFACE_HUB_TOKEN": os.getenv("SKYLINK_REMOTE_MODEL_HF_TOKEN", ""),
             "PUBLIC_BASE_URL": os.getenv("SKYLINK_REMOTE_MODEL_PUBLIC_BASE_URL", ""),
@@ -558,6 +693,7 @@ class ManagedRemoteModelState:
             "WAIT_FOR_HEALTH": str(_env_flag("SKYLINK_REMOTE_MODEL_WAIT_FOR_HEALTH", True)).lower(),
             "WAIT_FOR_TUNNEL": str(_env_flag("SKYLINK_REMOTE_MODEL_WAIT_FOR_TUNNEL", True)).lower(),
             "PREFETCH_MODELS": str(_env_flag("SKYLINK_REMOTE_MODEL_PREFETCH", True)).lower(),
+            "REMOTE_DEPLOY_MODE": remote_deploy_mode,
         }
         return "\n".join(f"{key}={value}" for key, value in values.items()) + "\n"
 
@@ -604,7 +740,7 @@ class ManagedRemoteModelState:
         if not source.exists():
             return key_file
 
-        runtime_dir = Path("/tmp/skylink-ssh")
+        runtime_dir = self.bundle_root / "data" / "tmp" / "ssh"
         runtime_dir.mkdir(parents=True, exist_ok=True)
         target = runtime_dir / source.name
 
