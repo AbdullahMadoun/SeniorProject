@@ -45,6 +45,9 @@ diff_check_utf8.patch
 .DS_Store
 Thumbs.db
 
+# Session archives (Pi-side, not version-controlled)
+.skylink_session/
+
 # Local upstream simulator checkouts
 vendor/**
 !vendor/README.md
