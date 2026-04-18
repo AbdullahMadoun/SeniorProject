@@ -3,3 +3,6 @@ pymavlink
 adafruit-blinka
 adafruit-circuitpython-ads1x15
 psutil
+MAVProxy==1.8.74
+future==1.0.0
+pynmeagps==1.1.2
