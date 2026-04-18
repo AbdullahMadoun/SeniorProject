@@ -5,6 +5,8 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "$SCRIPT_DIR/../.." && pwd)"
 AUTONOMY_ROOT="$REPO_ROOT/autonomy"
 PX4_REPO="$REPO_ROOT/vendor/PX4-Autopilot"
+PX4_REPO_URL="${SKYLINK_PX4_REPO_URL:-https://github.com/PX4/PX4-Autopilot.git}"
+PX4_REF="${SKYLINK_PX4_REF:-v1.14.3}"
 VENV_DIR="$AUTONOMY_ROOT/.venv"
 STATUS_DIR="$REPO_ROOT/artifacts/px4_bootstrap"
 STATUS_PATH="$STATUS_DIR/remote_status.json"
@@ -28,14 +30,35 @@ as_root() {
 }
 
 ensure_repo_layout() {
-  if [ ! -d "$PX4_REPO" ]; then
-    log "Missing PX4 checkout at $PX4_REPO"
-    exit 1
-  fi
   if [ ! -d "$AUTONOMY_ROOT" ]; then
     log "Missing autonomy checkout at $AUTONOMY_ROOT"
     exit 1
   fi
+}
+
+run_px4_ubuntu_setup() {
+  # `ubuntu.sh` exits successfully after consuming enough `yes` input, which leaves
+  # `yes` terminated by SIGPIPE. With `pipefail` enabled that would incorrectly abort
+  # the whole bootstrap despite the setup succeeding.
+  set +o pipefail
+  yes | bash ./Tools/setup/ubuntu.sh --no-nuttx
+  local status=$?
+  set -o pipefail
+  return "$status"
+}
+
+ensure_px4_checkout() {
+  if [ -d "$PX4_REPO/.git" ]; then
+    return
+  fi
+  if [ -d "$PX4_REPO" ] && [ ! -d "$PX4_REPO/.git" ]; then
+    log "PX4 directory exists without git metadata at $PX4_REPO"
+    exit 1
+  fi
+  log "Cloning PX4 checkout ${PX4_REF} into $PX4_REPO"
+  mkdir -p "$(dirname "$PX4_REPO")"
+  git clone "$PX4_REPO_URL" --depth 1 --branch "$PX4_REF" --recurse-submodules --shallow-submodules "$PX4_REPO"
+  (git -C "$PX4_REPO/platforms/nuttx/NuttX/nuttx" fetch --tags --force origin || true)
 }
 
 install_os_packages() {
@@ -46,7 +69,7 @@ install_os_packages() {
   log "Installing OS packages required for PX4 SITL and Python tooling"
   as_root apt-get update
   as_root apt-get install -y --no-install-recommends \
-    bash ca-certificates curl git jq lsb-release python3 python3-pip python3-venv rsync wget
+    bash ca-certificates curl git iproute2 jq lsb-release net-tools python3 python3-pip python3-venv rsync wget
 }
 
 sync_submodules() {
@@ -63,7 +86,7 @@ install_px4_dependencies() {
   log "Running PX4 Ubuntu setup"
   (
     cd "$PX4_REPO"
-    bash ./Tools/setup/ubuntu.sh --no-nuttx
+    run_px4_ubuntu_setup
   )
 }
 
@@ -76,6 +99,7 @@ ensure_venv() {
   source "$VENV_DIR/bin/activate"
   python -m pip install --upgrade pip wheel "setuptools<82"
   python -m pip install mavsdk pymavlink psutil numpy pyulog fastapi uvicorn
+  python -m pip install --force-reinstall "empy==3.3.4"
 }
 
 build_px4() {
@@ -131,6 +155,7 @@ bootstrap() {
   ensure_repo_layout
   install_os_packages
   sync_submodules
+  ensure_px4_checkout
   install_px4_dependencies
   ensure_venv
   build_px4
@@ -141,6 +166,7 @@ install_only() {
   ensure_repo_layout
   install_os_packages
   sync_submodules
+  ensure_px4_checkout
   install_px4_dependencies
   ensure_venv
   write_status
@@ -168,11 +194,13 @@ main() {
       ;;
     build)
       ensure_repo_layout
+      ensure_px4_checkout
       build_px4
       write_status
       ;;
     status)
       ensure_repo_layout
+      ensure_px4_checkout
       write_status
       ;;
     *)
