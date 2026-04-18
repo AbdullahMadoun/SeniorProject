@@ -6,6 +6,7 @@ from datetime import datetime
 import json
 import os
 from pathlib import Path
+import shlex
 import signal
 import subprocess
 import sys
@@ -21,9 +22,15 @@ from autonomy.drone_system.config import load_system_baseline
 from autonomy.drone_system.interactive_mission import interactive_mission_spec_from_dict
 from autonomy.drone_system.px4_sim_overrides import build_px4_sim_override_plan, write_generated_gz_world
 from autonomy.drone_system.runtime_affinity import enforce_cpu_affinity, parse_cpu_cores
+from autonomy.drone_system.simulation_runtime import (
+    resolve_runner_python,
+    resolve_simulation_runtime_paths,
+    runtime_host_mode,
+    should_bootstrap_linux,
+)
 
-VENV_PYTHON = AUTONOMY_ROOT / ".venv" / "Scripts" / "python.exe"
-PX4_REPO = REPO_ROOT / "vendor" / "PX4-Autopilot"
+RUNTIME_PATHS = resolve_simulation_runtime_paths(repo_root=REPO_ROOT)
+PX4_REPO = RUNTIME_PATHS.px4_repo
 BRIDGE_SCRIPT = AUTONOMY_ROOT / "scripts" / "wsl_mavlink_bridge.py"
 VALIDATOR_SCRIPT = AUTONOMY_ROOT / "scripts" / "execute_interactive_mission.py"
 REPLAY_SCRIPT = AUTONOMY_ROOT / "scripts" / "build_latest_replay_bundle.py"
@@ -31,8 +38,10 @@ SHOWCASE_SCRIPT = AUTONOMY_ROOT / "scripts" / "build_showcase.py"
 DASHBOARD_SCRIPT = AUTONOMY_ROOT / "scripts" / "build_dashboard.py"
 SITL_LOG_DIR = REPO_ROOT / "artifacts" / "sitl_logs"
 GENERATED_WORLD_DIR = REPO_ROOT / "artifacts" / "generated_worlds"
-WIND_TEMPLATE_PATH = PX4_REPO / "Tools" / "simulation" / "gz" / "worlds" / "windy.sdf"
-GZ_ENV_PATH = PX4_REPO / "build" / "px4_sitl_default" / "rootfs" / "gz_env.sh"
+WIND_TEMPLATE_PATH = RUNTIME_PATHS.wind_template_path
+GZ_ENV_PATH = RUNTIME_PATHS.gz_env_path
+BOOTSTRAP_SCRIPT = RUNTIME_PATHS.bootstrap_script
+HOST_MODE = runtime_host_mode()
 TELEMETRY_PREFIX = "__TELEMETRY__"
 
 READY_MARKERS = (
@@ -163,7 +172,7 @@ class ProcessManager:
                 except Exception as exc:
                     print(f"[CLEANUP] Error killing {proc_info.name}: {exc}", flush=True)
 
-        _wsl_cleanup_px4()
+        _cleanup_px4_runtime()
 
         self._processes.clear()
         self._shutdown_event.set()
@@ -187,7 +196,19 @@ def _windows_to_wsl_path(path: Path) -> str:
     return f"/mnt/{drive}/{relative}"
 
 
+def _shell_quote_path(path: Path | str) -> str:
+    return shlex.quote(str(path))
+
+
+def _bash_command(command: str) -> list[str]:
+    if HOST_MODE == "windows_wsl":
+        return ["wsl", "bash", "-lc", command]
+    return ["bash", "-lc", command]
+
+
 def _kill_stale_mavsdk_server() -> None:
+    if HOST_MODE != "windows_wsl":
+        return
     subprocess.run(
         [
             "powershell",
@@ -277,7 +298,7 @@ def _cleanup_process(process: subprocess.Popen[str] | None, *, name: str) -> Non
     print(f"[{name}] terminated", flush=True)
 
 
-def _wsl_cleanup_px4() -> None:
+def _cleanup_px4_runtime() -> None:
     cleanup_command = (
         "pkill -f 'px4_sitl_default/bin/px4' 2>/dev/null || true; "
         "pkill -f '/bin/px4' 2>/dev/null || true; "
@@ -285,10 +306,21 @@ def _wsl_cleanup_px4() -> None:
         "pkill -f 'make px4_sitl' 2>/dev/null || true"
     )
     subprocess.run(
-        ["wsl", "bash", "-lc", cleanup_command],
+        _bash_command(cleanup_command),
         check=False,
         capture_output=True,
         text=True,
+    )
+
+
+def _ensure_linux_runtime_ready() -> None:
+    if HOST_MODE == "windows_wsl" or not should_bootstrap_linux(RUNTIME_PATHS):
+        return
+    print("[RUNNER] Linux runtime incomplete, bootstrapping PX4 SITL environment", flush=True)
+    subprocess.run(
+        ["bash", str(BOOTSTRAP_SCRIPT), "bootstrap"],
+        check=True,
+        cwd=str(REPO_ROOT),
     )
 
 
@@ -296,12 +328,7 @@ def _wait_for_world_ready(world_name: str, *, timeout_s: float = 60.0) -> None:
     deadline = time.time() + timeout_s
     while time.time() < deadline:
         result = subprocess.run(
-            [
-                "wsl",
-                "bash",
-                "-lc",
-                f"gz service -i --service /world/{world_name}/scene/info",
-            ],
+            _bash_command(f"gz service -i --service /world/{world_name}/scene/info"),
             check=False,
             capture_output=True,
             text=True,
@@ -325,10 +352,12 @@ def main() -> None:
         execution_cpu_cores = []
         print("[RUNNER] MAX RESOURCES MODE: Simulation will use all available CPU cores", flush=True)
 
-    if not VENV_PYTHON.exists():
-        raise RuntimeError(f"Expected Windows autonomy venv python at {VENV_PYTHON}")
     if not args.mission_spec.exists():
         raise RuntimeError(f"Mission spec not found: {args.mission_spec}")
+    _ensure_linux_runtime_ready()
+    runner_python = resolve_runner_python(RUNTIME_PATHS, fallback=sys.executable)
+    if not runner_python.exists():
+        raise RuntimeError(f"Expected autonomy python at {runner_python}")
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     baseline = load_system_baseline()
@@ -354,17 +383,37 @@ def main() -> None:
     dashboard_log_path = SITL_LOG_DIR / f"interactive_mission_{timestamp}_dashboard.log"
 
     _kill_stale_mavsdk_server()
-    _wsl_cleanup_px4()
+    _cleanup_px4_runtime()
 
-    px4_repo_wsl = _windows_to_wsl_path(PX4_REPO)
-    bridge_script_wsl = _windows_to_wsl_path(BRIDGE_SCRIPT)
-    generated_world_wsl = _windows_to_wsl_path(generated_world)
-    gz_env_wsl = _windows_to_wsl_path(GZ_ENV_PATH)
-    wsl_command = f"cd {px4_repo_wsl}; . {gz_env_wsl}; "
-    if args.world:
-        wsl_command += f"env HEADLESS=1 PX4_GZ_WORLD={args.world} PX4_HOME_LAT={baseline.home.lat} PX4_HOME_LON={baseline.home.lon} PX4_HOME_ALT={baseline.home.alt_m} make px4_sitl {args.model}"
+    if HOST_MODE == "windows_wsl":
+        px4_repo_shell = _windows_to_wsl_path(PX4_REPO)
+        bridge_script_shell = _windows_to_wsl_path(BRIDGE_SCRIPT)
+        generated_world_shell = _windows_to_wsl_path(generated_world)
+        gz_env_shell = _windows_to_wsl_path(GZ_ENV_PATH)
     else:
-        wsl_command += f"env HEADLESS=1 PX4_GZ_STANDALONE=1 PX4_GZ_WORLD={world_name} PX4_HOME_LAT={baseline.home.lat} PX4_HOME_LON={baseline.home.lon} PX4_HOME_ALT={baseline.home.alt_m} make px4_sitl {args.model}"
+        px4_repo_shell = str(PX4_REPO)
+        bridge_script_shell = str(BRIDGE_SCRIPT)
+        generated_world_shell = str(generated_world)
+        gz_env_shell = str(GZ_ENV_PATH)
+    sitl_command = f"cd {_shell_quote_path(px4_repo_shell)}; . {_shell_quote_path(gz_env_shell)}; "
+    if args.world:
+        sitl_command += (
+            "env HEADLESS=1 "
+            f"PX4_GZ_WORLD={shlex.quote(args.world)} "
+            f"PX4_HOME_LAT={baseline.home.lat} "
+            f"PX4_HOME_LON={baseline.home.lon} "
+            f"PX4_HOME_ALT={baseline.home.alt_m} "
+            f"make px4_sitl {shlex.quote(args.model)}"
+        )
+    else:
+        sitl_command += (
+            "env HEADLESS=1 PX4_GZ_STANDALONE=1 "
+            f"PX4_GZ_WORLD={shlex.quote(world_name)} "
+            f"PX4_HOME_LAT={baseline.home.lat} "
+            f"PX4_HOME_LON={baseline.home.lon} "
+            f"PX4_HOME_ALT={baseline.home.alt_m} "
+            f"make px4_sitl {shlex.quote(args.model)}"
+        )
 
     print(
         "[RUNNER] simulator overrides "
@@ -380,16 +429,15 @@ def main() -> None:
 
     world_process = None
     world_thread = None
+    bridge_process = None
+    bridge_thread = None
     manager = get_process_manager()
     if not args.world:
         print("[RUNNER] launching generated Gazebo world", flush=True)
         world_process = subprocess.Popen(
-            [
-                "wsl",
-                "bash",
-                "-lc",
-                f". {gz_env_wsl}; HEADLESS=1 gz sim --verbose=1 -r -s {generated_world_wsl}",
-            ],
+            _bash_command(
+                f". {_shell_quote_path(gz_env_shell)}; HEADLESS=1 gz sim --verbose=1 -r -s {_shell_quote_path(generated_world_shell)}"
+            ),
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
@@ -409,7 +457,7 @@ def main() -> None:
     print("[RUNNER] launching PX4 SITL", flush=True)
     sitl_ready_event = threading.Event()
     sitl_process = subprocess.Popen(
-        ["wsl", "bash", "-lc", wsl_command],
+        _bash_command(sitl_command),
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
@@ -425,22 +473,23 @@ def main() -> None:
         ready_event=sitl_ready_event,
     )
 
-    print("[RUNNER] launching WSL MAVLink bridge", flush=True)
-    bridge_process = subprocess.Popen(
-        ["wsl", "bash", "-lc", f"python3 {bridge_script_wsl}"],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        bufsize=1,
-        cwd=str(REPO_ROOT),
-    )
-    manager.register(bridge_process, "MAVLINK_BRIDGE")
-    enforce_cpu_affinity(execution_cpu_cores, pid=bridge_process.pid, label="bridge")
-    bridge_thread = _stream_process_output(
-        bridge_process,
-        label="BRIDGE",
-        log_path=bridge_log_path,
-    )
+    if HOST_MODE == "windows_wsl":
+        print("[RUNNER] launching WSL MAVLink bridge", flush=True)
+        bridge_process = subprocess.Popen(
+            _bash_command(f"python3 {_shell_quote_path(bridge_script_shell)}"),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+            cwd=str(REPO_ROOT),
+        )
+        manager.register(bridge_process, "MAVLINK_BRIDGE")
+        enforce_cpu_affinity(execution_cpu_cores, pid=bridge_process.pid, label="bridge")
+        bridge_thread = _stream_process_output(
+            bridge_process,
+            label="BRIDGE",
+            log_path=bridge_log_path,
+        )
 
     try:
         deadline = time.time() + 300
@@ -454,14 +503,17 @@ def main() -> None:
         print("[RUNNER] PX4 SITL ready, starting validator", flush=True)
         env = os.environ.copy()
         env["LIVE_PX4_SITL_LOG_PATH"] = str(sitl_log_path)
-        env["LIVE_PX4_BRIDGE_LOG_PATH"] = str(bridge_log_path)
+        if bridge_thread is not None:
+            env["LIVE_PX4_BRIDGE_LOG_PATH"] = str(bridge_log_path)
+        else:
+            env["LANDING_TARGET_DIRECT_PX4"] = "1"
         if max_resources:
             env["OMP_NUM_THREADS"] = "0"
             env["OMP_PROVIDER"] = "nest"
             env["GZ_IGNORE_PROVIDER_STATE"] = "1"
         _run_step(
             [
-                str(VENV_PYTHON),
+                str(runner_python),
                 str(VALIDATOR_SCRIPT),
                 "--mission-spec",
                 str(args.mission_spec),
@@ -475,11 +527,11 @@ def main() -> None:
         )
 
         print("[RUNNER] building replay bundle", flush=True)
-        _run_step([str(VENV_PYTHON), str(REPLAY_SCRIPT)], label="REPLAY", log_path=replay_log_path)
+        _run_step([str(runner_python), str(REPLAY_SCRIPT)], label="REPLAY", log_path=replay_log_path)
         print("[RUNNER] building showcase", flush=True)
-        _run_step([str(VENV_PYTHON), str(SHOWCASE_SCRIPT)], label="SHOWCASE", log_path=showcase_log_path)
+        _run_step([str(runner_python), str(SHOWCASE_SCRIPT)], label="SHOWCASE", log_path=showcase_log_path)
         print("[RUNNER] building dashboard", flush=True)
-        _run_step([str(VENV_PYTHON), str(DASHBOARD_SCRIPT)], label="DASHBOARD", log_path=dashboard_log_path)
+        _run_step([str(runner_python), str(DASHBOARD_SCRIPT)], label="DASHBOARD", log_path=dashboard_log_path)
 
         print(
             f"[RUNNER] completed showcase={REPO_ROOT / 'artifacts' / 'showcase' / 'latest' / 'index.html'}",
@@ -489,7 +541,8 @@ def main() -> None:
         manager = get_process_manager()
         manager.shutdown()
         sitl_thread.join(timeout=2)
-        bridge_thread.join(timeout=2)
+        if bridge_thread is not None:
+            bridge_thread.join(timeout=2)
         if world_thread is not None:
             world_thread.join(timeout=2)
 

@@ -4,13 +4,33 @@ This path adds a Linux/Vast.ai execution lane for the PX4 SITL validation stack 
 
 Use it when the simulation workload should run on a remote Ubuntu GPU/VM host and the local workstation should stay focused on editing, artifact review, or dashboard work.
 
+## Docker First
+
+For fresh machines and Vast VMs, the supported path is now the simulation container. It bundles the autonomy stack, bootstraps `vendor/PX4-Autopilot` automatically during image build, and runs the existing mission planner/API on port `8625`.
+
+Build and run it from the repo root:
+
+```powershell
+docker compose -f .\docker-compose.simulation.yml up --build
+```
+
+Then open:
+
+- `http://127.0.0.1:8625/planner/index.html`
+
+That path is intended to be self-contained:
+
+- no manual PX4 checkout on the host
+- no WSL requirement
+- no ad-hoc host package bootstrap after the image is built
+
 ## Scope
 
 - `vast_probe.py`
   - small repo-local Vast.ai helper
   - can list instances, inspect one instance, fetch bounded boot logs, wait for SSH readiness, search offers, create templates, create instances, and attach an SSH key
 - `bootstrap_remote.sh`
-  - bootstraps PX4 SITL prerequisites on a Linux host that already has this repo checked out
+  - bootstraps PX4 SITL prerequisites on a Linux host and clones `vendor/PX4-Autopilot` automatically when it is missing
 - Linux-native validation wrappers under `autonomy/scripts/`
   - probe
   - mission validation
@@ -113,9 +133,6 @@ df -h
 
 Make sure this repo is present on the remote host. Then bootstrap it:
 
-- preferred: `git clone --recursive` so the bootstrap can refresh submodules itself
-- acceptable: copy an already-complete checkout that already includes `vendor/PX4-Autopilot`
-
 ```bash
 cd /path/to/Skylink2
 bash deploy/simulation/bootstrap_remote.sh bootstrap
@@ -125,6 +142,7 @@ That step:
 
 - installs Ubuntu prerequisites
 - syncs git submodules
+- clones `vendor/PX4-Autopilot` at `v1.14.3` if it is missing
 - runs `vendor/PX4-Autopilot/Tools/setup/ubuntu.sh --no-nuttx`
 - creates `autonomy/.venv`
 - installs the Python packages required by the live PX4 validators
