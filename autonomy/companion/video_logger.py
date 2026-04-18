@@ -66,6 +66,7 @@ class VideoLoggerConfig:
     telemetry_timeout_s: float = 0.5
     use_mock_mavlink: bool = False
     use_mock_camera: bool = False
+    camera_backend: str = os.environ.get("SKYLINK_CAMERA_BACKEND", "auto")
     stream_enabled: bool = os.environ.get("SKYLINK_VIDEO_STREAM_ENABLED", "0").strip().lower() in {"1", "true", "yes", "on"}
     stream_host: str = os.environ.get("SKYLINK_VIDEO_STREAM_HOST", "127.0.0.1")
     stream_port: int = _env_int("SKYLINK_VIDEO_STREAM_PORT", 5050)
@@ -242,6 +243,37 @@ def _open_mavlink_connection(target: str, baud: int) -> Any:
     return mavutil.mavlink_connection(cleaned, autoreconnect=True, source_system=250)
 
 
+class Picamera2CameraSource:
+    def __init__(self, width: int, height: int) -> None:
+        from picamera2 import Picamera2  # type: ignore[import]
+        self._cam = Picamera2()
+        cfg = self._cam.create_video_configuration(
+            main={"size": (width, height), "format": "RGB888"},
+        )
+        self._cam.configure(cfg)
+        self._cam.start()
+
+    def read(self) -> tuple[bool, Any]:
+        try:
+            frame = self._cam.capture_array()
+            return True, frame[:, :, ::-1].copy()  # RGB → BGR for cv2 compatibility
+        except Exception:
+            return False, None
+
+    def set(self, prop_id: int, value: float) -> bool:
+        return True
+
+    def release(self) -> None:
+        try:
+            self._cam.stop()
+        except Exception:
+            pass
+        try:
+            self._cam.close()
+        except Exception:
+            pass
+
+
 class VideoLoggerService:
     def __init__(
         self,
@@ -262,6 +294,7 @@ class VideoLoggerService:
         self._stop_event = threading.Event()
         self._telemetry_updates = 0
         self._processed_frames = 0
+        self._camera_backend_used: str = "unknown"
         self._stream_server: MjpegStreamServer | None = None
 
     def _build_telemetry_source(self, config: VideoLoggerConfig) -> MockTelemetrySource | PymavlinkTelemetrySource:
@@ -276,9 +309,23 @@ class VideoLoggerService:
 
     def _build_camera(self) -> Any:
         if self.camera is not None:
+            self._camera_backend_used = "injected"
+            print(f"[video_logger] camera backend selected: {self._camera_backend_used}", file=sys.stderr, flush=True)
             return self.camera
         if self.config.use_mock_camera or self.cv2_is_mock:
+            self._camera_backend_used = "mock"
+            print(f"[video_logger] camera backend selected: {self._camera_backend_used}", file=sys.stderr, flush=True)
             return build_mock_camera_source(self.config.camera_source)
+        backend = self.config.camera_backend
+        if backend in ("picamera2", "auto"):
+            try:
+                cam = Picamera2CameraSource(self.config.frame_width, self.config.frame_height)
+                self._camera_backend_used = "picamera2"
+                print(f"[video_logger] camera backend selected: {self._camera_backend_used}", file=sys.stderr, flush=True)
+                return cam
+            except Exception:
+                if backend == "picamera2":
+                    raise
         source: Any = self.config.camera_source
         if isinstance(source, str) and source.isdigit():
             source = int(source)
@@ -286,6 +333,8 @@ class VideoLoggerService:
         if hasattr(capture, "set"):
             capture.set(getattr(self.cv2, "CAP_PROP_FRAME_WIDTH", 3), self.config.frame_width)
             capture.set(getattr(self.cv2, "CAP_PROP_FRAME_HEIGHT", 4), self.config.frame_height)
+        self._camera_backend_used = "cv2"
+        print(f"[video_logger] camera backend selected: {self._camera_backend_used}", file=sys.stderr, flush=True)
         return capture
 
     def _telemetry_loop(self) -> None:
@@ -444,6 +493,7 @@ class VideoLoggerService:
             "telemetry_updates": self._telemetry_updates,
             "used_mock_camera": bool(self.config.use_mock_camera or self.cv2_is_mock),
             "used_mock_mavlink": isinstance(self.telemetry_source, MockTelemetrySource),
+            "camera_backend_used": self._camera_backend_used,
             "csv_path": str(csv_path),
             "preview_path": str(preview_path),
             "stream": {
@@ -468,6 +518,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--frame-interval", type=float, default=0.1)
     parser.add_argument("--mock-mavlink", action="store_true")
     parser.add_argument("--mock-camera", action="store_true")
+    parser.add_argument("--camera-backend", default=os.environ.get("SKYLINK_CAMERA_BACKEND", "auto"), choices=["cv2", "picamera2", "auto"])
     parser.add_argument("--stream", action="store_true")
     parser.add_argument("--stream-host", default="127.0.0.1")
     parser.add_argument("--stream-port", type=int, default=5050)
@@ -490,6 +541,7 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
         frame_interval_s=args.frame_interval,
         use_mock_mavlink=args.mock_mavlink,
         use_mock_camera=args.mock_camera,
+        camera_backend=args.camera_backend,
         stream_enabled=args.stream,
         stream_host=args.stream_host,
         stream_port=args.stream_port,
