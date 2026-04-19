@@ -51,6 +51,7 @@ from typing import Optional, TypedDict
 
 from supabase import create_client, Client
 from storage3.exceptions import StorageApiError
+from postgrest.exceptions import APIError
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -111,6 +112,14 @@ class SkylinkRunRow(TypedDict, total=False):
     artifact_summary_path: str
     artifact_frame_path: str
     mission_id: str            # UUID string or absent
+
+
+class UpsertResult(TypedDict):
+    """Return value of upsert_run_row — the fields main() needs
+    for the IS5 SUCCESS stdout contract.
+    """
+    uploaded_at: str              # ISO 8601 from PostgREST
+    upload_latency_seconds: float # generated column; IS5 metric
 
 # ---------------------------------------------------------------------------
 # Exceptions
@@ -430,28 +439,84 @@ def upload_artifacts(
     return uploaded
 
 
-def upsert_run_row(client: Client, row: SkylinkRunRow) -> None:
-    """Upsert a skylink_runs row, refreshing uploaded_at and artifact paths on conflict.
+def upsert_run_row(client: Client, row: SkylinkRunRow) -> UpsertResult:
+    """Upsert a skylink_runs row, returning uploaded_at and latency.
 
-    On conflict on run_id, updates uploaded_at=now() and all four
-    artifact_*_path columns so re-uploads reflect the latest storage paths.
+    On conflict on run_id, PostgREST updates uploaded_at=now() and
+    re-populates the generated upload_latency_seconds column so
+    re-uploads reflect the latest upload cycle, not the first.
 
     Args:
         client: Authenticated Supabase client (service role).
-        row: SkylinkRunRow mapping skylink_runs column names to values. Must
-            include at minimum: run_id, started_at, ended_at, source_host,
+        row: SkylinkRunRow of column -> value pairs. Must include at
+            minimum: run_id, started_at, ended_at, source_host,
             frame_count, telemetry_updates, telemetry_errors_count,
             used_mock_mavlink, used_mock_camera, and the four
-            artifact_*_path values.
+            artifact_*_path values. mission_id is optional.
 
     Returns:
-        None
+        UpsertResult with uploaded_at (ISO 8601) and
+        upload_latency_seconds (float).
 
     Raises:
-        RowUpsertError: If the Supabase PostgREST call returns an error
-            or raises an exception.
+        RowUpsertError: If PostgREST returns an error, if the
+            response data is not a single-row list, or if the
+            returned row is missing uploaded_at or
+            upload_latency_seconds.
     """
-    raise NotImplementedError("skeleton")
+    try:
+        resp = (
+            client.table(TABLE_NAME)
+            .upsert(row, on_conflict="run_id")
+            .execute()
+        )
+    except APIError as exc:
+        # APIError attributes are all Optional[str]; format what we have.
+        detail_parts = []
+        if getattr(exc, "code", None):
+            detail_parts.append(f"code={exc.code}")
+        if getattr(exc, "message", None):
+            detail_parts.append(f"message={exc.message}")
+        if getattr(exc, "details", None):
+            detail_parts.append(f"details={exc.details}")
+        if getattr(exc, "hint", None):
+            detail_parts.append(f"hint={exc.hint}")
+        joined = "; ".join(detail_parts) or str(exc)
+        raise RowUpsertError(
+            f"PostgREST upsert to {TABLE_NAME} failed: {joined}"
+        ) from exc
+
+    # resp.data is a list of dicts when returning='representation'
+    # (the default). For a single-row upsert it must be length 1.
+    if not isinstance(resp.data, list) or len(resp.data) != 1:
+        raise RowUpsertError(
+            f"upsert to {TABLE_NAME} returned unexpected data shape: "
+            f"type={type(resp.data).__name__} len="
+            f"{len(resp.data) if isinstance(resp.data, list) else 'n/a'}"
+        )
+
+    returned_row = resp.data[0]
+    if not isinstance(returned_row, dict):
+        raise RowUpsertError(
+            f"upsert to {TABLE_NAME} returned non-dict row: "
+            f"{type(returned_row).__name__}"
+        )
+
+    uploaded_at = returned_row.get("uploaded_at")
+    latency = returned_row.get("upload_latency_seconds")
+    if uploaded_at is None or latency is None:
+        raise RowUpsertError(
+            f"upsert to {TABLE_NAME} returned row missing required "
+            f"fields: uploaded_at={uploaded_at!r}, "
+            f"upload_latency_seconds={latency!r}"
+        )
+
+    return {
+        "uploaded_at": str(uploaded_at),
+        # PostgREST may return numeric as int/float/string depending
+        # on client parsing — coerce to float for stable downstream use.
+        "upload_latency_seconds": float(latency),
+    }
 
 
 def main() -> int:
