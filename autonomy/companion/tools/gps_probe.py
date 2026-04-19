@@ -21,6 +21,11 @@ Connection style mirrors autonomy/companion/video_logger.py:
   - URL normaliser strips '://' → ':' for UDP targets
   - recv_match with blocking=True and a per-iteration timeout
 
+  Divergence from video_logger: this probe talks directly to PX4 (not via a
+  pre-latched MAVProxy), so it must initiate and maintain its own MAVLink peer
+  relationship by sending periodic GCS heartbeats.  video_logger omits this
+  because it consumes from a MAVProxy fan-out that has already latched upstream.
+
 Note on eph units: GPS_RAW_INT.eph is a dimensionless HDOP×100 value
 per MAVLink common.xml, not a distance in centimetres.  Most autopilots
 and GCS tools interpret eph/100 as metres for display purposes, and PX4
@@ -95,6 +100,11 @@ def collect_gps_messages(
 ) -> tuple[list[float], list[int]]:
     """Receive GPS_RAW_INT messages for *duration_s* seconds.
 
+    Sends an initial GCS heartbeat before entering the loop, then repeats every
+    1 s.  The initial heartbeat causes PX4 to register this probe as a unicast
+    peer; the periodic cadence keeps PX4's partner entry and Docker VPNKit's UDP
+    NAT flow entry alive for the full duration.
+
     Args:
         conn: Open pymavlink connection.
         duration_s: How long to listen, in seconds.
@@ -110,8 +120,17 @@ def collect_gps_messages(
     eph_values_m: list[float] = []
     fix_types: list[int] = []
     deadline = time.monotonic() + duration_s
+    last_heartbeat: float = 0.0  # force immediate send on first iteration
 
     while time.monotonic() < deadline:
+        now = time.monotonic()
+        if now - last_heartbeat >= 1.0:
+            conn.mav.heartbeat_send(
+                mavutil.mavlink.MAV_TYPE_GCS,
+                mavutil.mavlink.MAV_AUTOPILOT_INVALID,
+                0, 0, 0,
+            )
+            last_heartbeat = now
         remaining = max(0.0, deadline - time.monotonic())
         msg = conn.recv_match(
             type="GPS_RAW_INT",
@@ -179,7 +198,9 @@ def run_probe(target: str, duration_s: float) -> dict[str, Any]:
         print(
             f"[gps_probe] FAIL: received {len(fix_types)} GPS_RAW_INT messages "
             f"(minimum required: {MIN_MESSAGES}). "
-            "Is PX4 SITL running and is the MAVLink connection correct?",
+            "Check: (1) PX4 SITL running ('docker exec skylink-simulation ps aux | grep bin/px4'); "
+            "(2) heartbeats reaching PX4 (set PYMAVLINK_DEBUG=1 and look for HEARTBEAT send lines); "
+            "(3) target address and port are reachable from this host.",
             file=sys.stderr,
         )
         sys.exit(1)
