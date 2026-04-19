@@ -14,7 +14,8 @@ APT_PACKAGES=(
   git
   i2c-tools
   python3-smbus
-  libatlas-base-dev
+  python3-lgpio
+  liblgpio-dev
   libopenblas-dev
   libjpeg-dev
   libtiff5-dev
@@ -56,6 +57,10 @@ source "$VENV_DIR/bin/activate"
 python -m pip install --upgrade pip wheel setuptools
 python -m pip install -r "$REQUIREMENTS_FILE"
 python -m pip install opencv-contrib-python-headless
+
+# Pi 5 (BCM2712) uses lgpio which is only available as a system package
+SITE_PACKAGES="$VENV_DIR/lib/$(python -c 'import sys; print(f"python{sys.version_info.major}.{sys.version_info.minor}")')/site-packages"
+echo "/usr/lib/python3/dist-packages" > "$SITE_PACKAGES/system-lgpio.pth"
 
 echo "[bootstrap] verifying imports"
 python - <<'PY'

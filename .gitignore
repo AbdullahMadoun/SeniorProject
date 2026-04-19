@@ -36,6 +36,7 @@ deploy/backend/ssh/*
 *.log
 companion_video_logger/*.npy
 companion_video_logger/*.csv
+autonomy/companion/artifacts/latest/
 diff_check_utf8.patch
 
 # IDE/OS
@@ -44,9 +45,13 @@ diff_check_utf8.patch
 .DS_Store
 Thumbs.db
 
+# Session archives (Pi-side, not version-controlled)
+.skylink_session/
+
 # Local upstream simulator checkouts
 vendor/**
 !vendor/README.md
+!vendor/PATCHES.md
 
 # Generated autonomy artifacts (track curated latest evidence only)
 artifacts/**

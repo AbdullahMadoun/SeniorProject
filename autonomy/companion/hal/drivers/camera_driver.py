@@ -42,6 +42,10 @@ class CameraDriver(CameraDevice):
 
             from picamera2 import Picamera2
             self._camera = Picamera2(self._camera_index)
+            # FIXME(R8/2026-04-18): camera_configure("preview") is not a picamera2 API.
+            # Correct call is self._camera.create_preview_configuration().
+            # HAL is currently unused by video_logger.py (which instantiates picamera2
+            # directly). Bug is latent. See feature/rpi5-companion-bringup commit history.
             self._camera.configure(self._camera.camera_configure("preview"))
             self._camera.start()
             self._connected = True
