@@ -156,7 +156,23 @@ def validate_output_dir(path: Path) -> dict[str, Path]:
         MissingArtifactError: If path is not a directory or any required
             artifact file is absent.
     """
-    raise NotImplementedError("skeleton")
+    resolved = path.resolve()
+    if not resolved.is_dir():
+        raise MissingArtifactError(
+            f"output directory not found or not a directory: {resolved}"
+        )
+    # Report all missing files at once — do not fail fast on the first,
+    # so users see the full picture.
+    missing = [
+        filename
+        for filename in ARTIFACTS.values()
+        if not (resolved / filename).is_file()
+    ]
+    if missing:
+        raise MissingArtifactError(
+            f"missing artifacts in {resolved}: {', '.join(missing)}"
+        )
+    return {key: resolved / filename for key, filename in ARTIFACTS.items()}
 
 
 def parse_telemetry(jsonl_path: Path) -> tuple[float, float, int]:
@@ -206,7 +222,9 @@ def compute_run_id(hostname: str, min_ts: float) -> str:
     Returns:
         String of the form "run_{hostname}_{YYYYMMDD}_{HHMMSS}" in UTC.
     """
-    raise NotImplementedError("skeleton")
+    dt = datetime.fromtimestamp(min_ts, tz=timezone.utc)
+    date_str = dt.strftime("%Y%m%d_%H%M%S")
+    return f"run_{hostname}_{date_str}"
 
 
 def upload_artifacts(
