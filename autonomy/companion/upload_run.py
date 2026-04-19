@@ -190,7 +190,51 @@ def parse_telemetry(jsonl_path: Path) -> tuple[float, float, int]:
         TelemetryParseError: If the file is empty, any line is not valid JSON,
             or any line is missing the frame_ts_unix field.
     """
-    raise NotImplementedError("skeleton")
+    min_ts: float | None = None
+    max_ts: float | None = None
+    count = 0
+
+    with jsonl_path.open("r", encoding="utf-8") as f:
+        for line_num, raw_line in enumerate(f, start=1):
+            stripped = raw_line.strip()
+            if not stripped:
+                # Blank or whitespace-only lines are tolerated (trailing
+                # newlines, mid-file blanks). They do not count toward
+                # frame_count and do not raise.
+                continue
+
+            try:
+                entry = json.loads(stripped)
+            except json.JSONDecodeError as exc:
+                raise TelemetryParseError(
+                    f"{jsonl_path}:line {line_num}: invalid JSON ({exc.msg})"
+                ) from exc
+
+            ts = entry.get("frame_ts_unix") if isinstance(entry, dict) else None
+            # Reject booleans explicitly: isinstance(True, int) is True in
+            # Python, which would otherwise let a malformed entry through.
+            if ts is None or isinstance(ts, bool) or not isinstance(ts, (int, float)):
+                raise TelemetryParseError(
+                    f"{jsonl_path}:line {line_num}: missing or non-numeric "
+                    f"frame_ts_unix"
+                )
+
+            ts_float = float(ts)
+            if min_ts is None or ts_float < min_ts:
+                min_ts = ts_float
+            if max_ts is None or ts_float > max_ts:
+                max_ts = ts_float
+            count += 1
+
+    if count == 0:
+        raise TelemetryParseError(
+            f"{jsonl_path}: no valid telemetry entries found (empty file or "
+            f"all lines blank)"
+        )
+
+    # After the count check above, min_ts and max_ts are guaranteed non-None.
+    assert min_ts is not None and max_ts is not None
+    return (min_ts, max_ts, count)
 
 
 def parse_summary(summary_path: Path) -> SummaryFields:
@@ -208,7 +252,67 @@ def parse_summary(summary_path: Path) -> SummaryFields:
         SummaryParseError: If the file is missing, not valid JSON, or any
             required field is absent.
     """
-    raise NotImplementedError("skeleton")
+    # Required fields and their expected types. Order matters for the
+    # bool-before-int check: isinstance(True, int) is True in Python, so
+    # validate bool-typed fields with an explicit isinstance(v, bool).
+    required: dict[str, type] = {
+        "processed_frames": int,
+        "telemetry_updates": int,
+        "telemetry_errors_count": int,
+        "used_mock_mavlink": bool,
+        "used_mock_camera": bool,
+    }
+
+    try:
+        with summary_path.open("r", encoding="utf-8") as f:
+            parsed = json.load(f)
+    except FileNotFoundError as exc:
+        raise SummaryParseError(f"{summary_path}: file not found") from exc
+    except json.JSONDecodeError as exc:
+        raise SummaryParseError(
+            f"{summary_path}: invalid JSON ({exc.msg})"
+        ) from exc
+
+    if not isinstance(parsed, dict):
+        raise SummaryParseError(
+            f"{summary_path}: top-level JSON must be an object, "
+            f"got {type(parsed).__name__}"
+        )
+
+    # Collect all problems at once — do not fail fast on the first, so
+    # users see the full picture.
+    problems: list[str] = []
+    for key, expected_type in required.items():
+        if key not in parsed:
+            problems.append(f"missing key '{key}'")
+            continue
+        value = parsed[key]
+        if expected_type is bool:
+            if not isinstance(value, bool):
+                problems.append(
+                    f"'{key}' expected bool, got {type(value).__name__}"
+                )
+        elif expected_type is int:
+            # Reject bool for int fields (isinstance(True, int) is True).
+            if isinstance(value, bool) or not isinstance(value, int):
+                problems.append(
+                    f"'{key}' expected int, got {type(value).__name__}"
+                )
+
+    if problems:
+        raise SummaryParseError(
+            f"{summary_path}: {'; '.join(problems)}"
+        )
+
+    # Return only the required fields, not the full summary dict.
+    # Keeps the SummaryFields TypedDict honest.
+    return {
+        "processed_frames": parsed["processed_frames"],
+        "telemetry_updates": parsed["telemetry_updates"],
+        "telemetry_errors_count": parsed["telemetry_errors_count"],
+        "used_mock_mavlink": parsed["used_mock_mavlink"],
+        "used_mock_camera": parsed["used_mock_camera"],
+    }
 
 
 def compute_run_id(hostname: str, min_ts: float) -> str:
