@@ -6,6 +6,7 @@ from dataclasses import asdict, dataclass
 from http import server as http_server
 import itertools
 import json
+import math
 import os
 from pathlib import Path
 import sys
@@ -162,7 +163,23 @@ class MjpegStreamServer:
         return f"http://{host}:{port}{self._path}"
 
 
-class MockTelemetrySource:
+_TRACKED_MAVLINK_TYPES: list[str] = ["GLOBAL_POSITION_INT", "VFR_HUD", "ATTITUDE"]
+
+
+class TelemetrySource:
+    """Base class for telemetry producers; heartbeat_send and read_raw are no-ops by default."""
+
+    def heartbeat_send(self) -> None:
+        return None
+
+    def read_raw(self, timeout_s: float) -> tuple[Any, float] | None:
+        return None
+
+    def supports_raw_read(self) -> bool:
+        return False
+
+
+class MockTelemetrySource(TelemetrySource):
     def __init__(self) -> None:
         self._index = 0
 
@@ -189,7 +206,7 @@ class MockTelemetrySource:
         return None
 
 
-class PymavlinkTelemetrySource:
+class PymavlinkTelemetrySource(TelemetrySource):
     def __init__(self, target: str, baud: int) -> None:
         self._target = target
         self._baud = baud
@@ -210,21 +227,31 @@ class PymavlinkTelemetrySource:
         )
         if message is None:
             return None
-        heading_cdeg = getattr(message, "hdg", None)
-        return TelemetrySample(
-            timestamp_utc=time.time(),
-            lat_deg=getattr(message, "lat", None) / 1e7 if getattr(message, "lat", None) is not None else None,
-            lon_deg=getattr(message, "lon", None) / 1e7 if getattr(message, "lon", None) is not None else None,
-            altitude_m=getattr(message, "alt", None) / 1000.0 if getattr(message, "alt", None) is not None else None,
-            relative_altitude_m=(
-                getattr(message, "relative_alt", None) / 1000.0
-                if getattr(message, "relative_alt", None) is not None
-                else None
-            ),
-            heading_deg=(heading_cdeg / 100.0) if heading_cdeg not in {None, 65535} else None,
-            source="pymavlink",
-            fix_type="global_position_int",
+        return _gpi_msg_to_telemetry_sample(message)
+
+    def read_raw(self, timeout_s: float) -> tuple[Any, float] | None:
+        if self._connection is None:
+            return None
+        message = self._connection.recv_match(
+            type=_TRACKED_MAVLINK_TYPES,
+            blocking=True,
+            timeout=timeout_s,
         )
+        if message is None:
+            return None
+        return message, time.monotonic()
+
+    def heartbeat_send(self) -> None:
+        if self._connection is None:
+            return
+        self._connection.mav.heartbeat_send(
+            mavutil.mavlink.MAV_TYPE_GCS,
+            mavutil.mavlink.MAV_AUTOPILOT_INVALID,
+            0, 0, 0,
+        )
+
+    def supports_raw_read(self) -> bool:
+        return True
 
     def close(self) -> None:
         if self._connection is not None and hasattr(self._connection, "close"):
@@ -241,6 +268,24 @@ def _open_mavlink_connection(target: str, baud: int) -> Any:
     if ":" not in cleaned and cleaned.count(".") == 3:
         cleaned = f"udp:{cleaned}"
     return mavutil.mavlink_connection(cleaned, autoreconnect=True, source_system=250)
+
+
+def _gpi_msg_to_telemetry_sample(message: Any) -> TelemetrySample:
+    heading_cdeg = getattr(message, "hdg", None)
+    return TelemetrySample(
+        timestamp_utc=time.time(),
+        lat_deg=getattr(message, "lat", None) / 1e7 if getattr(message, "lat", None) is not None else None,
+        lon_deg=getattr(message, "lon", None) / 1e7 if getattr(message, "lon", None) is not None else None,
+        altitude_m=getattr(message, "alt", None) / 1000.0 if getattr(message, "alt", None) is not None else None,
+        relative_altitude_m=(
+            getattr(message, "relative_alt", None) / 1000.0
+            if getattr(message, "relative_alt", None) is not None
+            else None
+        ),
+        heading_deg=(heading_cdeg / 100.0) if heading_cdeg not in {None, 65535} else None,
+        source="pymavlink",
+        fix_type="global_position_int",
+    )
 
 
 class Picamera2CameraSource:
@@ -296,6 +341,10 @@ class VideoLoggerService:
         self._processed_frames = 0
         self._camera_backend_used: str = "unknown"
         self._stream_server: MjpegStreamServer | None = None
+        self._latest_mavlink: dict[str, tuple[Any, float]] = {}
+        self._raw_mavlink_mode: bool = self.telemetry_source.supports_raw_read()
+        self._last_telemetry_error: str | None = None
+        self._telemetry_errors_count: int = 0
 
     def _build_telemetry_source(self, config: VideoLoggerConfig) -> MockTelemetrySource | PymavlinkTelemetrySource:
         if config.use_mock_mavlink:
@@ -338,15 +387,32 @@ class VideoLoggerService:
         return capture
 
     def _telemetry_loop(self) -> None:
+        last_heartbeat: float = 0.0
         while not self._stop_event.is_set():
             try:
-                sample = self.telemetry_source.read(self.config.telemetry_timeout_s)
-            except Exception:
-                sample = None
-            if sample is not None:
-                with self._telemetry_lock:
-                    self._latest_sample = sample
-                    self._telemetry_updates += 1
+                now = time.monotonic()
+                if now - last_heartbeat >= 1.0:
+                    self.telemetry_source.heartbeat_send()
+                    last_heartbeat = now
+                if self._raw_mavlink_mode:
+                    result = self.telemetry_source.read_raw(self.config.telemetry_timeout_s)
+                    if result is not None:
+                        msg, recv_ts = result
+                        msg_type = msg.get_type()
+                        with self._telemetry_lock:
+                            self._latest_mavlink[msg_type] = (msg, recv_ts)
+                            if msg_type == "GLOBAL_POSITION_INT":
+                                self._latest_sample = _gpi_msg_to_telemetry_sample(msg)
+                                self._telemetry_updates += 1
+                else:
+                    sample = self.telemetry_source.read(self.config.telemetry_timeout_s)
+                    if sample is not None:
+                        with self._telemetry_lock:
+                            self._latest_sample = sample
+                            self._telemetry_updates += 1
+            except Exception as exc:
+                self._last_telemetry_error = repr(exc)
+                self._telemetry_errors_count += 1
 
     def _wait_for_initial_sample(self, timeout_s: float) -> None:
         deadline = time.monotonic() + timeout_s
@@ -426,12 +492,47 @@ class VideoLoggerService:
         }
         writer.writerow(row)
 
+    def _build_jsonl_entry(
+        self,
+        frame_index: int,
+        frame_ts_unix: float,
+        frame_ts_mono: float,
+        mavlink_snap: dict[str, tuple[Any, float]],
+    ) -> dict[str, Any]:
+        def _age_ms(key: str) -> int | None:
+            slot = mavlink_snap.get(key)
+            if slot is None:
+                return None
+            return max(0, int((frame_ts_mono - slot[1]) * 1000))
+
+        gpi_msg = mavlink_snap["GLOBAL_POSITION_INT"][0] if "GLOBAL_POSITION_INT" in mavlink_snap else None
+        vfr_msg = mavlink_snap["VFR_HUD"][0] if "VFR_HUD" in mavlink_snap else None
+        att_msg = mavlink_snap["ATTITUDE"][0] if "ATTITUDE" in mavlink_snap else None
+        return {
+            "frame_idx": frame_index,
+            "frame_ts_unix": round(frame_ts_unix, 6),
+            "lat_deg": round(gpi_msg.lat * 1e-7, 7) if gpi_msg is not None else None,
+            "lon_deg": round(gpi_msg.lon * 1e-7, 7) if gpi_msg is not None else None,
+            "alt_m_msl": round(gpi_msg.alt * 1e-3, 3) if gpi_msg is not None else None,
+            "alt_m_rel": round(gpi_msg.relative_alt * 1e-3, 3) if gpi_msg is not None else None,
+            "ground_speed_mps": round(float(vfr_msg.groundspeed), 3) if vfr_msg is not None else None,
+            "airspeed_mps": round(float(vfr_msg.airspeed), 3) if vfr_msg is not None else None,
+            "roll_deg": round(math.degrees(att_msg.roll), 4) if att_msg is not None else None,
+            "pitch_deg": round(math.degrees(att_msg.pitch), 4) if att_msg is not None else None,
+            "yaw_deg": round(math.degrees(att_msg.yaw), 4) if att_msg is not None else None,
+            "gps_age_ms": _age_ms("GLOBAL_POSITION_INT"),
+            "vfr_age_ms": _age_ms("VFR_HUD"),
+            "att_age_ms": _age_ms("ATTITUDE"),
+        }
+
     def run(self) -> dict[str, Any]:
         enforce_cpu_affinity(self.config.cpu_core, label="video_logger")
         self.config.output_dir.mkdir(parents=True, exist_ok=True)
         csv_path = self.config.output_dir / "telemetry_log.csv"
         summary_path = self.config.output_dir / "summary.json"
         preview_path = self.config.output_dir / "latest_frame.jpg"
+        jsonl_path = self.config.output_dir / "telemetry.jsonl"
+        _frame_age_max_ms: int | None = None
         camera = self._build_camera()
         self.telemetry_source.connect()
         self._start_stream_server()
@@ -450,7 +551,8 @@ class VideoLoggerService:
             "telemetry_source",
         ]
         try:
-            with csv_path.open("w", newline="", encoding="utf-8") as handle:
+            with csv_path.open("w", newline="", encoding="utf-8") as handle, \
+                    jsonl_path.open("w", encoding="utf-8") as jsonl_handle:
                 writer = csv.DictWriter(handle, fieldnames=fieldnames)
                 writer.writeheader()
                 frame_indices = range(self.config.max_frames) if self.config.max_frames > 0 else itertools.count()
@@ -461,9 +563,21 @@ class VideoLoggerService:
                         continue
                     with self._telemetry_lock:
                         sample = self._latest_sample
+                        mavlink_snap = dict(self._latest_mavlink)
+                    frame_ts_unix = time.time()
+                    frame_ts_mono = time.monotonic()
                     annotated = self._overlay_lines(frame, sample)
                     self._write_csv_row(writer, frame_index, sample)
                     handle.flush()
+                    entry = self._build_jsonl_entry(frame_index, frame_ts_unix, frame_ts_mono, mavlink_snap)
+                    jsonl_handle.write(json.dumps(entry) + "\n")
+                    jsonl_handle.flush()
+                    row_max = max(
+                        (a for a in [entry["gps_age_ms"], entry["vfr_age_ms"], entry["att_age_ms"]] if a is not None),
+                        default=None,
+                    )
+                    if row_max is not None:
+                        _frame_age_max_ms = max(_frame_age_max_ms or 0, row_max)
                     self.cv2.imwrite(str(preview_path), annotated)
                     frame_bytes = self._encode_frame(annotated)
                     if frame_bytes is not None and self._stream_server is not None:
@@ -496,6 +610,10 @@ class VideoLoggerService:
             "camera_backend_used": self._camera_backend_used,
             "csv_path": str(csv_path),
             "preview_path": str(preview_path),
+            "jsonl_path": str(jsonl_path),
+            "frame_age_max_ms": _frame_age_max_ms,
+            "telemetry_errors_count": self._telemetry_errors_count,
+            "last_telemetry_error": self._last_telemetry_error,
             "stream": {
                 "enabled": self.config.stream_enabled,
                 "url": self.current_stream_url(),
