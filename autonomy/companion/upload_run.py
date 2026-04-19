@@ -564,7 +564,113 @@ def main() -> int:
         help="Print per-artifact progress to stderr.",
     )
     args = parser.parse_args()
-    raise NotImplementedError("skeleton — implementation pending")
+
+    # ---- Load credentials from environment ----
+    url = os.environ.get("SUPABASE_URL")
+    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+    if not url or not key:
+        print(
+            "ERROR: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set "
+            "in the environment. Source ~/.skylink_env first "
+            "(use `set -a; source ~/.skylink_env; set +a`).",
+            file=sys.stderr,
+        )
+        return 1
+
+    if args.verbose:
+        print(f"[main] config loaded; output_dir={args.output_dir}",
+              file=sys.stderr)
+
+    # ---- Validate output directory ----
+    try:
+        paths = validate_output_dir(args.output_dir)
+    except MissingArtifactError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 2
+
+    # ---- Parse telemetry + summary ----
+    try:
+        min_ts, max_ts, frame_count = parse_telemetry(paths["jsonl"])
+    except TelemetryParseError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 3
+
+    try:
+        summary = parse_summary(paths["summary"])
+    except SummaryParseError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 3
+
+    # ---- Compute run_id ----
+    hostname = socket.gethostname()
+    run_id = args.run_id or compute_run_id(hostname, min_ts)
+
+    # ---- Build the DB row ----
+    # artifact_*_path fields are populated after successful upload, below.
+    row: SkylinkRunRow = {
+        "run_id": run_id,
+        "started_at": datetime.fromtimestamp(min_ts, tz=timezone.utc).isoformat(),
+        "ended_at": datetime.fromtimestamp(max_ts, tz=timezone.utc).isoformat(),
+        "source_host": hostname,
+        "frame_count": frame_count,
+        "telemetry_updates": summary["telemetry_updates"],
+        "telemetry_errors_count": summary["telemetry_errors_count"],
+        "used_mock_mavlink": summary["used_mock_mavlink"],
+        "used_mock_camera": summary["used_mock_camera"],
+    }
+    # Only include mission_id if provided — TypedDict(total=False) permits
+    # omission so the column stays NULL (matching FK ON DELETE SET NULL).
+    if args.mission_id is not None:
+        row["mission_id"] = args.mission_id
+
+    # ---- Dry-run branch ----
+    if args.dry_run:
+        # Print the computed row payload as pretty JSON so the caller can
+        # verify field derivation without writing anything to Supabase.
+        # Artifact paths are absent because no upload occurred.
+        print("DRY RUN: would upsert the following row "
+              "(no actual writes performed):")
+        print(json.dumps(row, indent=2, sort_keys=True))
+        return 0
+
+    # ---- Create Supabase client and perform real upload + upsert ----
+    if args.verbose:
+        print(f"[main] starting upload: run_id={run_id} "
+              f"frames={frame_count}",
+              file=sys.stderr)
+
+    client = create_client(url, key)
+
+    try:
+        uploaded = upload_artifacts(client, run_id, paths,
+                                    verbose=args.verbose)
+    except ArtifactUploadError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 4
+
+    # Merge uploaded bucket paths into the row using ARTIFACT_COLUMN_MAP
+    # so the column names match the table schema exactly.
+    for artifact_key, bucket_path in uploaded.items():
+        column_name = ARTIFACT_COLUMN_MAP[artifact_key]
+        row[column_name] = bucket_path  # type: ignore[literal-required]
+
+    if args.verbose:
+        print(f"[main] upload complete; upserting row", file=sys.stderr)
+
+    try:
+        result = upsert_run_row(client, row)
+    except RowUpsertError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 5
+
+    # ---- Success — print SUCCESS line per stdout contract ----
+    latency = result["upload_latency_seconds"]
+    print(
+        f"SUCCESS: run_id={run_id} "
+        f"uploaded_at={result['uploaded_at']} "
+        f"latency_s={latency:.3f}"
+    )
+    return 0
 
 
 if __name__ == "__main__":
