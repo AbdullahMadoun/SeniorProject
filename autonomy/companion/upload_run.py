@@ -50,6 +50,7 @@ from pathlib import Path
 from typing import Optional, TypedDict
 
 from supabase import create_client, Client
+from storage3.exceptions import StorageApiError
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -71,6 +72,16 @@ ARTIFACT_COLUMN_MAP: dict[str, str] = {
     "csv":     "artifact_csv_path",
     "summary": "artifact_summary_path",
     "frame":   "artifact_frame_path",
+}
+
+# MIME types per artifact for Supabase Storage uploads.
+# Symmetric with ARTIFACTS / ARTIFACT_COLUMN_MAP — if you add an
+# artifact, add it here too.
+_CONTENT_TYPES: dict[str, str] = {
+    "jsonl":   "application/json",
+    "csv":     "text/csv",
+    "summary": "application/json",
+    "frame":   "image/jpeg",
 }
 
 # ---------------------------------------------------------------------------
@@ -358,7 +369,65 @@ def upload_artifacts(
             identifies which artifact failed; cause holds the underlying
             exception.
     """
-    raise NotImplementedError("skeleton")
+    bucket = client.storage.from_(BUCKET_NAME)
+    uploaded: dict[str, str] = {}
+
+    # Iterate ARTIFACTS.items() (not paths.items()) so upload order
+    # is deterministic regardless of how paths was constructed.
+    for key, filename in ARTIFACTS.items():
+        local_path = paths[key]
+        object_path = f"{run_id}/{filename}"
+
+        # Read file contents as bytes. Surfacing read errors here
+        # (before the HTTP call) gives a clearer ArtifactUploadError
+        # cause than a mid-upload network failure would.
+        try:
+            content = local_path.read_bytes()
+        except OSError as exc:
+            raise ArtifactUploadError(
+                artifact_key=key,
+                message=f"failed to read {local_path}: {exc}",
+                cause=exc,
+            ) from exc
+
+        if verbose:
+            print(
+                f"[upload] {key}: {local_path} "
+                f"-> {BUCKET_NAME}/{object_path} ({len(content)} bytes)",
+                file=sys.stderr,
+            )
+
+        # Fresh dict per call: supabase-py's _upload_or_update
+        # pops keys from file_options, mutating it.
+        file_options = {
+            "content-type": _CONTENT_TYPES[key],
+            "upsert": "true",
+        }
+
+        try:
+            resp = bucket.upload(
+                path=object_path,
+                file=content,
+                file_options=file_options,
+            )
+        except StorageApiError as exc:
+            # exc.status (int) and exc.message (str) are reliable;
+            # exc.statusCode / exc.error may be absent in 2.24.0.
+            status = getattr(exc, "status", "?")
+            message = getattr(exc, "message", str(exc))
+            raise ArtifactUploadError(
+                artifact_key=key,
+                message=f"upload failed (status={status}): {message}",
+                cause=exc,
+            ) from exc
+
+        if verbose:
+            print(f"[upload] {key}: OK -> {resp.full_path}",
+                  file=sys.stderr)
+
+        uploaded[key] = resp.full_path
+
+    return uploaded
 
 
 def upsert_run_row(client: Client, row: SkylinkRunRow) -> None:
