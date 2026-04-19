@@ -23,3 +23,6 @@ picamera2==0.3.34
 pidng==4.0.9
 piexif==1.1.3
 simplejpeg==1.9.0
+
+# --- cloud upload (Supabase) ---
+supabase==2.24.0
