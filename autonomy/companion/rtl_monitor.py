@@ -283,31 +283,54 @@ def run_monitor(
 
         conn = _open_connection(target)
 
-        # Initiate latch: send heartbeat first so PX4 registers this client
-        # as a GCS peer, then wait for PX4's heartbeat to learn target_system/
-        # target_component (required to address PARAM_SET and COMMAND_LONG).
-        # Mirrors gps_probe latch pattern.
+        # recv_match(type="HEARTBEAT") returns the first HEARTBEAT of ANY class,
+        # including GCS-class heartbeats broadcast by mission_api and companion_sim
+        # on the LAN. wait_heartbeat() is identical — it is recv_match(HEARTBEAT)
+        # with no additional filtering; probably_vehicle_heartbeat() is only used
+        # internally to auto-populate sysid, not to gate the return value.
+        # We loop explicitly, skipping HEARTBEATs that fail
+        # conn.probably_vehicle_heartbeat() (GCS, GIMBAL, ADSB, INVALID autopilot).
         _heartbeat_send(conn)
-        hb = conn.recv_match(type="HEARTBEAT", blocking=True,
-                              timeout=_LATCH_TIMEOUT_S)
+        latch_deadline = time.monotonic() + _LATCH_TIMEOUT_S
+        hb = None
+        while time.monotonic() < latch_deadline:
+            remaining = max(0.1, latch_deadline - time.monotonic())
+            candidate = conn.recv_match(
+                type="HEARTBEAT", blocking=True, timeout=min(remaining, 1.0)
+            )
+            if candidate is None:
+                continue
+            if not conn.probably_vehicle_heartbeat(candidate):
+                _log(log_file, {
+                    "event": "latch_skipped_non_vehicle_heartbeat",
+                    "src_system": candidate.get_srcSystem(),
+                    "src_component": candidate.get_srcComponent(),
+                    "mav_type": candidate.type,
+                    "autopilot": candidate.autopilot,
+                })
+                continue
+            hb = candidate
+            break
+
         if hb is None:
             _log(log_file, {
                 "event": "latch_timeout",
-                "error": f"no HEARTBEAT received within {_LATCH_TIMEOUT_S}s",
+                "error": f"no vehicle HEARTBEAT received within {_LATCH_TIMEOUT_S}s",
             })
             conn.close()
             sys.exit(1)
 
-        # defensive — pymavlink's recv_msg() already auto-populates
-        # conn.target_system from any vehicle HEARTBEAT received when sysid==0.
-        # Explicit assignment here makes the dependency visible for the
-        # addressed commands (PARAM_SET, COMMAND_LONG) below.
+        # pymavlink's recv_msg() auto-populates conn.target_system from vehicle
+        # HEARTBEATs when sysid==0. Explicit assignment here makes the dependency
+        # visible and ensures correct routing for PARAM_SET and COMMAND_LONG.
         conn.target_system = hb.get_srcSystem()
         conn.target_component = hb.get_srcComponent()
         _log(log_file, {
             "event": "latched",
             "target_system": conn.target_system,
             "target_component": conn.target_component,
+            "mav_type": hb.type,
+            "autopilot": hb.autopilot,
         })
 
         if sitl_drain_rate is not None:
