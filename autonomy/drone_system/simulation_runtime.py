@@ -30,7 +30,7 @@ def resolve_simulation_runtime_paths(*, repo_root: Path | None = None) -> Simula
         px4_repo=px4_repo,
         px4_binary=px4_repo / "build" / "px4_sitl_default" / "bin" / "px4",
         gz_env_path=px4_repo / "build" / "px4_sitl_default" / "rootfs" / "gz_env.sh",
-        wind_template_path=px4_repo / "Tools" / "simulation" / "gz" / "worlds" / "windy.sdf",
+        wind_template_path=px4_repo / "Tools" / "simulation" / "gz" / "worlds" / "default.sdf",
         bootstrap_script=resolved_repo_root / "deploy" / "simulation" / "bootstrap_remote.sh",
     )
 

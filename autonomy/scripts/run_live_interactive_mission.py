@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import shlex
 import signal
+import socket
 import subprocess
 import sys
 import threading
@@ -41,6 +42,7 @@ GENERATED_WORLD_DIR = REPO_ROOT / "artifacts" / "generated_worlds"
 WIND_TEMPLATE_PATH = RUNTIME_PATHS.wind_template_path
 GZ_ENV_PATH = RUNTIME_PATHS.gz_env_path
 BOOTSTRAP_SCRIPT = RUNTIME_PATHS.bootstrap_script
+COMPANION_SCRIPT = AUTONOMY_ROOT / "companion" / "rpi_companion_sim.py"
 HOST_MODE = runtime_host_mode()
 TELEMETRY_PREFIX = "__TELEMETRY__"
 
@@ -134,6 +136,8 @@ class ProcessManager:
                             f"exited unexpectedly with code {proc_info.process.returncode}",
                             flush=True
                         )
+                    self._processes.pop(pid, None)
+                    self._process_names.pop(pid, None)
             time.sleep(1.0)
 
     def start_monitoring(self) -> None:
@@ -206,6 +210,12 @@ def _bash_command(command: str) -> list[str]:
     return ["bash", "-lc", command]
 
 
+def _is_tcp_port_listening(port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.settimeout(0.3)
+        return sock.connect_ex(("127.0.0.1", int(port))) == 0
+
+
 def _kill_stale_mavsdk_server() -> None:
     if HOST_MODE != "windows_wsl":
         return
@@ -238,6 +248,8 @@ def _stream_process_output(
                 line = raw_line.rstrip("\r\n")
                 handle.write(raw_line)
                 handle.flush()
+                if label == "SITL" and line.strip().startswith("pxh>"):
+                    continue
                 print(f"[{label}] {line}", flush=True)
                 if ready_event is not None and any(marker in line for marker in READY_MARKERS):
                     ready_event.set()
@@ -381,6 +393,7 @@ def main() -> None:
     replay_log_path = SITL_LOG_DIR / f"interactive_mission_{timestamp}_replay.log"
     showcase_log_path = SITL_LOG_DIR / f"interactive_mission_{timestamp}_showcase.log"
     dashboard_log_path = SITL_LOG_DIR / f"interactive_mission_{timestamp}_dashboard.log"
+    companion_log_path = SITL_LOG_DIR / f"interactive_mission_{timestamp}_companion.log"
 
     _kill_stale_mavsdk_server()
     _cleanup_px4_runtime()
@@ -432,6 +445,36 @@ def main() -> None:
     bridge_process = None
     bridge_thread = None
     manager = get_process_manager()
+
+    companion_port = int(os.environ.get("SKYLINK_COMPANION_MJPEG_PORT", "8765"))
+    if _is_tcp_port_listening(companion_port):
+        print(f"[RUNNER] companion MJPEG stream already listening on port {companion_port}", flush=True)
+    else:
+        print("[RUNNER] launching companion simulator", flush=True)
+        companion_env = os.environ.copy()
+        existing_pythonpath = companion_env.get("PYTHONPATH", "")
+        companion_env["PYTHONPATH"] = (
+            str(REPO_ROOT) if not existing_pythonpath else f"{REPO_ROOT}{os.pathsep}{existing_pythonpath}"
+        )
+        companion_env["SKYLINK_COMPANION_MJPEG_PORT"] = str(companion_port)
+        companion_env["SKYLINK_COMPANION_CAMERA_HZ"] = "15.0"
+        companion_process = subprocess.Popen(
+            [str(runner_python), str(COMPANION_SCRIPT)],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+            env=companion_env,
+            cwd=str(REPO_ROOT),
+        )
+        manager.register(companion_process, "COMPANION")
+        enforce_cpu_affinity([1], pid=companion_process.pid, label="companion")
+        _stream_process_output(
+            companion_process,
+            label="COMPANION",
+            log_path=companion_log_path,
+        )
+
     if not args.world:
         print("[RUNNER] launching generated Gazebo world", flush=True)
         world_process = subprocess.Popen(

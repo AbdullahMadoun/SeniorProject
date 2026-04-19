@@ -4,6 +4,7 @@ import argparse
 import asyncio
 from dataclasses import asdict
 import json
+import math
 import os
 from pathlib import Path
 import sys
@@ -63,7 +64,13 @@ DEPARTURE_TIMEOUT_S = 25.0
 WEATHER_TRIGGER_TIMEOUT_S = 45.0
 DOCK_WEATHER_TIMEOUT_S = 30.0
 RTL_APPROACH_TIMEOUT_S = 45.0
-STREAM_DURATION_S = 12.0
+SKYLINK_COMPANION_STATE_FILE = Path(
+    os.environ.get(
+        "SKYLINK_COMPANION_STATE_FILE",
+        str(Path("/tmp") / "skylink_drone_state.json"),
+    )
+)
+STREAM_DURATION_S = float(os.environ.get("SKYLINK_LANDING_STREAM_TIMEOUT_S", "90.0"))
 LIVE_TELEMETRY_INTERVAL_S = 0.35
 TELEMETRY_PREFIX = "__TELEMETRY__"
 LIVE_POSITION_READY_TIMEOUT_S = 45.0
@@ -143,6 +150,32 @@ def _emit_live_telemetry(payload: dict[str, object]) -> None:
     print(f"{TELEMETRY_PREFIX}{json.dumps(payload, separators=(',', ':'))}", flush=True)
 
 
+def _update_companion_state(payload: dict[str, object], *, phase: str = "mission") -> None:
+    try:
+        # Extract relevant fields from common telemetry snapshot
+        local_pose = payload.get("local_pose", {}) or {}
+        att = payload.get("attitude_euler", {}) or {}
+        
+        down_m = float(local_pose.get("down_m", -5.0))
+        
+        state = {
+            "altitude_m": float(max(0.0, -down_m)),
+            "offset_x_m": float(local_pose.get("east_m", 0.0)),
+            "offset_y_m": float(local_pose.get("north_m", 0.0)),
+            "roll_rad": math.radians(float(att.get("roll_deg", 0.0))),
+            "pitch_rad": math.radians(float(att.get("pitch_deg", 0.0))),
+            "vel_xy_ms": 0.0, # Simplified
+            "fsm_state": phase,
+            "noise_enabled": True,
+            "drop_prob": 0.0,
+        }
+        SKYLINK_COMPANION_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        SKYLINK_COMPANION_STATE_FILE.write_text(json.dumps(state, indent=2), encoding="utf-8")
+    except Exception as e:
+        # Non-critical failure
+        pass
+
+
 async def _publish_live_telemetry(
     gateway: MavsdkVehicleGateway,
     *,
@@ -155,6 +188,7 @@ async def _publish_live_telemetry(
             elapsed_s=time.monotonic() - runtime_origin_s,
         )
         _emit_live_telemetry(payload)
+        _update_companion_state(payload)
         try:
             await asyncio.wait_for(stop_event.wait(), timeout=LIVE_TELEMETRY_INTERVAL_S)
         except asyncio.TimeoutError:

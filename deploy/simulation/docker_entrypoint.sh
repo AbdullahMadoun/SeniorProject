@@ -28,6 +28,18 @@ if [[ ! -x "$PX4_BINARY" || ! -f "$GZ_ENV" ]]; then
   bash deploy/simulation/bootstrap_remote.sh build
 fi
 
+if [[ "${SKYLINK_COMPANION_AUTOSTART:-true}" =~ ^(1|true|yes|on)$ ]]; then
+  companion_port="${SKYLINK_COMPANION_MJPEG_PORT:-8765}"
+  if ! ss -ltn | grep -q ":${companion_port} "; then
+    PYTHONPATH="$REPO_ROOT:${PYTHONPATH:-}" \
+    SKYLINK_COMPANION_MJPEG_PORT="$companion_port" \
+    SKYLINK_COMPANION_CAMERA_HZ="${SKYLINK_COMPANION_CAMERA_HZ:-15.0}" \
+      "$PYTHON_BIN" "$REPO_ROOT/autonomy/companion/rpi_companion_sim.py" \
+      >> "$REPO_ROOT/artifacts/sitl_logs/companion_autostart.log" 2>&1 &
+    echo "[ENTRYPOINT] companion MJPEG autostart pid=$! port=$companion_port"
+  fi
+fi
+
 exec "$PYTHON_BIN" "$REPO_ROOT/autonomy/scripts/mission_api.py" \
   --host 0.0.0.0 \
   --port "${SKYLINK_MISSION_API_PORT:-8625}" \

@@ -18,6 +18,12 @@ from autonomy.simulation.landing_pad import PadRenderConfig, render_frame
 
 
 class LandingPadRendererTests(unittest.TestCase):
+    def test_renderer_clears_warp_background(self) -> None:
+        source = (AUTONOMY_ROOT / "simulation" / "landing_pad.py").read_text(encoding="utf-8")
+
+        self.assertIn("borderMode=cv2.BORDER_CONSTANT", source)
+        self.assertNotIn("borderMode=cv2.BORDER_TRANSPARENT", source)
+
     def test_render_frame_returns_expected_shape(self) -> None:
         frame = render_frame(
             PadRenderConfig(

@@ -25,14 +25,15 @@ class UiStaticArtifactTests(unittest.TestCase):
         dashboard_html = (REPO_ROOT / "artifacts" / "dashboard" / "index.html").read_text(encoding="utf-8")
 
         self.assertIn("overflow-wrap: anywhere", planner_html)
-        self.assertIn("grid-template-columns: minmax(0, 1.6fr) minmax(120px, 0.8fr)", planner_html)
+        self.assertIn("grid-template-columns: 1.15fr 0.85fr", planner_html)
         self.assertIn("overflow-wrap: anywhere", dashboard_html)
         self.assertIn("action-strip", dashboard_html)
         self.assertIn("server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile", dashboard_html)
         self.assertIn("grid-template-rows: auto minmax(0, 1fr) auto", dashboard_html)
         self.assertIn("class=\"fpv-media\"", dashboard_html)
-        self.assertIn("visibility: hidden", dashboard_html)
-        self.assertIn("font-size: 0", dashboard_html)
+        self.assertIn("class=\"fpv-detection-layer stale\"", dashboard_html)
+        self.assertIn("FPV_DETECTION_STALE_MS = 500", dashboard_html)
+        self.assertIn("clearFpvDetection", dashboard_html)
         self.assertIn("class=\"fpv-bottom\"", dashboard_html)
         self.assertIn("class=\"status-copy\"", dashboard_html)
 

@@ -18,5 +18,7 @@ services:
       - "14540:14540/udp"
       # MAVLink GCS link: QGC / MAVProxy on host connects here
       - "18570:18570/udp"
+      # Companion sim MJPEG stream (rpi_companion_sim.py autostart)
+      - "${SKYLINK_COMPANION_MJPEG_PORT:-8765}:8765"
     volumes:
       - ./artifacts:/opt/skylink2/artifacts

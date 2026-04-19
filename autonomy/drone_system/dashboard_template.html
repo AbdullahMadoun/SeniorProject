@@ -288,25 +288,24 @@
     .fpv-header span:last-child { color: var(--accent); text-align: right; }
     .fpv-media {
       position: relative;
-      min-height: 0;
+      min-height: 220px;
+      aspect-ratio: 16 / 9;
       margin: 10px 12px 0;
       border-radius: 18px;
       overflow: hidden;
-      background: linear-gradient(180deg, #030408, #091019);
-      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: #000;
+      border: 1px solid rgba(255, 255, 255, 0.12);
     }
     .fpv-shell img {
       position: absolute;
       inset: 0;
       width: 100%;
       height: 100%;
-      object-fit: cover;
+      object-fit: contain;
       display: block;
-      filter: saturate(1.05) contrast(1.06);
-      visibility: hidden;
-      color: transparent;
-      font-size: 0;
-      line-height: 0;
+      z-index: 2;
+      opacity: 1;
+      background: #000;
     }
     .fpv-placeholder {
       position: absolute;
@@ -319,8 +318,47 @@
       background: linear-gradient(180deg, rgba(3, 4, 8, 0.82), rgba(5, 9, 16, 0.76));
       z-index: 3;
     }
-    .fpv-shell.live .fpv-placeholder { display: none; }
+    .fpv-shell.live .fpv-placeholder { display: none !important; }
     .fpv-ar { position: absolute; inset: 0; z-index: 6; pointer-events: none; }
+    .fpv-ar .heading-tape,
+    .fpv-ar .horizon-frame { display: none; }
+    .fpv-detection-layer { position: absolute; inset: 0; z-index: 8; pointer-events: none; }
+    .fpv-detection-layer.stale { display: none; }
+    .fpv-detection-box {
+      position: absolute;
+      border: 2px solid var(--accent);
+      box-shadow: 0 0 18px rgba(0, 212, 170, 0.42);
+      background: rgba(0, 212, 170, 0.06);
+    }
+    .fpv-detection-crosshair {
+      position: absolute;
+      width: 32px;
+      height: 32px;
+      border: 1px solid rgba(255, 255, 255, 0.72);
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+    }
+    .fpv-detection-crosshair::before,
+    .fpv-detection-crosshair::after {
+      content: "";
+      position: absolute;
+      background: var(--accent);
+    }
+    .fpv-detection-crosshair::before { left: 50%; top: -7px; width: 1px; height: 44px; }
+    .fpv-detection-crosshair::after { top: 50%; left: -7px; width: 44px; height: 1px; }
+    .fpv-detection-label {
+      position: absolute;
+      transform: translateY(-100%);
+      padding: 4px 7px;
+      border-radius: 6px;
+      background: rgba(0, 0, 0, 0.72);
+      border: 1px solid rgba(0, 212, 170, 0.55);
+      color: #e8fffb;
+      font-size: 0.66rem;
+      font-weight: 800;
+      letter-spacing: 0;
+      white-space: nowrap;
+    }
     .heading-tape {
       position: absolute;
       top: 12px;
@@ -671,10 +709,17 @@
             <div class="fpv-header"><span>FPV Camera</span><span id="fpv-status">Awaiting stream</span></div>
             <div class="fpv-media">
               <img id="fpv-feed" alt="Live FPV MJPEG stream">
-              <div class="fpv-placeholder"><div><strong style="display:block;margin-bottom:10px">FPV stream offline</strong><div id="fpv-placeholder-text">Enable the companion MJPEG stream or point the dashboard proxy at the Raspberry Pi companion host.</div></div></div>
+              <div class="fpv-placeholder">
+                <div>
+                  <strong style="display:block;margin-bottom:10px">FPV Stream Offline</strong>
+                  <div id="fpv-placeholder-text" style="font-size: 0.82rem; margin-bottom: 16px;">Connecting to companion simulator...</div>
+                  <button id="fpv-retry" style="font-size: 0.72rem; padding: 6px 14px; border-radius: 8px;">Force Retry Stream</button>
+                </div>
+              </div>
               <div class="fpv-ar">
                 <div class="heading-tape"><div id="heading-track" class="heading-track"></div><div class="heading-center"></div></div>
                 <div class="horizon-frame"><div id="horizon-roll" class="horizon-roll"><div id="horizon-pitch" class="horizon-pitch"><div class="sky"></div><div class="earth"></div><div id="pitch-ladder" class="pitch-ladder"></div></div></div><div class="horizon-center"><span></span></div></div>
+                <div id="fpv-detection-layer" class="fpv-detection-layer stale"></div>
               </div>
             </div>
             <div class="fpv-bottom">
@@ -714,7 +759,8 @@
     const dock = replay.simulation?.dock_target || { north_m: 0, east_m: 0, down_m: 0 };
     const fpvCfg = base.visualization?.fpv || { enabled: false, source_url: "", proxy_url: "/api/fpv/stream", mode: "simulation" };
     const cinematicCfg = base.visualization?.cinematic || { redline_pitch_deg: 15.0, redline_roll_deg: 15.0 };
-    const S = { waypoints: [], valid: false, locked: false, cam: "follow", cinematic: false, job: null, log: null, tel: null, logTimeout: null, telTimeout: null, last: null, liveFrames: [], liveFrameLimit: 1200, potholePulse: null, weatherMode: "proof", lowBatteryAction: "return", events: [], missionStartTime: null, lastBattery: null, lastMode: null, windThreshold: 7.0 };
+    const FPV_DETECTION_STALE_MS = 500;
+    const S = { waypoints: [], valid: false, locked: false, cam: "follow", cinematic: false, job: null, log: null, tel: null, logTimeout: null, telTimeout: null, last: null, liveFrames: [], liveFrameLimit: 1200, potholePulse: null, weatherMode: "proof", lowBatteryAction: "return", events: [], missionStartTime: null, lastBattery: null, lastMode: null, windThreshold: 7.0, fpvDetectionStaleTimer: null };
     const $ = (id) => document.getElementById(id);
 const E = {
       timelineTrack: $("timeline-track"),
@@ -725,7 +771,7 @@ const E = {
       popupMessage: $("popup-message"),
       simPhase: $("sim-phase"),
       batteryDrain: $("battery-drain"),
-      alt: $("alt"), speed: $("speed"), wind: $("wind"), dir: $("dir"), gust: $("gust"), battery: $("battery"), warn: $("warn"), rtl: $("rtl"), emergency: $("emergency"), launch: $("launch"), reload: $("reload"), undo: $("undo"), clear: $("clear"), term: $("term"), waypoints: $("waypoints"), banner: $("banner"), bannerT: $("banner-t"), bannerD: $("banner-d"), cGeo: $("c-geofence"), cWp: $("c-waypoints"), cAlt: $("c-altitude"), mapText: $("map-text"), mapLive: $("map-live"), target: $("target"), status: $("status"), mGeo: $("m-geofence"), mHome: $("m-home"), mDock: $("m-dock"), mProof: $("m-proof"), mapMode: $("map-mode"), mapBattery: $("map-battery"), mapSats: $("map-sats"), mapLoad: $("map-load"), hAlt: $("h-alt"), hSpeed: $("h-speed"), hMode: $("h-mode"), hBattery: $("h-battery"), hDock: $("h-dock"), hLoad: $("h-load"), media: $("media"), fpvModeSummary: $("fpv-mode-summary"), loadState: $("load-state"), cinematicToggle: $("cinematic-toggle"), fpvShell: $("fpv-shell"), fpvFeed: $("fpv-feed"), fpvStatus: $("fpv-status"), fpvPlaceholderText: $("fpv-placeholder-text"), headingTrack: $("heading-track"), horizonRoll: $("horizon-roll"), horizonPitch: $("horizon-pitch"), pitchLadder: $("pitch-ladder"), fpvHeading: $("fpv-heading"), fpvAttitude: $("fpv-attitude"), fpvStress: $("fpv-stress"), fpvFlag: $("fpv-flag"), stressFlag: $("stress-flag"), loadFlag: $("load-flag") };
+      alt: $("alt"), speed: $("speed"), wind: $("wind"), dir: $("dir"), gust: $("gust"), battery: $("battery"), warn: $("warn"), rtl: $("rtl"), emergency: $("emergency"), launch: $("launch"), reload: $("reload"), undo: $("undo"), clear: $("clear"), term: $("term"), waypoints: $("waypoints"), banner: $("banner"), bannerT: $("banner-t"), bannerD: $("banner-d"), cGeo: $("c-geofence"), cWp: $("c-waypoints"), cAlt: $("c-altitude"), mapText: $("map-text"), mapLive: $("map-live"), target: $("target"), status: $("status"), mGeo: $("m-geofence"), mHome: $("m-home"), mDock: $("m-dock"), mProof: $("m-proof"), mapMode: $("map-mode"), mapBattery: $("map-battery"), mapSats: $("map-sats"), mapLoad: $("map-load"), hAlt: $("h-alt"), hSpeed: $("h-speed"), hMode: $("h-mode"), hBattery: $("h-battery"), hDock: $("h-dock"), hLoad: $("h-load"), media: $("media"), fpvModeSummary: $("fpv-mode-summary"), loadState: $("load-state"), cinematicToggle: $("cinematic-toggle"), fpvShell: $("fpv-shell"), fpvFeed: $("fpv-feed"), fpvStatus: $("fpv-status"), fpvPlaceholderText: $("fpv-placeholder-text"), fpvDetectionLayer: $("fpv-detection-layer"), headingTrack: $("heading-track"), horizonRoll: $("horizon-roll"), horizonPitch: $("horizon-pitch"), pitchLadder: $("pitch-ladder"), fpvHeading: $("fpv-heading"), fpvAttitude: $("fpv-attitude"), fpvStress: $("fpv-stress"), fpvFlag: $("fpv-flag"), stressFlag: $("stress-flag"), loadFlag: $("load-flag") };
     const fmt = (value, digits = 1) => Number(value || 0).toFixed(digits);
     const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
     const modeText = (mode) => (mode || "idle").replaceAll("_", " ");
@@ -1051,6 +1097,116 @@ function syncMapWaypoints() {
       E.loadFlag.classList.toggle("alert", alert);
       E.fpvFlag.classList.toggle("alert", telemetryMode(frame) === "return_to_launch");
     }
+    function clearFpvDetection() {
+      if (S.fpvDetectionStaleTimer) {
+        clearTimeout(S.fpvDetectionStaleTimer);
+        S.fpvDetectionStaleTimer = null;
+      }
+      if (!E.fpvDetectionLayer) return;
+      E.fpvDetectionLayer.innerHTML = "";
+      E.fpvDetectionLayer.classList.add("stale");
+    }
+    function fpvCoordPercent(value, maxValue) {
+      const numeric = Number(value);
+      if (!Number.isFinite(numeric)) return null;
+      if (numeric >= 0 && numeric <= 1) return numeric * 100;
+      return clamp((numeric / maxValue) * 100, 0, 100);
+    }
+    function fpvPoint(point) {
+      if (Array.isArray(point)) {
+        return { x: Number(point[0]), y: Number(point[1]) };
+      }
+      if (point && typeof point === "object") {
+        return {
+          x: Number(point.x_px ?? point.x ?? point.u ?? point[0]),
+          y: Number(point.y_px ?? point.y ?? point.v ?? point[1]),
+        };
+      }
+      return null;
+    }
+    function fpvCornerSets(rawCorners) {
+      if (!Array.isArray(rawCorners)) return [];
+      if (rawCorners.length > 0 && !Array.isArray(rawCorners[0]) && typeof rawCorners[0] === "object") {
+        return [rawCorners.map(fpvPoint).filter(Boolean)];
+      }
+      return rawCorners
+        .map((corner) => (Array.isArray(corner) ? corner.map(fpvPoint).filter(Boolean) : []))
+        .filter((corner) => corner.length > 0);
+    }
+    function fpvDetectionFromFrame(frame) {
+      const candidates = [
+        frame?.fpv_detection,
+        frame?.aruco_detection,
+        frame?.qr_detection,
+        frame?.companion_detection,
+        frame?.landing_target_detection,
+        frame?.detection,
+      ];
+      const raw = candidates.find((candidate) => candidate && typeof candidate === "object");
+      if (!raw) return null;
+      if (raw.detected === false || raw.acquired === false || raw.target_acquired === false) return null;
+      const width = Number(raw.image_width_px ?? raw.width_px ?? raw.width ?? 512) || 512;
+      const height = Number(raw.image_height_px ?? raw.height_px ?? raw.height ?? 512) || 512;
+      const corners = fpvCornerSets(raw.corners ?? raw.marker_corners ?? raw.boxes);
+      const centroid = fpvPoint(raw.centroid ?? raw.center ?? raw.target ?? {
+        x: raw.centroid_x_px ?? raw.center_x_px ?? raw.x_px ?? raw.x,
+        y: raw.centroid_y_px ?? raw.center_y_px ?? raw.y_px ?? raw.y,
+      });
+      if (!corners.length && (!centroid || !Number.isFinite(centroid.x) || !Number.isFinite(centroid.y))) return null;
+      return {
+        width,
+        height,
+        corners,
+        centroid,
+        confidence: raw.confidence ?? raw.quality,
+        label: raw.label || raw.marker_id || raw.id || "QR",
+      };
+    }
+    function updateFpvDetection(frame) {
+      const detection = fpvDetectionFromFrame(frame);
+      if (!detection || !E.fpvDetectionLayer) {
+        clearFpvDetection();
+        return;
+      }
+      if (S.fpvDetectionStaleTimer) clearTimeout(S.fpvDetectionStaleTimer);
+      E.fpvDetectionLayer.innerHTML = "";
+      E.fpvDetectionLayer.classList.remove("stale");
+      detection.corners.forEach((corner) => {
+        const xs = corner.map((point) => fpvCoordPercent(point.x, detection.width)).filter((value) => value != null);
+        const ys = corner.map((point) => fpvCoordPercent(point.y, detection.height)).filter((value) => value != null);
+        if (!xs.length || !ys.length) return;
+        const left = Math.min(...xs);
+        const top = Math.min(...ys);
+        const right = Math.max(...xs);
+        const bottom = Math.max(...ys);
+        const box = document.createElement("div");
+        box.className = "fpv-detection-box";
+        box.style.left = `${left}%`;
+        box.style.top = `${top}%`;
+        box.style.width = `${Math.max(1.5, right - left)}%`;
+        box.style.height = `${Math.max(1.5, bottom - top)}%`;
+        E.fpvDetectionLayer.appendChild(box);
+      });
+      const centroidX = fpvCoordPercent(detection.centroid?.x, detection.width);
+      const centroidY = fpvCoordPercent(detection.centroid?.y, detection.height);
+      if (centroidX != null && centroidY != null) {
+        const crosshair = document.createElement("div");
+        crosshair.className = "fpv-detection-crosshair";
+        crosshair.style.left = `${centroidX}%`;
+        crosshair.style.top = `${centroidY}%`;
+        E.fpvDetectionLayer.appendChild(crosshair);
+        const label = document.createElement("div");
+        label.className = "fpv-detection-label";
+        label.style.left = `${clamp(centroidX + 2, 1, 84)}%`;
+        label.style.top = `${clamp(centroidY - 3, 8, 96)}%`;
+        const confidence = Number(detection.confidence);
+        label.textContent = Number.isFinite(confidence)
+          ? `TARGET ${detection.label} ${Math.round(confidence * 100)}%`
+          : `TARGET ${detection.label}`;
+        E.fpvDetectionLayer.appendChild(label);
+      }
+      S.fpvDetectionStaleTimer = setTimeout(clearFpvDetection, FPV_DETECTION_STALE_MS);
+    }
     function updateDrone(frame) {
       const pose = telemetryFrameLocalPose(frame);
       const attitude = telemetryAttitude(frame);
@@ -1113,6 +1269,7 @@ function syncMapWaypoints() {
       updateRibbon();
       updateDrone(frame);
       updateAttitudeHud(frame);
+      updateFpvDetection(frame);
       if (previous) {
         const currentPose = telemetryFrameLocalPose(frame);
         const previousPose = telemetryFrameLocalPose(previous);
@@ -1147,7 +1304,7 @@ E.mapMode.textContent = modeText(telemetryMode(frame));
       updateDrone(syntheticFrame);
       updateAttitudeHud(syntheticFrame);
     }
-    function resetLiveState() { S.liveFrames = []; S.events = []; S.missionStartTime = Date.now(); S.lastBattery = null; S.lastMode = null; livePolyline.setLatLngs([]); updateRibbon(); updateTimeline(); E.mapLive.textContent = "Awaiting live mission start."; E.simPhase.textContent = "Starting..."; E.simPhase.style.color = "var(--warn)"; log("[META] Live telemetry stream armed", "info"); }
+    function resetLiveState() { S.liveFrames = []; S.events = []; S.missionStartTime = Date.now(); S.lastBattery = null; S.lastMode = null; clearFpvDetection(); livePolyline.setLatLngs([]); updateRibbon(); updateTimeline(); E.mapLive.textContent = "Awaiting live mission start."; E.simPhase.textContent = "Starting..."; E.simPhase.style.color = "var(--warn)"; log("[META] Live telemetry stream armed", "info"); }
     function detectEvents(frame, previous, batteryPercent) {
       const currentMode = telemetryMode(frame);
       const elapsed = (Date.now() - S.missionStartTime) / 1000;
@@ -1217,15 +1374,36 @@ E.mapMode.textContent = modeText(telemetryMode(frame));
     function configureFpv(config) {
       if (!config.enabled) { E.fpvShell.classList.add("hidden"); E.fpvStatus.textContent = "FPV disabled"; return; }
       E.fpvShell.classList.remove("hidden");
+
       const proxyUrl = config.proxy_url || "/api/fpv/stream";
-      const sourceUrl = config.source_url || "";
-      const url = sourceUrl ? `${proxyUrl}?source_url=${encodeURIComponent(sourceUrl)}` : proxyUrl;
-      E.fpvPlaceholderText.textContent = `Proxy source: ${sourceUrl || "dashboard local stream"}`;
-      E.fpvStatus.textContent = "Connecting";
-      E.fpvFeed.style.visibility = "hidden";
-      E.fpvFeed.addEventListener("load", () => { E.fpvFeed.style.visibility = "visible"; E.fpvShell.classList.add("live"); E.fpvStatus.textContent = `${config.mode || "simulation"} live`; });
-      E.fpvFeed.addEventListener("error", () => { E.fpvFeed.style.visibility = "hidden"; E.fpvShell.classList.remove("live"); E.fpvStatus.textContent = "Stream unavailable"; });
-      E.fpvFeed.src = url;
+      const sourceUrl = (config.source_url || "").replace("http://127.0.0.1:5050/stream", "http://127.0.0.1:8765/camera");
+      const proxiedUrl = sourceUrl ? `${proxyUrl}?source_url=${encodeURIComponent(sourceUrl)}` : proxyUrl;
+      const directUrl = "http://127.0.0.1:18765/camera";
+      const cacheBust = (url) => `${url}${url.includes("?") ? "&" : "?"}t=${Date.now()}`;
+      const showStream = (targetUrl) => {
+        E.fpvPlaceholderText.textContent = `Proxy source: ${sourceUrl || "dashboard local stream"}`;
+        E.fpvStatus.textContent = `${config.mode || "simulation"} live`;
+        E.fpvShell.classList.add("live");
+        E.fpvFeed.style.visibility = "visible";
+        E.fpvFeed.src = cacheBust(targetUrl);
+      };
+
+      E.fpvFeed.onload = () => {
+        E.fpvShell.classList.add("live");
+        E.fpvStatus.textContent = `${config.mode || "simulation"} live`;
+      };
+      E.fpvFeed.onerror = () => {
+        if (!E.fpvFeed.src.includes("18765")) {
+          E.fpvStatus.textContent = "Switching to camera tunnel";
+          showStream(directUrl);
+          return;
+        }
+        E.fpvShell.classList.remove("live");
+        E.fpvStatus.textContent = "Stream unavailable";
+      };
+
+      $("fpv-retry")?.addEventListener("click", () => showStream(proxiedUrl));
+      showStream(proxiedUrl);
     }
     function renderPotholePulse() {
       const detections = replay.companion?.pothole_detections || [];

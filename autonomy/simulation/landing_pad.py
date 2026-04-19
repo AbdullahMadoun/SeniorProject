@@ -11,8 +11,8 @@ import numpy as np
 ARUCO_DICT = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
 MARKER_LENGTH_M = 0.20
 MARKER_SEPARATION_M = 0.05
-BOARD_COLS = 2
-BOARD_ROWS = 2
+BOARD_COLS = 1
+BOARD_ROWS = 1
 BOARD_MARGIN_M = 0.05
 
 CAM_FX = 400.0
@@ -37,7 +37,7 @@ class PadRenderConfig:
     roll_rad: float = 0.0
     pitch_rad: float = 0.0
     vel_xy_ms: float = 0.0
-    drop_prob: float = 0.02
+    drop_prob: float = 0.0
     noise_enabled: bool = True
 
 
@@ -82,7 +82,7 @@ def _get_board_image() -> np.ndarray:
 def _destination_quad(cfg: PadRenderConfig) -> np.ndarray:
     altitude_m = max(cfg.altitude_m, 0.15)
     pixels_per_meter = CAM_FX / altitude_m
-    board_px = float(np.clip(BOARD_SIDE_M * pixels_per_meter, 80.0, 460.0))
+    board_px = float(np.clip(BOARD_SIDE_M * pixels_per_meter, 72.0, 180.0))
     half_side_px = board_px / 2.0
 
     center_x = CAM_CX - (cfg.offset_x_m * pixels_per_meter)
@@ -136,7 +136,8 @@ def render_frame(cfg: PadRenderConfig) -> np.ndarray | None:
         transform,
         (IMG_W, IMG_H),
         flags=cv2.INTER_LINEAR,
-        borderMode=cv2.BORDER_TRANSPARENT,
+        borderMode=cv2.BORDER_CONSTANT,
+        borderValue=(0, 0, 0),
     )
     mask = cv2.cvtColor(warped_board, cv2.COLOR_BGR2GRAY) > 0
     canvas[mask] = warped_board[mask]
@@ -144,18 +145,6 @@ def render_frame(cfg: PadRenderConfig) -> np.ndarray | None:
     if cfg.noise_enabled:
         if cfg.vel_xy_ms > 0.3:
             canvas = _apply_motion_blur(canvas, cfg.vel_xy_ms)
-        if cfg.altitude_m < 1.5:
-            density = 0.015 + (0.015 * (1.5 - max(cfg.altitude_m, 0.0)))
-            count = int(density * IMG_W * IMG_H)
-            ys = np.random.randint(0, IMG_H, count)
-            xs = np.random.randint(0, IMG_W, count)
-            canvas[ys, xs] = np.where(
-                np.random.randint(0, 2, count)[:, None] == 0,
-                0,
-                255,
-            )
-        alpha = 0.9 + (random.random() * 0.2)
-        canvas = np.clip(canvas.astype(np.float32) * alpha, 0, 255).astype(np.uint8)
 
     return canvas
 
@@ -165,66 +154,6 @@ def annotate_frame(
     cfg: PadRenderConfig,
     detection: dict[str, object] | None,
 ) -> np.ndarray:
+    del cfg, detection
     output = frame.copy()
-    cv2.drawMarker(
-        output,
-        (IMG_W // 2, IMG_H // 2),
-        (0, 255, 255),
-        cv2.MARKER_CROSS,
-        28,
-        2,
-    )
-
-    if detection and detection.get("detected"):
-        for corner in detection.get("corners", []):
-            pts = np.asarray(corner, dtype=np.int32).reshape((-1, 1, 2))
-            cv2.polylines(output, [pts], True, (0, 255, 0), 2)
-        centroid_x_px = int(float(detection.get("centroid_x_px", IMG_W // 2)))
-        centroid_y_px = int(float(detection.get("centroid_y_px", IMG_H // 2)))
-        cv2.drawMarker(
-            output,
-            (centroid_x_px, centroid_y_px),
-            (0, 0, 255),
-            cv2.MARKER_CROSS,
-            24,
-            2,
-        )
-        cv2.line(
-            output,
-            (IMG_W // 2, IMG_H // 2),
-            (centroid_x_px, centroid_y_px),
-            (0, 165, 255),
-            2,
-        )
-
-    confidence = float(detection.get("confidence", 0.0)) if detection else 0.0
-    status = "DETECTED" if confidence > 0.0 else "SEARCHING"
-    status_color = (0, 255, 0) if confidence > 0.0 else (0, 100, 255)
-    cv2.putText(
-        output,
-        f"ALT: {cfg.altitude_m:.2f} m",
-        (10, 22),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        0.55,
-        (255, 255, 255),
-        1,
-    )
-    cv2.putText(
-        output,
-        f"OFF: ({cfg.offset_x_m:.2f}, {cfg.offset_y_m:.2f}) m",
-        (10, 44),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        0.55,
-        (255, 255, 255),
-        1,
-    )
-    cv2.putText(
-        output,
-        f"{status} conf={confidence:.2f}",
-        (10, 66),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        0.55,
-        status_color,
-        2,
-    )
     return output

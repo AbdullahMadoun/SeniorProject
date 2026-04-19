@@ -457,6 +457,7 @@
       waypointMarkers: [],
       remoteMode: false,
       remotePollTimer: null,
+      remoteStatus: null,
     };
 
     const mapEl = document.getElementById("mission-map");
@@ -760,20 +761,52 @@
       }
     }
 
-    async function pollRemoteStatusOnce() {
-      if (!state.remoteMode) { return; }
+    function isRemoteExecutionReady(payload) {
+      if (!payload || typeof payload !== "object") { return false; }
+      if (payload.configured === false) { return false; }
+      if (payload.ready_for_remote_execution === true) { return true; }
+      return Boolean(
+        payload.reachable === true &&
+        payload.repo_present === true &&
+        payload.venv_present === true &&
+        payload.runner_present === true &&
+        payload.px4_binary_present === true
+      );
+    }
+
+    async function refreshRemoteStatus({ fallbackToLocal = false } = {}) {
       try {
         const { response, payload } = await fetchJsonWithTimeout("/api/remote/status", null, 8000);
+        state.remoteStatus = payload;
         if (!response.ok) {
           setRemoteBadge("Unavailable", "bad", `HTTP ${response.status}`);
-          return;
+          return false;
         }
         const summary = summarizeRemoteStatus(payload);
-        setRemoteBadge(summary.label, summary.className, summary.detail);
+        const ready = isRemoteExecutionReady(payload);
+        setRemoteBadge(summary.label, ready ? "good" : summary.className, summary.detail);
+        if (!ready && fallbackToLocal) {
+          setRemoteMode(false);
+          storeRemoteMode(false);
+          appendTerminal("[STATUS] Remote bridge is not configured; using this Vast VM directly.", "status");
+        }
+        return ready;
       } catch (error) {
         const detail = error?.name === "AbortError" ? "timeout" : (error?.message || "unknown error");
+        state.remoteStatus = null;
         setRemoteBadge("Unavailable", "bad", detail);
+        if (fallbackToLocal) {
+          setRemoteMode(false);
+          storeRemoteMode(false);
+          appendTerminal("[STATUS] Remote bridge is unavailable; using this Vast VM directly.", "status");
+        }
+        return false;
       }
+    }
+
+    async function pollRemoteStatusOnce() {
+      if (!state.remoteMode) { return; }
+      await refreshRemoteStatus();
     }
 
     function startRemotePolling() {
@@ -909,6 +942,9 @@
       cancelButton.disabled = true;
       if (remoteToggle) { remoteToggle.disabled = true; }
       if (state.remoteMode) { stopRemotePolling(); }
+      if (state.remoteMode) {
+        await refreshRemoteStatus({ fallbackToLocal: true });
+      }
       const executeUrl = state.remoteMode ? "/api/mission/execute?remote=true" : "/api/mission/execute";
       appendTerminal(`[STATUS] Sending mission to ${executeUrl}`, "status");
       try {
@@ -977,7 +1013,13 @@
       updateWaypointList();
       syncMap();
       validateMission();
-      setRemoteMode(readStoredRemoteMode(), { persist: false });
+      const requestedRemoteMode = readStoredRemoteMode();
+      if (requestedRemoteMode) {
+        const remoteReady = await refreshRemoteStatus({ fallbackToLocal: true });
+        setRemoteMode(remoteReady, { persist: false });
+      } else {
+        setRemoteMode(false, { persist: false });
+      }
     }
 
     initialize().catch((error) => {

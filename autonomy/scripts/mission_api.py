@@ -59,7 +59,7 @@ DEFAULT_BRIDGE_STATUS = "Bridge Active"
 DEFAULT_REMOTE_BRIDGE_STATUS = "Remote Ready"
 DEFAULT_SHOWCASE_REDIRECT = "../showcase/latest/index.html"
 TELEMETRY_PREFIX = "__TELEMETRY__"
-DEFAULT_FPV_SOURCE_URL = os.environ.get("SKYLINK_FPV_SOURCE_URL", "http://127.0.0.1:5050/stream")
+DEFAULT_FPV_SOURCE_URL = os.environ.get("SKYLINK_FPV_SOURCE_URL", "http://127.0.0.1:8765/camera")
 DEFAULT_FPV_PROXY_PATH = "/api/fpv/stream"
 DEFAULT_FPV_ENABLED = os.environ.get("SKYLINK_FPV_ENABLED", "1").strip().lower() in {"1", "true", "yes", "on"}
 DEFAULT_FPV_MODE = os.environ.get("SKYLINK_FPV_MODE", "simulation")
@@ -220,6 +220,8 @@ def _extract_telemetry_payload(line: str) -> dict[str, Any] | None:
 
 
 def _fpv_stream_target(source_url: str | None) -> str:
+    if source_url and "127.0.0.1:5050/stream" in source_url:
+        return DEFAULT_FPV_SOURCE_URL
     return source_url or DEFAULT_FPV_SOURCE_URL
 
 
@@ -863,29 +865,31 @@ async def fpv_stream(source_url: str | None = Query(default=None)) -> StreamingR
         raise HTTPException(status_code=503, detail="FPV stream is disabled.")
 
     target = _fpv_stream_target(source_url)
-    try:
-        probe = urllib.request.urlopen(target, timeout=5.0)
-        content_type = probe.headers.get("Content-Type", "multipart/x-mixed-replace; boundary=frame")
-        probe.close()
-    except urllib.error.URLError as exc:
-        raise HTTPException(status_code=502, detail=f"FPV stream unavailable: {target}") from exc
 
-    def _stream() -> Any:
-        with urllib.request.urlopen(target, timeout=30.0) as response:
-            while True:
-                chunk = response.read(8192)
-                if not chunk:
-                    break
-                yield chunk
+    def _stream_generator():
+        try:
+            # Use a longer timeout for the stream itself
+            req = urllib.request.Request(target)
+            with urllib.request.urlopen(req, timeout=10.0) as response:
+                while True:
+                    chunk = response.read(16384) # Larger chunks for efficiency
+                    if not chunk:
+                        break
+                    yield chunk
+        except Exception as e:
+            print(f"FPV Stream Error: {e}")
 
+    # Return a generic multipart content type for MJPEG
     return StreamingResponse(
-        _stream(),
+        _stream_generator(),
+        media_type="multipart/x-mixed-replace; boundary=frame",
         headers={
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
-            "Content-Type": content_type,
+            "Pragma": "no-cache",
         },
     )
+
 
 
 @app.get("/api/system/logs")
