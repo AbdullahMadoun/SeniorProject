@@ -111,12 +111,35 @@ python D:\downloads\SeniorProject\Skylink2\autonomy\companion\video_logger.py --
 
 If `psutil` or host CPU affinity support is unavailable, the logger prints an `[AFFINITY] warning ...` line and continues normally without pinning.
 
-Real hardware mode examples:
+Real hardware mode (production path on the Pi):
 
-```powershell
-python D:\downloads\SeniorProject\Skylink2\autonomy\companion\video_logger.py --mavlink-target /dev/ttyAMA0 --mavlink-baud 57600 --camera-source 0
-python D:\downloads\SeniorProject\Skylink2\autonomy\companion\video_logger.py --mavlink-target udp:127.0.0.1:14551 --camera-source "udpsrc port=5600 ! ..."
+The Pixhawk 4 connects over USB-CDC at `/dev/ttyACM0`. The MAVProxy
+systemd service `mavproxy-skylink` (see
+[deploy/companion/README.md](/deploy/companion/README.md)) owns that
+serial port and forwards MAVLink to `udp:127.0.0.1:14551`, which is
+already the default `--mavlink-target` for `video_logger.py`. So in
+production you do not pass `--mavlink-target` at all — the default is
+correct:
+
+```bash
+~/SeniorProject/autonomy/companion/.venv-pi/bin/python \
+    ~/SeniorProject/autonomy/companion/video_logger.py \
+    --camera-source 0
 ```
+
+Alternative: direct UART (not currently used).
+
+The pipeline is target-agnostic, so the older direct-UART path via
+TELEM2 still works if `mavproxy-skylink` is disabled and
+`/dev/ttyAMA0` is wired up:
+
+```bash
+python ~/SeniorProject/autonomy/companion/video_logger.py \
+    --mavlink-target /dev/ttyAMA0 --mavlink-baud 57600 --camera-source 0
+```
+
+This path is preserved here for completeness; the production deployment
+on this hardware is the USB-CDC + MAVProxy bridge above.
 
 Outputs:
 
@@ -144,10 +167,23 @@ $env:SKYLINK_MOCK_ARUCO_DETECTION='1'
 python D:\downloads\SeniorProject\Skylink2\autonomy\companion\aruco_detector.py --mock-mavlink --mock-camera --max-frames 10
 ```
 
-Real hardware mode example:
+Real hardware mode example (production path: MAVProxy bridge on
+`udp:127.0.0.1:14551`):
 
-```powershell
-python D:\downloads\SeniorProject\Skylink2\autonomy\companion\aruco_detector.py --mavlink-target /dev/ttyAMA0 --camera-source 0 --marker-id 0 --marker-size-m 0.2
+```bash
+~/SeniorProject/autonomy/companion/.venv-pi/bin/python \
+    ~/SeniorProject/autonomy/companion/aruco_detector.py \
+    --mavlink-target udp:127.0.0.1:14551 --camera-source 0 \
+    --marker-id 0 --marker-size-m 0.2
+```
+
+Alternative: direct UART (not currently used) — if `mavproxy-skylink`
+is disabled and TELEM2 is wired:
+
+```bash
+python ~/SeniorProject/autonomy/companion/aruco_detector.py \
+    --mavlink-target /dev/ttyAMA0 --camera-source 0 \
+    --marker-id 0 --marker-size-m 0.2
 ```
 
 Important:
@@ -208,7 +244,13 @@ python -m unittest discover -s D:\downloads\SeniorProject\Skylink2\autonomy\test
 
 ## Hardware Bring-Up Notes
 
-- Raspberry Pi serial target will usually be `/dev/ttyAMA0` or `/dev/serial0`
+- Production MAVLink target on the Pi is the MAVProxy systemd bridge:
+  `mavproxy-skylink.service` reads `/dev/ttyACM0` (Pixhawk USB-CDC) and
+  forwards to `udp:127.0.0.1:14551`, which is the default
+  `--mavlink-target` for `video_logger.py`. See
+  [deploy/companion/README.md](/deploy/companion/README.md) for setup.
+  The older `/dev/ttyAMA0` / `/dev/serial0` (TELEM2 direct UART) path
+  is preserved as an alternative but is not currently used.
 - camera source should stay configurable because Gazebo, USB cameras, and Pi camera pipelines differ
 - the companion scripts are designed to run directly as standalone files, not only as imported modules
 - if OpenCV is installed without `aruco`, the detector falls back safely to the mock backend on development laptops

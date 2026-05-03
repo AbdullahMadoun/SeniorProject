@@ -1,6 +1,6 @@
-"""Heartbeat probe for the Pixhawk USB link.
+"""Heartbeat probe for the Pixhawk MAVLink link.
 
-Read-only diagnostic script. Opens a serial connection to the autopilot,
+Read-only diagnostic script. Opens a MAVLink connection (serial or UDP),
 waits for a fixed number of MAVLink ``HEARTBEAT`` messages, then logs
 ``ATTITUDE`` messages for a fixed duration. On success the final stdout
 line is ``PROBE OK``; on failure ``PROBE FAIL: <reason>``. The process
@@ -10,12 +10,22 @@ The probe never sends any MAVLink command, never requests data streams,
 and never reconfigures the serial port baud rate beyond the value passed
 to pymavlink. An autopilot on the other end of the link is undisturbed.
 
+Two valid device targets:
+
+- ``udpin:127.0.0.1:14551`` (default) — the production MAVProxy bridge
+  endpoint per ``deploy/companion/mavproxy-skylink.service``. This tests
+  the full Pixhawk -> /dev/ttyACM0 -> MAVProxy -> UDP -> probe path,
+  i.e. the same path ``video_logger.py`` uses in production.
+- ``/dev/ttyACM0`` (or any serial device) — direct USB-CDC to the
+  autopilot. Use this only when ``mavproxy-skylink`` is intentionally
+  stopped, since the bridge holds an exclusive lock on the serial port
+  while it is running.
+
 Run with the companion venv (which has pymavlink installed)::
 
     cd /home/pi/SeniorProject
     autonomy/companion/.venv-pi/bin/python \\
-        -m autonomy.companion.scripts.diagnostics.heartbeat_probe \\
-        --device /dev/ttyACM0
+        -m autonomy.companion.scripts.diagnostics.heartbeat_probe
 """
 from __future__ import annotations
 
@@ -53,8 +63,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--device",
-        default="/dev/ttyACM0",
-        help="Serial device path (default: /dev/ttyACM0).",
+        default="udpin:127.0.0.1:14551",
+        help=(
+            "MAVLink connection string (default: udpin:127.0.0.1:14551 "
+            "— the production MAVProxy bridge endpoint per "
+            "deploy/companion/mavproxy-skylink.service). "
+            "Use /dev/ttyACM0 directly only when MAVProxy is stopped, "
+            "since the bridge holds an exclusive lock on the serial port."
+        ),
     )
     parser.add_argument(
         "--baud",
