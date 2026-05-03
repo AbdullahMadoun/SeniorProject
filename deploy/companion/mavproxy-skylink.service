@@ -1,0 +1,84 @@
+# SkyLink MAVProxy bridge: Pixhawk USB serial -> localhost UDP.
+#
+# Reads MAVLink from /dev/ttyACM0 (Pixhawk 4 over USB-CDC) and forwards
+# the stream to udp:127.0.0.1:14551 where video_logger.py listens by
+# default (autonomy/companion/video_logger.py:30 — DEFAULT_MAVLINK_TARGET).
+#
+# Why .venv-pi/bin/mavproxy.py rather than a system-wide install?
+# autonomy/companion/requirements-rpi.txt pins MAVProxy==1.8.74 and
+# its pymavlink dependency. Running the venv binary keeps the pinned
+# stack in effect and avoids dual-install drift. The venv is created
+# by autonomy/companion/bootstrap_rpi_companion.sh.
+#
+# Why Type=simple + --daemon (not Type=simple alone, not Type=forking)?
+# MAVProxy 1.8.74's `--daemon` flag does NOT fork. Per its --help
+# output (`run in daemon mode, do not start interactive shell`) it
+# only suppresses the interactive console; the process stays in the
+# foreground as a single PID. That matches Type=simple's contract:
+# the unit is active as soon as execve returns, and systemd does not
+# wait for a parent-fork-and-exit handshake.
+#  - Type=simple alone (no --daemon) was the v1 attempt. MAVProxy's
+#    interactive console reads stdin unconditionally and exits on EOF;
+#    systemd's default StandardInput=null delivers EOF on first read,
+#    so the unit fell into a fast restart loop (~1 s per cycle).
+#    StandardInput=null was confirmed to be a no-op against the same
+#    default, leaving the same behaviour.
+#  - Type=forking + --daemon was the v2 attempt. systemd waited the
+#    full TimeoutStartSec (90 s) for a fork-and-exit that never
+#    happened, then SIGTERMed the working process. MAVProxy was
+#    correctly forwarding traffic the entire 90 s — the failure mode
+#    was purely the wrong service Type.
+#  - Type=simple + --daemon is the matching combination: --daemon
+#    keeps MAVProxy off the interactive code path (no EOF exit) while
+#    Type=simple correctly models its single-PID foreground lifetime.
+# MAVProxy 1.8.74 has no PID-writing flag (`--help | grep -i pid`
+# returns nothing), so PIDFile= and RuntimeDirectory= are deliberately
+# absent: there would be no PID file to host.
+#
+# Why are StartLimitBurst / StartLimitIntervalSec under [Unit]?
+# In current systemd these directives belong to [Unit]. Placing them
+# in [Service] is silently ignored on this systemd build (the journal
+# from the v1 install printed: `Unknown key 'StartLimitIntervalSec'
+# in section [Service], ignoring.`).
+#
+# Why depend on dev-ttyACM0.device?
+# Pixhawk USB-CDC enumeration takes ~30 s after autopilot power-on
+# (the bootloader appears first, then the runtime firmware re-enumerates
+# — see Session 2 of docs/PHASE1_NOTES.md). Without Requires=/After=
+# dev-ttyACM0.device, systemd would start MAVProxy before the node
+# existed; MAVProxy would fail to open the master port, and the unit
+# would burn through StartLimitBurst before the Pixhawk finished
+# coming up. The dependency also stops MAVProxy if /dev/ttyACM0
+# disappears mid-run.
+#
+# Why WorkingDirectory=/home/pi?
+# MAVProxy writes mav.tlog into the current working directory. Pinning
+# cwd to /home/pi keeps telemetry logs alongside the existing
+# mav.tlog/mav.parm convention on this host instead of cluttering /.
+#
+# Disable / stop:
+#   sudo systemctl disable --now mavproxy-skylink
+# Re-enable after disabling:
+#   sudo systemctl enable --now mavproxy-skylink
+# Inspect:
+#   systemctl status mavproxy-skylink --no-pager
+#   journalctl -u mavproxy-skylink -n 100 --no-pager
+
+[Unit]
+Description=SkyLink MAVProxy UART->UDP bridge (Pixhawk -> 127.0.0.1:14551)
+After=network.target
+After=dev-ttyACM0.device
+Requires=dev-ttyACM0.device
+StartLimitBurst=5
+StartLimitIntervalSec=60
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi
+ExecStart=/home/pi/SeniorProject/autonomy/companion/.venv-pi/bin/mavproxy.py --master=/dev/ttyACM0 --baudrate=115200 --out=udpout:127.0.0.1:14551 --daemon
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
