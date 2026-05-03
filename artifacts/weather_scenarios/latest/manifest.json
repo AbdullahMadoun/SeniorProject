@@ -1,0 +1,66 @@
+{
+  "scenario_count": 4,
+  "passed_count": 4,
+  "results": [
+    {
+      "name": "nominal_weather_ready",
+      "passed": true,
+      "launch_allowed": true,
+      "mission_continue_allowed": true,
+      "dock_allowed": true,
+      "safety_action": "continue",
+      "final_mode": "hold",
+      "effective_wind_mps": 4.5,
+      "reasons": [],
+      "details": [
+        "Effective wind 4.5 m/s is within configured limit 7.0 m/s."
+      ]
+    },
+    {
+      "name": "gust_abort_launch",
+      "passed": true,
+      "launch_allowed": false,
+      "mission_continue_allowed": false,
+      "dock_allowed": false,
+      "safety_action": "abort_launch",
+      "final_mode": "hold",
+      "effective_wind_mps": 8.2,
+      "reasons": [
+        "wind_limit_exceeded"
+      ],
+      "details": [
+        "Wind 8.2 m/s exceeds 7.0 m/s."
+      ]
+    },
+    {
+      "name": "inflight_wind_excursion_rtl",
+      "passed": true,
+      "launch_allowed": false,
+      "mission_continue_allowed": false,
+      "dock_allowed": false,
+      "safety_action": "return_to_launch",
+      "final_mode": "return_to_launch",
+      "effective_wind_mps": 8.0,
+      "reasons": [
+        "wind_limit_exceeded"
+      ],
+      "details": [
+        "Wind 8.0 m/s exceeds 7.0 m/s."
+      ]
+    },
+    {
+      "name": "nominal_dock_weather_ready",
+      "passed": true,
+      "launch_allowed": true,
+      "mission_continue_allowed": true,
+      "dock_allowed": true,
+      "safety_action": "continue",
+      "final_mode": "return_to_launch",
+      "effective_wind_mps": 5.0,
+      "reasons": [],
+      "details": [
+        "Effective wind 5.0 m/s is within configured limit 7.0 m/s."
+      ]
+    }
+  ]
+}
