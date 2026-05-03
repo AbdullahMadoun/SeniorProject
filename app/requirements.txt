@@ -1,0 +1,10 @@
+ultralytics
+streamlit
+opencv-python-headless
+pandas
+Pillow
+python-dotenv
+fastapi
+uvicorn[standard]
+httpx
+psutil
