@@ -13,8 +13,10 @@ IS5 reference:
     upload_latency_seconds generated column measures this automatically.
 
 Credentials:
-    Reads SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, and optionally
-    SUPABASE_BUCKET from os.environ. Does NOT load env files itself.
+    Reads SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY from os.environ.
+    Does NOT load env files itself. The storage bucket is the hardcoded
+    constant BUCKET_NAME ("skylink_runs") below; it is not configurable
+    via environment.
     On the Pi, source credentials before invoking:
         set -a; source ~/.skylink_env; set +a
         .venv-pi/bin/python upload_run.py <output-dir>

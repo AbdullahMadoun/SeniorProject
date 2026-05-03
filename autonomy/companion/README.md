@@ -76,11 +76,19 @@ python D:\downloads\SeniorProject\Skylink2\autonomy\companion\yolo_pothole_detec
 - Mock / laptop mode:
   - use the smoke runner or pass `--mock-camera` / `--mock-mavlink`
   - GPIO and ADS hardware fall back automatically on Windows
-- Raspberry Pi mode:
+- Raspberry Pi mode (production):
   - keep the same scripts
-  - point MAVLink at `/dev/ttyAMA0` or the actual serial device
+  - MAVLink reaches the autopilot via the MAVProxy systemd bridge:
+    Pixhawk 4 → `/dev/ttyACM0` (USB-CDC) → `mavproxy-skylink.service` →
+    `udp:127.0.0.1:14551`. `video_logger.py` defaults its
+    `--mavlink-target` to that UDP endpoint, so no flag is needed in
+    production. See [deploy/companion/README.md](/deploy/companion/README.md)
+    for service install / verify / disable.
   - point cameras at the real USB index or GStreamer string
   - replace the placeholder intrinsics in `aruco_detector.py` with real calibration data
   - run `bootstrap_rpi_companion.sh` first to create the Pi-side environment
+  - alternative: direct UART via `/dev/ttyAMA0` / `/dev/serial0` (TELEM2)
+    is supported by the pipeline but not currently used; switch to it
+    only when `mavproxy-skylink` is intentionally disabled.
 
 Detailed procedures are in [RUNBOOK.md](/D:/downloads/SeniorProject/Skylink2/autonomy/companion/RUNBOOK.md).
