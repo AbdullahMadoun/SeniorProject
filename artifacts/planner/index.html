@@ -1,0 +1,1031 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SkyLink Interactive Mission Planner</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+  <style>
+    :root {
+      --bg: #0a0a0f;
+      --surface: #12121a;
+      --surface-strong: rgba(18, 18, 26, 0.88);
+      --surface-soft: rgba(255, 255, 255, 0.04);
+      --border: rgba(255, 255, 255, 0.08);
+      --text: #e8e8ed;
+      --muted: #9ca3b3;
+      --accent: #00d4aa;
+      --accent-2: #53b7ff;
+      --warn: #ff9f43;
+      --danger: #ff5d73;
+      --shadow: 0 28px 84px rgba(0, 0, 0, 0.42);
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      font-family: "Inter", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(0, 212, 170, 0.14), transparent 26%),
+        radial-gradient(circle at top right, rgba(83, 183, 255, 0.12), transparent 28%),
+        linear-gradient(180deg, #09090d 0%, #0a0a0f 100%);
+    }
+    .page {
+      width: min(1520px, calc(100% - 28px));
+      margin: 20px auto 32px;
+      display: grid;
+      gap: 18px;
+      min-height: calc(100vh - 52px);
+    }
+    .hero {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 18px;
+    }
+    .panel {
+      background: linear-gradient(180deg, rgba(18, 18, 26, 0.94), rgba(18, 18, 26, 0.78));
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      overflow: hidden;
+      min-width: 0;
+    }
+    .panel-inner {
+      padding: 22px;
+    }
+    .eyebrow {
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      font-size: 0.72rem;
+      font-weight: 700;
+      margin-bottom: 12px;
+    }
+    h1, h2, h3 { margin: 0; letter-spacing: -0.03em; }
+    h1 { font-size: clamp(2.3rem, 4vw, 4.3rem); line-height: 0.94; margin-bottom: 12px; }
+    h2 { font-size: 1.35rem; margin-bottom: 8px; }
+    p { margin: 0; color: var(--muted); line-height: 1.6; }
+    .summary-grid, .metric-grid, .rule-grid {
+      display: grid;
+      gap: 12px;
+    }
+    .summary-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-top: 18px; }
+    .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .rule-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 16px; }
+    .card, .metric, .rule-chip, .log-meta {
+      padding: 16px;
+      border-radius: 18px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.04);
+      min-width: 0;
+    }
+    .card label, .metric label, .rule-chip label, .log-meta label, .waypoint-card label {
+      display: block;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-size: 0.72rem;
+      margin-bottom: 10px;
+    }
+    .metric strong, .card strong, .rule-chip strong, .log-meta strong {
+      font-size: 1.15rem;
+      line-height: 1.2;
+      display: block;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+    .good { color: var(--accent); }
+    .warn { color: var(--warn); }
+    .bad { color: var(--danger); }
+    .main-grid {
+      display: grid;
+      grid-template-columns: 1.15fr 0.85fr;
+      gap: 18px;
+    }
+    .map-shell {
+      position: relative;
+      border-radius: 24px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: #091019;
+      overflow: hidden;
+      min-height: 620px;
+    }
+    #mission-map {
+      display: block;
+      width: 100%;
+      height: min(72vh, 760px);
+      min-height: 520px;
+    }
+    .map-overlay {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      display: grid;
+      gap: 10px;
+      max-width: 260px;
+      pointer-events: none;
+    }
+    .overlay-chip {
+      padding: 12px 14px;
+      border-radius: 16px;
+      background: rgba(10, 12, 18, 0.74);
+      border: 1px solid rgba(255,255,255,0.08);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+    }
+    .leaflet-control-attribution {
+      background: rgba(10, 10, 15, 0.72);
+      color: var(--muted);
+    }
+    .leaflet-control-attribution a { color: var(--accent); }
+    .home-icon, .waypoint-icon {
+      border-radius: 999px;
+      border: 2px solid rgba(255,255,255,0.88);
+      box-shadow: 0 0 18px rgba(0,0,0,0.34);
+    }
+    .home-icon { width: 18px; height: 18px; background: var(--accent); }
+    .waypoint-icon { width: 16px; height: 16px; background: var(--accent-2); }
+    .controls-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 16px;
+    }
+    .field {
+      display: grid;
+      gap: 8px;
+    }
+    .field label {
+      color: var(--muted);
+      font-size: 0.82rem;
+      font-weight: 600;
+    }
+    .field input {
+      width: 100%;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.04);
+      color: var(--text);
+      padding: 13px 14px;
+      font: inherit;
+    }
+    .field-wide { grid-column: 1 / -1; }
+    .toggle-row {
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+    }
+    .toggle-copy { min-width: 0; }
+    .toggle-caption {
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-top: 2px;
+    }
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 52px;
+      height: 30px;
+      flex: 0 0 auto;
+      margin-top: 2px;
+    }
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(255,255,255,0.07);
+      border: 1px solid rgba(255,255,255,0.12);
+      transition: background 180ms ease, border-color 180ms ease;
+      border-radius: 999px;
+    }
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 22px;
+      width: 22px;
+      left: 3px;
+      top: 3px;
+      background: rgba(232, 232, 237, 0.92);
+      border-radius: 999px;
+      transition: transform 180ms ease, background 180ms ease;
+      box-shadow: 0 10px 26px rgba(0,0,0,0.42);
+    }
+    .switch input:checked + .slider {
+      background: rgba(0, 212, 170, 0.20);
+      border-color: rgba(0, 212, 170, 0.42);
+    }
+    .switch input:checked + .slider:before {
+      transform: translateX(22px);
+      background: rgba(0, 212, 170, 0.92);
+    }
+    .switch input:disabled + .slider {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+    .action-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 18px;
+    }
+    button {
+      appearance: none;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 999px;
+      background: rgba(255,255,255,0.04);
+      color: var(--text);
+      padding: 12px 18px;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 180ms ease, border-color 180ms ease, transform 180ms ease, opacity 180ms ease;
+    }
+    button:hover { background: rgba(255,255,255,0.08); }
+    button:disabled { opacity: 0.35; cursor: not-allowed; }
+    .button-primary {
+      background: linear-gradient(135deg, rgba(0, 212, 170, 0.24), rgba(83, 183, 255, 0.22));
+      border-color: rgba(0, 212, 170, 0.42);
+    }
+    .alert {
+      margin-top: 16px;
+      padding: 16px 18px;
+      border-radius: 18px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.03);
+      min-height: 76px;
+      display: grid;
+      align-content: center;
+      gap: 6px;
+    }
+    .alert.danger {
+      border-color: rgba(255, 93, 115, 0.46);
+      background: rgba(255, 93, 115, 0.12);
+      animation: pulse 1.1s ease-in-out infinite alternate;
+    }
+    .alert.ok {
+      border-color: rgba(0, 212, 170, 0.34);
+      background: rgba(0, 212, 170, 0.10);
+    }
+    @keyframes pulse {
+      from { box-shadow: 0 0 0 rgba(255, 93, 115, 0.0); }
+      to { box-shadow: 0 0 28px rgba(255, 93, 115, 0.18); }
+    }
+    .waypoint-list {
+      margin-top: 16px;
+      display: grid;
+      gap: 10px;
+      max-height: 280px;
+      overflow: auto;
+      padding-right: 4px;
+    }
+    .waypoint-card {
+      padding: 14px 16px;
+      border-radius: 16px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      min-width: 0;
+    }
+    .terminal {
+      margin-top: 16px;
+      border-radius: 20px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: #050508;
+      overflow: hidden;
+    }
+    .terminal-head {
+      padding: 14px 16px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 10px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.03);
+      align-items: start;
+    }
+    .terminal-body {
+      min-height: 340px;
+      max-height: 520px;
+      overflow: auto;
+      padding: 16px;
+      font-family: "Cascadia Mono", "Consolas", monospace;
+      font-size: 0.88rem;
+      line-height: 1.5;
+      color: #bce7da;
+      white-space: pre-wrap;
+    }
+    .terminal-line.error { color: #ff9aaa; }
+    .terminal-line.status { color: #8ed8ff; }
+    .terminal-line.meta { color: #e8e8ed; }
+    @media (max-width: 1220px) {
+      .hero, .main-grid { grid-template-columns: 1fr; }
+      .summary-grid, .rule-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 760px) {
+      .page { width: min(100% - 14px, 1520px); margin: 12px auto 22px; }
+      .panel-inner { padding: 18px; }
+      .summary-grid, .metric-grid, .controls-grid, .rule-grid, .terminal-head { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <section class="hero">
+      <article class="panel">
+        <div class="panel-inner">
+          <div class="eyebrow">SkyLink Interactive Mission Planner</div>
+          <h1>Create a mission, validate it against the real rule set, then launch the live PX4 SITL chain.</h1>
+          <p>The planner is tied directly to the autonomy backend. Every waypoint edit is validated by the same Python constraints engine that governs the live execution path. The launch button stays locked if radius, altitude, or waypoint-count rules fail.</p>
+          <div class="summary-grid" id="summary-grid"></div>
+        </div>
+      </article>
+      <article class="panel">
+        <div class="panel-inner">
+          <div class="eyebrow">Runtime Connection</div>
+          <div class="metric-grid" id="metric-grid"></div>
+        </div>
+      </article>
+    </section>
+
+    <section class="main-grid">
+      <article class="panel">
+        <div class="panel-inner">
+          <div class="eyebrow">2D Mission Geometry</div>
+          <h2>Home, Geofence, and click-to-place waypoints</h2>
+          <p>Click anywhere inside the grid to place a waypoint in local NED coordinates. The geofence ring is the hard 100 m limit enforced by the backend. The route line is exactly what gets sent to validation and execution.</p>
+          <div class="map-shell">
+            <div id="mission-map"></div>
+            <div class="map-overlay">
+              <div class="overlay-chip" id="map-cursor">Cursor: -</div>
+              <div class="overlay-chip" id="map-home">Home: -</div>
+            </div>
+          </div>
+          <div class="controls-grid">
+            <div class="field">
+              <label for="mission-id">Mission ID</label>
+              <input id="mission-id" value="interactive-mission" spellcheck="false">
+            </div>
+            <div class="field">
+              <label for="cruise-speed">Cruise Speed (m/s)</label>
+              <input id="cruise-speed" type="number" min="0" step="0.1" value="5.0">
+            </div>
+            <div class="field">
+              <label for="waypoint-altitude">Waypoint Altitude (m)</label>
+              <input id="waypoint-altitude" type="number" min="0" step="0.5" value="10.0">
+            </div>
+            <div class="field">
+              <label for="weather-profile">Weather Injection</label>
+              <input id="weather-profile" value="0s:3.8, 10s:4.6, 22s:5.4, 36s:4.4" spellcheck="false">
+            </div>
+            <div class="field field-wide">
+              <label for="remote-sim-toggle">Remote Simulation Mode</label>
+              <div class="toggle-row">
+                <label class="switch" title="Toggle remote simulation execution">
+                  <input id="remote-sim-toggle" type="checkbox">
+                  <span class="slider"></span>
+                </label>
+                <div class="toggle-copy">
+                  <div id="remote-sim-caption" class="toggle-caption">Local execution</div>
+                  <div class="muted" style="font-size:0.82rem;">When enabled, the planner requests remote execution (remote=true) while keeping the same live log terminal and auto-redirect behavior.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="action-row">
+            <button id="execute-button" class="button-primary" type="button" disabled>Execute Mission</button>
+            <button id="cancel-button" type="button" disabled>Cancel Job</button>
+            <button id="undo-button" type="button">Undo Last</button>
+            <button id="clear-button" type="button">Clear Mission</button>
+            <button id="showcase-button" type="button">Open Latest Showcase</button>
+          </div>
+        </div>
+      </article>
+
+      <article class="panel">
+        <div class="panel-inner">
+          <div class="eyebrow">Live Rule Engine</div>
+          <h2>Constraint status and hardware-authenticity HUD</h2>
+          <p>The rule engine calls the backend on every change. The console below streams the raw SITL, bridge, and validator output from the active job. This is the same output that proves the browser is observing the live emulation stack rather than a fake frontend timer.</p>
+          <div class="rule-grid" id="rule-grid"></div>
+          <div id="validation-alert" class="alert">
+            <strong>Waiting for mission geometry.</strong>
+            <div class="muted">Place at least two waypoints to begin validation.</div>
+          </div>
+          <div class="waypoint-list" id="waypoint-list"></div>
+          <div class="terminal">
+            <div class="terminal-head">
+              <div class="log-meta"><label>Target</label><strong id="hud-target">udpin://0.0.0.0:14540</strong></div>
+              <div class="log-meta"><label>Status</label><strong id="hud-status">Idle</strong></div>
+              <div class="log-meta">
+                <label>Remote</label>
+                <strong id="remote-badge" class="muted">Disabled</strong>
+                <div id="remote-detail" class="muted" style="margin-top:6px; font-size:0.82rem;">-</div>
+              </div>
+            </div>
+            <div id="terminal-body" class="terminal-body"></div>
+          </div>
+        </div>
+      </article>
+    </section>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script>
+    const state = {
+      constraints: null,
+      waypoints: [],
+      validation: null,
+      jobId: null,
+      eventSource: null,
+      mapRadiusM: 120,
+      map: null,
+      homeMarker: null,
+      geofenceCircle: null,
+      routePolyline: null,
+      waypointMarkers: [],
+      remoteMode: false,
+      remotePollTimer: null,
+      remoteStatus: null,
+    };
+
+    const mapEl = document.getElementById("mission-map");
+    const missionIdInput = document.getElementById("mission-id");
+    const cruiseSpeedInput = document.getElementById("cruise-speed");
+    const waypointAltitudeInput = document.getElementById("waypoint-altitude");
+    const weatherProfileInput = document.getElementById("weather-profile");
+    const remoteToggle = document.getElementById("remote-sim-toggle");
+    const remoteCaption = document.getElementById("remote-sim-caption");
+    const executeButton = document.getElementById("execute-button");
+    const cancelButton = document.getElementById("cancel-button");
+    const undoButton = document.getElementById("undo-button");
+    const clearButton = document.getElementById("clear-button");
+    const showcaseButton = document.getElementById("showcase-button");
+    const terminalBody = document.getElementById("terminal-body");
+    const hudTarget = document.getElementById("hud-target");
+    const hudStatus = document.getElementById("hud-status");
+    const remoteBadge = document.getElementById("remote-badge");
+    const remoteDetail = document.getElementById("remote-detail");
+    const validationAlert = document.getElementById("validation-alert");
+    const cursorChip = document.getElementById("map-cursor");
+    const mapHomeChip = document.getElementById("map-home");
+
+    function appendTerminal(message, className = "") {
+      const line = document.createElement("div");
+      line.className = `terminal-line ${className}`.trim();
+      line.textContent = message;
+      terminalBody.appendChild(line);
+      terminalBody.scrollTop = terminalBody.scrollHeight;
+    }
+
+    function setAlert(mode, title, detail) {
+      validationAlert.className = `alert ${mode}`.trim();
+      validationAlert.innerHTML = `<strong>${title}</strong><div class="muted">${detail}</div>`;
+    }
+
+    function metricCard(label, value, extraClass = "") {
+      return `<div class="metric"><label>${label}</label><strong class="${extraClass}">${value}</strong></div>`;
+    }
+
+    function ruleChip(label, value, ok) {
+      const className = ok ? "good" : "bad";
+      return `<div class="rule-chip"><label>${label}</label><strong class="${className}">${value}</strong></div>`;
+    }
+
+    function waypointCard(waypoint, index) {
+      const radius = Math.hypot(waypoint.north_m, waypoint.east_m);
+      return `
+        <div class="waypoint-card">
+          <label>Waypoint ${index + 1}</label>
+          <strong>N ${waypoint.north_m.toFixed(1)} m · E ${waypoint.east_m.toFixed(1)} m</strong>
+          <div class="muted" style="margin-top:8px;">Altitude ${waypoint.altitude_m.toFixed(1)} m · Radius ${radius.toFixed(1)} m</div>
+        </div>
+      `;
+    }
+
+    function updateSummary() {
+      if (!state.constraints) { return; }
+      const limits = state.constraints.mission_limits;
+      const speed = state.constraints.speed_band;
+      document.getElementById("summary-grid").innerHTML = [
+        metricCard("Geofence Radius", `${limits.max_radius_m.toFixed(0)} m`),
+        metricCard("Max Altitude", `${limits.max_altitude_m.toFixed(0)} m`),
+        metricCard("Cruise Envelope", `${speed.min_mps.toFixed(1)}-${speed.max_mps.toFixed(1)} m/s`),
+        metricCard("Minimum Waypoints", `${limits.min_waypoints}`),
+      ].join("");
+      document.getElementById("metric-grid").innerHTML = [
+        metricCard("Target", state.constraints.connection.target),
+        metricCard("Bridge", state.constraints.connection.status, "good"),
+        metricCard("Default Speed", `${speed.default_cruise_mps.toFixed(1)} m/s`),
+        metricCard("Home", `${state.constraints.home.lat.toFixed(6)}, ${state.constraints.home.lon.toFixed(6)}`),
+      ].join("");
+      hudTarget.textContent = state.constraints.connection.target;
+      state.mapRadiusM = Math.max(110, limits.max_radius_m * 1.15);
+    }
+
+    function updateWaypointList() {
+      document.getElementById("waypoint-list").innerHTML = state.waypoints.length
+        ? state.waypoints.map(waypointCard).join("")
+        : `<div class="waypoint-card"><label>Waypoint Queue</label><strong class="muted">No waypoints yet</strong></div>`;
+    }
+
+    function updateRuleGrid(valid) {
+      document.getElementById("rule-grid").innerHTML = [
+        ruleChip("Geofence", valid ? "within limit" : "violated", valid),
+        ruleChip("Altitude", valid ? "within limit" : "violated", valid),
+        ruleChip("Min Waypoints", state.waypoints.length >= 2 ? "satisfied" : "need 2+", state.waypoints.length >= 2),
+      ].join("");
+    }
+
+    function nedToLatLng(northM, eastM) {
+      const home = state.constraints?.home;
+      if (!home) { return null; }
+      return [
+        home.lat + (northM / 111320),
+        home.lon + (eastM / (111320 * Math.cos(home.lat * Math.PI / 180))),
+      ];
+    }
+
+    function latLngToNed(lat, lon) {
+      const home = state.constraints?.home;
+      if (!home) {
+        return { north_m: 0, east_m: 0 };
+      }
+      return {
+        north_m: (lat - home.lat) * 111320,
+        east_m: (lon - home.lon) * 111320 * Math.cos(home.lat * Math.PI / 180),
+      };
+    }
+
+    function ensureMap() {
+      if (state.map || !state.constraints) { return; }
+      const home = state.constraints.home;
+      state.map = L.map("mission-map", { zoomControl: true, preferCanvas: true }).setView([home.lat, home.lon], 19);
+      L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+        maxZoom: 20,
+        attribution: "Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community",
+      }).addTo(state.map);
+
+      const homeIcon = L.divIcon({ className: "", html: '<div class="home-icon"></div>', iconSize: [18, 18], iconAnchor: [9, 9] });
+      state.homeMarker = L.marker([home.lat, home.lon], { icon: homeIcon }).addTo(state.map);
+      state.geofenceCircle = L.circle([home.lat, home.lon], {
+        radius: Number(state.constraints.mission_limits.max_radius_m || 100),
+        color: "#00d4aa",
+        weight: 2,
+        fillColor: "#00d4aa",
+        fillOpacity: 0.08,
+      }).addTo(state.map);
+      state.routePolyline = L.polyline([], { color: "#53b7ff", weight: 3 }).addTo(state.map);
+
+      state.map.on("mousemove", (event) => {
+        const local = latLngToNed(event.latlng.lat, event.latlng.lng);
+        cursorChip.textContent = `Cursor: N ${local.north_m.toFixed(1)} m · E ${local.east_m.toFixed(1)} m`;
+      });
+      state.map.on("click", (event) => {
+        const world = latLngToNed(event.latlng.lat, event.latlng.lng);
+        state.waypoints.push({
+          north_m: world.north_m,
+          east_m: world.east_m,
+          altitude_m: Number(waypointAltitudeInput.value || 0),
+        });
+        validateMission();
+      });
+    }
+
+    function syncMap() {
+      if (!state.map || !state.constraints) { return; }
+      const home = state.constraints.home;
+      mapHomeChip.textContent = `Home: ${home.lat.toFixed(6)}, ${home.lon.toFixed(6)}`;
+
+      state.waypointMarkers.forEach((marker) => marker.remove());
+      state.waypointMarkers = state.waypoints.map((waypoint, index) => {
+        const latLng = nedToLatLng(waypoint.north_m, waypoint.east_m);
+        const icon = L.divIcon({ className: "", html: '<div class="waypoint-icon"></div>', iconSize: [16, 16], iconAnchor: [8, 8] });
+        return L.marker(latLng, {
+          icon,
+          title: `Waypoint ${index + 1}`,
+        }).bindTooltip(`WP ${index + 1}<br>N ${waypoint.north_m.toFixed(1)} m<br>E ${waypoint.east_m.toFixed(1)} m`, {
+          direction: "top",
+          offset: [0, -10],
+        }).addTo(state.map);
+      });
+      state.routePolyline.setLatLngs(
+        state.waypoints.map((waypoint) => nedToLatLng(waypoint.north_m, waypoint.east_m)).filter(Boolean)
+      );
+    }
+
+    function parseWeatherProfile() {
+      const source = weatherProfileInput.value.trim();
+      if (!source) { return []; }
+      return source.split(",").map((chunk) => chunk.trim()).filter(Boolean).map((chunk) => {
+        const [timeRaw, gustRaw] = chunk.split(":");
+        const t_s = Number(String(timeRaw).replace(/s/gi, "").trim());
+        const gust = Number(String(gustRaw || "").trim());
+        if (!Number.isFinite(t_s) || !Number.isFinite(gust)) {
+          throw new Error(`Invalid weather profile token: ${chunk}`);
+        }
+        return {
+          t_s,
+          steady_wind_mps: Math.max(0, gust - 1.0),
+          gust_wind_mps: gust,
+        };
+      });
+    }
+
+    function missionPayload() {
+      return {
+        mission_id: missionIdInput.value.trim() || "interactive-mission",
+        cruise_speed_mps: Number(cruiseSpeedInput.value || 0),
+        weather_profile_mode: "full_trip",
+        waypoints: state.waypoints.map((waypoint) => ({
+          north_m: waypoint.north_m,
+          east_m: waypoint.east_m,
+          altitude_m: waypoint.altitude_m,
+        })),
+        weather_profile: parseWeatherProfile(),
+      };
+    }
+
+    let validateTimer = null;
+    async function validateMission() {
+      clearTimeout(validateTimer);
+      validateTimer = setTimeout(async () => {
+        updateWaypointList();
+        syncMap();
+        if (state.waypoints.length < 2) {
+          executeButton.disabled = true;
+          updateRuleGrid(false);
+          setAlert("",
+            "Waiting for mission geometry.",
+            "Place at least two waypoints to satisfy the minimum mission definition.");
+          return;
+        }
+        try {
+          const response = await fetch("/api/mission/validate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(missionPayload()),
+          });
+          const payload = await response.json();
+          if (!response.ok) {
+            throw new Error(payload.detail || "Validation failed.");
+          }
+          state.validation = payload;
+          executeButton.disabled = false;
+          updateRuleGrid(true);
+          setAlert("ok", "Mission validated.", "All active backend constraints passed. Launch is enabled.");
+        } catch (error) {
+          state.validation = null;
+          executeButton.disabled = true;
+          updateRuleGrid(false);
+          setAlert("danger", "Constraint violated.", error.message || "Validation failed.");
+        }
+      }, 140);
+    }
+
+    function closeEventSource() {
+      if (state.eventSource) {
+        state.eventSource.close();
+        state.eventSource = null;
+      }
+    }
+
+    const REMOTE_MODE_STORAGE_KEY = "skylink_planner_remote_sim_mode_v1";
+    function readStoredRemoteMode() {
+      try {
+        return window.localStorage.getItem(REMOTE_MODE_STORAGE_KEY) === "1";
+      } catch (_error) {
+        return false;
+      }
+    }
+
+    function storeRemoteMode(enabled) {
+      try {
+        window.localStorage.setItem(REMOTE_MODE_STORAGE_KEY, enabled ? "1" : "0");
+      } catch (_error) {
+        // ignore storage failures (private browsing, etc.)
+      }
+    }
+
+    function setRemoteBadge(label, className, detail) {
+      if (!remoteBadge || !remoteDetail) { return; }
+      remoteBadge.textContent = label;
+      remoteBadge.className = className || "muted";
+      remoteDetail.textContent = detail || "-";
+    }
+
+    function summarizeRemoteStatus(payload) {
+      if (!payload || typeof payload !== "object") {
+        return { label: "Unavailable", className: "bad", detail: "no payload" };
+      }
+      const raw = payload.status ?? payload.instance_status ?? payload.state ?? payload.health ?? "";
+      const normalized = String(raw).toLowerCase();
+      const ok = payload.ok;
+      let className = "warn";
+      if (ok === true || ["ok", "ready", "active", "running", "alive"].includes(normalized)) { className = "good"; }
+      if (ok === false || ["down", "error", "failed", "unavailable", "stopped"].includes(normalized)) { className = "bad"; }
+
+      const bits = [];
+      const instanceId = payload.instance_id ?? payload.id;
+      if (instanceId !== undefined && instanceId !== null && String(instanceId).length) { bits.push(`id=${instanceId}`); }
+      if (payload.label) { bits.push(String(payload.label)); }
+      if (payload.ssh_ok !== undefined) { bits.push(`ssh=${payload.ssh_ok ? "ok" : "fail"}`); }
+      if (payload.mavlink_ok !== undefined) { bits.push(`mavlink=${payload.mavlink_ok ? "ok" : "fail"}`); }
+      if (payload.px4_running !== undefined) { bits.push(`px4=${payload.px4_running ? "yes" : "no"}`); }
+      const detail = bits.join(" ") || payload.detail || "-";
+
+      const label = raw ? String(raw) : ok === true ? "OK" : ok === false ? "Down" : "Unknown";
+      return { label, className, detail };
+    }
+
+    async function fetchJsonWithTimeout(url, options, timeoutMs) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const response = await fetch(url, { ...(options || {}), signal: controller.signal });
+        const payload = await response.json().catch(() => null);
+        return { response, payload };
+      } finally {
+        clearTimeout(timeout);
+      }
+    }
+
+    function isRemoteExecutionReady(payload) {
+      if (!payload || typeof payload !== "object") { return false; }
+      if (payload.configured === false) { return false; }
+      if (payload.ready_for_remote_execution === true) { return true; }
+      return Boolean(
+        payload.reachable === true &&
+        payload.repo_present === true &&
+        payload.venv_present === true &&
+        payload.runner_present === true &&
+        payload.px4_binary_present === true
+      );
+    }
+
+    async function refreshRemoteStatus({ fallbackToLocal = false } = {}) {
+      try {
+        const { response, payload } = await fetchJsonWithTimeout("/api/remote/status", null, 8000);
+        state.remoteStatus = payload;
+        if (!response.ok) {
+          setRemoteBadge("Unavailable", "bad", `HTTP ${response.status}`);
+          return false;
+        }
+        const summary = summarizeRemoteStatus(payload);
+        const ready = isRemoteExecutionReady(payload);
+        setRemoteBadge(summary.label, ready ? "good" : summary.className, summary.detail);
+        if (!ready && fallbackToLocal) {
+          setRemoteMode(false);
+          storeRemoteMode(false);
+          appendTerminal("[STATUS] Remote bridge is not configured; using this Vast VM directly.", "status");
+        }
+        return ready;
+      } catch (error) {
+        const detail = error?.name === "AbortError" ? "timeout" : (error?.message || "unknown error");
+        state.remoteStatus = null;
+        setRemoteBadge("Unavailable", "bad", detail);
+        if (fallbackToLocal) {
+          setRemoteMode(false);
+          storeRemoteMode(false);
+          appendTerminal("[STATUS] Remote bridge is unavailable; using this Vast VM directly.", "status");
+        }
+        return false;
+      }
+    }
+
+    async function pollRemoteStatusOnce() {
+      if (!state.remoteMode) { return; }
+      await refreshRemoteStatus();
+    }
+
+    function startRemotePolling() {
+      if (state.remotePollTimer) { return; }
+      pollRemoteStatusOnce();
+      state.remotePollTimer = setInterval(pollRemoteStatusOnce, 5000);
+    }
+
+    function stopRemotePolling() {
+      if (!state.remotePollTimer) { return; }
+      clearInterval(state.remotePollTimer);
+      state.remotePollTimer = null;
+    }
+
+    function setRemoteMode(enabled, { persist = true } = {}) {
+      state.remoteMode = Boolean(enabled);
+      if (remoteToggle) {
+        remoteToggle.checked = state.remoteMode;
+      }
+      if (remoteCaption) {
+        remoteCaption.textContent = state.remoteMode ? "Remote execution" : "Local execution";
+      }
+      executeButton.textContent = state.remoteMode ? "Execute Mission (Remote)" : "Execute Mission";
+      if (persist) {
+        storeRemoteMode(state.remoteMode);
+      }
+      if (state.remoteMode) {
+        setRemoteBadge("Checking...", "warn", "polling /api/remote/status");
+        startRemotePolling();
+      } else {
+        stopRemotePolling();
+        setRemoteBadge("Disabled", "muted", "-");
+      }
+    }
+
+    async function cancelMission() {
+      if (!state.jobId) {
+        appendTerminal("[WARN] No active job_id to cancel.", "error");
+        return;
+      }
+      cancelButton.disabled = true;
+      const base = "/api/mission/cancel";
+      const params = new URLSearchParams({ job_id: state.jobId });
+      if (state.remoteMode) { params.set("remote", "true"); }
+      const url = `${base}?${params.toString()}`;
+      appendTerminal(`[STATUS] Sending cancel request to ${url}`, "status");
+      try {
+        const response = await fetch(url, { method: "POST" });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(payload.detail || `Cancel failed (HTTP ${response.status})`);
+        }
+        appendTerminal("[STATUS] Cancel requested. Waiting for backend to stop the job...", "status");
+      } catch (error) {
+        cancelButton.disabled = false;
+        appendTerminal(`[ERROR] ${error.message || "Cancel failed."}`, "error");
+      }
+    }
+
+    function connectLogs(jobId) {
+      closeEventSource();
+      const eventSource = new EventSource(`/api/system/logs?job_id=${encodeURIComponent(jobId)}`);
+      state.eventSource = eventSource;
+      eventSource.addEventListener("metadata", (event) => {
+        const payload = JSON.parse(event.data);
+        hudTarget.textContent = payload.target || hudTarget.textContent;
+        hudStatus.textContent = payload.bridge_status || payload.status || "Running";
+        appendTerminal(`[META] job=${payload.job_id} target=${payload.target} bridge=${payload.bridge_status}`, "meta");
+      });
+      eventSource.addEventListener("status", (event) => {
+        const payload = JSON.parse(event.data);
+        hudStatus.textContent = payload.status || "Running";
+        appendTerminal(`[STATUS] ${payload.message}`, "status");
+      });
+      eventSource.addEventListener("log", (event) => {
+        const payload = JSON.parse(event.data);
+        appendTerminal(payload.message || "");
+      });
+      eventSource.addEventListener("complete", (event) => {
+        const payload = JSON.parse(event.data);
+        hudStatus.textContent = "Completed";
+        appendTerminal("[STATUS] Mission execution completed. Redirecting to showcase...", "status");
+        eventSource.close();
+        state.eventSource = null;
+        cancelButton.disabled = true;
+        if (remoteToggle) { remoteToggle.disabled = false; }
+        if (state.remoteMode) { startRemotePolling(); }
+        setTimeout(() => {
+          window.location.href = payload.redirect_url || "../showcase/latest/index.html";
+        }, 1200);
+      });
+      eventSource.addEventListener("failed", (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          appendTerminal(`[ERROR] execution failed with exit code ${payload.exit_code}`, "error");
+        } catch (_error) {
+          appendTerminal("[ERROR] log stream failed.", "error");
+        }
+        hudStatus.textContent = "Failed";
+        eventSource.close();
+        state.eventSource = null;
+        executeButton.disabled = false;
+        cancelButton.disabled = true;
+        if (remoteToggle) { remoteToggle.disabled = false; }
+        if (state.remoteMode) { startRemotePolling(); }
+      });
+      eventSource.addEventListener("cancelled", (event) => {
+        let payload = {};
+        try {
+          payload = JSON.parse(event.data);
+        } catch (_error) {
+          payload = {};
+        }
+        hudStatus.textContent = "Cancelled";
+        appendTerminal(`[STATUS] Mission execution cancelled${payload.detail ? `: ${payload.detail}` : "."}`, "status");
+        eventSource.close();
+        state.eventSource = null;
+        executeButton.disabled = false;
+        cancelButton.disabled = true;
+        if (remoteToggle) { remoteToggle.disabled = false; }
+        if (state.remoteMode) { startRemotePolling(); }
+      });
+      eventSource.onerror = () => {
+        if (state.eventSource === eventSource) {
+          appendTerminal("[WARN] Event stream disconnected.", "error");
+        }
+      };
+    }
+
+    async function executeMission() {
+      executeButton.disabled = true;
+      hudStatus.textContent = "Launching";
+      cancelButton.disabled = true;
+      if (remoteToggle) { remoteToggle.disabled = true; }
+      if (state.remoteMode) { stopRemotePolling(); }
+      if (state.remoteMode) {
+        await refreshRemoteStatus({ fallbackToLocal: true });
+      }
+      const executeUrl = state.remoteMode ? "/api/mission/execute?remote=true" : "/api/mission/execute";
+      appendTerminal(`[STATUS] Sending mission to ${executeUrl}`, "status");
+      try {
+        const payloadBody = missionPayload();
+        if (state.remoteMode) {
+          payloadBody.execution_mode = "remote";
+        }
+        const headers = { "Content-Type": "application/json" };
+        if (state.remoteMode) { headers["X-Skylink-Execution-Mode"] = "remote"; }
+        const response = await fetch(executeUrl, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(payloadBody),
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.detail || "Mission launch failed.");
+        }
+        state.jobId = payload.job_id;
+        hudTarget.textContent = payload.target || hudTarget.textContent;
+        hudStatus.textContent = payload.bridge_status || payload.status || "Running";
+        appendTerminal(`[STATUS] Mission job ${payload.job_id} started. Connecting log stream...`, "status");
+        cancelButton.disabled = false;
+        connectLogs(payload.job_id);
+      } catch (error) {
+        executeButton.disabled = false;
+        cancelButton.disabled = true;
+        if (remoteToggle) { remoteToggle.disabled = false; }
+        if (state.remoteMode) { startRemotePolling(); }
+        hudStatus.textContent = "Idle";
+        appendTerminal(`[ERROR] ${error.message || "Mission launch failed."}`, "error");
+      }
+    }
+
+    undoButton.addEventListener("click", () => {
+      state.waypoints.pop();
+      validateMission();
+    });
+    clearButton.addEventListener("click", () => {
+      state.waypoints = [];
+      validateMission();
+    });
+    showcaseButton.addEventListener("click", () => {
+      window.location.href = "../showcase/latest/index.html";
+    });
+    if (remoteToggle) {
+      remoteToggle.addEventListener("change", () => setRemoteMode(remoteToggle.checked));
+    }
+    executeButton.addEventListener("click", executeMission);
+    cancelButton.addEventListener("click", cancelMission);
+    missionIdInput.addEventListener("input", validateMission);
+    cruiseSpeedInput.addEventListener("input", validateMission);
+    waypointAltitudeInput.addEventListener("input", syncMap);
+    weatherProfileInput.addEventListener("input", validateMission);
+
+    async function initialize() {
+      appendTerminal("[META] Loading /api/constraints", "meta");
+      const response = await fetch("/api/constraints");
+      state.constraints = await response.json();
+      cruiseSpeedInput.value = String(state.constraints.speed_band.default_cruise_mps.toFixed(1));
+      weatherProfileInput.value = state.constraints.default_weather_profile
+        .map((point) => `${point.t_s.toFixed(0)}s:${Number(point.gust_wind_mps ?? point.steady_wind_mps).toFixed(1)}`)
+        .join(", ");
+      ensureMap();
+      updateSummary();
+      updateWaypointList();
+      syncMap();
+      validateMission();
+      const requestedRemoteMode = readStoredRemoteMode();
+      if (requestedRemoteMode) {
+        const remoteReady = await refreshRemoteStatus({ fallbackToLocal: true });
+        setRemoteMode(remoteReady, { persist: false });
+      } else {
+        setRemoteMode(false, { persist: false });
+      }
+    }
+
+    initialize().catch((error) => {
+      setAlert("danger", "Planner failed to initialize.", error.message || "Could not load constraints.");
+      appendTerminal(`[ERROR] ${error.message || "Could not load constraints."}`, "error");
+    });
+  </script>
+</body>
+</html>

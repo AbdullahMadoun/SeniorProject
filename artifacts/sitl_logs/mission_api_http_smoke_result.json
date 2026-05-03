@@ -1,0 +1,173 @@
+{
+  "constraints_target": "udpin://0.0.0.0:14540",
+  "validation_valid": true,
+  "job_id": "412551fd3513",
+  "metadata_event": {
+    "job_id": "412551fd3513",
+    "status": "running",
+    "target": "udpin://0.0.0.0:14540",
+    "bridge_status": "Bridge Active",
+    "redirect_url": "../dashboard/index.html",
+    "created_at": "2026-04-01T19:13:08.071364+00:00",
+    "spec": {
+      "mission_id": "dashboard-http-smoke-buffered",
+      "cruise_speed_mps": 5.0,
+      "rtl_after_mission": true,
+      "capture_images": false,
+      "waypoints": [
+        {
+          "north_m": 0.0,
+          "east_m": 0.0,
+          "altitude_m": 10.0
+        },
+        {
+          "north_m": 18.0,
+          "east_m": 12.0,
+          "altitude_m": 10.0
+        },
+        {
+          "north_m": 28.0,
+          "east_m": -8.0,
+          "altitude_m": 10.0
+        }
+      ],
+      "weather_profile": [
+        {
+          "t_s": 0.0,
+          "steady_wind_mps": 3.8,
+          "gust_wind_mps": 5.2
+        },
+        {
+          "t_s": 5.0,
+          "steady_wind_mps": 4.6,
+          "gust_wind_mps": 6.3
+        },
+        {
+          "t_s": 12.0,
+          "steady_wind_mps": 7.8,
+          "gust_wind_mps": 10.8
+        },
+        {
+          "t_s": 36.0,
+          "steady_wind_mps": 4.8,
+          "gust_wind_mps": 6.6
+        }
+      ],
+      "environment": {
+        "wind_speed_mps": 3.8,
+        "wind_direction_deg": 60.0,
+        "gust_multiplier": 1.38
+      },
+      "battery": {
+        "initial_battery_percent": 97.0,
+        "rtl_battery_threshold_percent": 20.0
+      }
+    }
+  },
+  "telemetry_event": {
+    "elapsed_s": 18.047,
+    "snapshot": {
+      "connected": true,
+      "armed": false,
+      "in_air": false,
+      "mode": "hold",
+      "battery_percent": 100.0,
+      "position": {
+        "lat": 47.3979709,
+        "lon": 8.5461634,
+        "alt_m": -0.01600000075995922
+      },
+      "mission_progress": {
+        "current": 0,
+        "total": 3
+      }
+    },
+    "gps_info": {
+      "lat": 47.3979712,
+      "lon": 8.5461636,
+      "relative_altitude_m": -0.0010000000474974513,
+      "absolute_altitude_m": 0.27400001883506775,
+      "num_satellites": 10,
+      "fix_type": "fix_3d"
+    },
+    "local_pose": {
+      "north_m": 0.03249373286962509,
+      "east_m": -0.008575855754315853,
+      "down_m": -0.021696895360946655,
+      "yaw_deg": 97.79786682128906,
+      "roll_deg": 0.1380528062582016,
+      "pitch_deg": -0.3695322573184967
+    },
+    "attitude_euler": {
+      "roll_deg": 0.1380528062582016,
+      "pitch_deg": -0.3695322573184967,
+      "yaw_deg": 97.79786682128906
+    },
+    "battery": {
+      "percent": 100.0
+    }
+  },
+  "final_job_snapshot": {
+    "job_id": "412551fd3513",
+    "status": "completed",
+    "created_at": "2026-04-01T19:13:08.071364+00:00",
+    "redirect_url": "../dashboard/index.html",
+    "exit_code": 0,
+    "event_count": 2807296,
+    "telemetry_event_count": 10,
+    "spec": {
+      "mission_id": "dashboard-http-smoke-buffered",
+      "cruise_speed_mps": 5.0,
+      "rtl_after_mission": true,
+      "capture_images": false,
+      "waypoints": [
+        {
+          "north_m": 0.0,
+          "east_m": 0.0,
+          "altitude_m": 10.0
+        },
+        {
+          "north_m": 18.0,
+          "east_m": 12.0,
+          "altitude_m": 10.0
+        },
+        {
+          "north_m": 28.0,
+          "east_m": -8.0,
+          "altitude_m": 10.0
+        }
+      ],
+      "weather_profile": [
+        {
+          "t_s": 0.0,
+          "steady_wind_mps": 3.8,
+          "gust_wind_mps": 5.2
+        },
+        {
+          "t_s": 5.0,
+          "steady_wind_mps": 4.6,
+          "gust_wind_mps": 6.3
+        },
+        {
+          "t_s": 12.0,
+          "steady_wind_mps": 7.8,
+          "gust_wind_mps": 10.8
+        },
+        {
+          "t_s": 36.0,
+          "steady_wind_mps": 4.8,
+          "gust_wind_mps": 6.6
+        }
+      ],
+      "environment": {
+        "wind_speed_mps": 3.8,
+        "wind_direction_deg": 60.0,
+        "gust_multiplier": 1.38
+      },
+      "battery": {
+        "initial_battery_percent": 97.0,
+        "rtl_battery_threshold_percent": 20.0
+      }
+    }
+  }
+}

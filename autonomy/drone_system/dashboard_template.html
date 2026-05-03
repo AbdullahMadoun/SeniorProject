@@ -1,0 +1,1516 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SkyLink Mega-Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.min.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"
+    }
+  }
+  </script>
+  <style>
+    :root {
+      --bg: #05070b;
+      --bg2: #0a0a0f;
+      --surface: rgba(18, 18, 26, 0.84);
+      --surface-strong: rgba(12, 14, 20, 0.94);
+      --border: rgba(255, 255, 255, 0.08);
+      --text: #e8e8ed;
+      --muted: #98a4b7;
+      --accent: #00d4aa;
+      --accent-blue: #53b7ff;
+      --warn: #ffb454;
+      --danger: #ff6b7a;
+      --shadow: 0 26px 72px rgba(0, 0, 0, 0.44);
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      font-family: Inter, sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(0, 212, 170, 0.18), transparent 28%),
+        radial-gradient(circle at 90% 10%, rgba(83, 183, 255, 0.12), transparent 20%),
+        linear-gradient(180deg, #04060a, #090a10 55%, #05070b);
+      overflow: hidden;
+    }
+    .page {
+      width: min(1680px, calc(100% - 24px));
+      margin: 12px auto;
+      height: calc(100vh - 24px);
+      min-height: calc(100vh - 24px);
+      display: grid;
+      grid-template-columns: 430px minmax(0, 1fr);
+      gap: 18px;
+      overflow: hidden;
+    }
+    .panel {
+      background: linear-gradient(180deg, rgba(18, 18, 26, 0.96), rgba(18, 18, 26, 0.72));
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(18px);
+      overflow: hidden;
+      min-height: 0;
+    }
+    .scroll {
+      padding: 22px;
+      display: grid;
+      gap: 16px;
+      overflow-y: auto;
+      overflow-x: hidden;
+      height: 100%;
+      min-height: 0;
+      scrollbar-gutter: stable;
+    }
+    .right {
+      display: grid;
+      gap: 18px;
+      grid-template-rows: minmax(320px, 0.9fr) minmax(420px, 1.1fr);
+      min-height: 0;
+    }
+    .eyebrow { color: var(--accent); text-transform: uppercase; letter-spacing: 0.16em; font-size: 0.72rem; font-weight: 700; }
+    h1, h2, h3, p { margin: 0; }
+    h1 { font-size: clamp(2rem, 4vw, 3.2rem); line-height: 0.94; letter-spacing: -0.04em; }
+    h2 { font-size: 1.12rem; letter-spacing: -0.02em; }
+    h3 { font-size: 0.96rem; letter-spacing: -0.01em; }
+    p { color: var(--muted); line-height: 1.6; }
+    .grid2, .grid3, .grid4 { display: grid; gap: 12px; }
+    .grid2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .grid3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .grid4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .card, .field, .banner, .terminal-meta, .media-card, .hud, .floating-panel {
+      padding: 14px 16px;
+      border-radius: 18px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(255, 255, 255, 0.04);
+      min-width: 0;
+    }
+    .glass {
+      background: rgba(9, 12, 18, 0.7);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 18px 38px rgba(0, 0, 0, 0.36);
+    }
+    .card label, .field label, .terminal-meta label, .media-card label, .hud label, .floating-panel label {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-size: 0.72rem;
+    }
+    .card strong,
+    .item strong,
+    .terminal-meta strong,
+    .media-card strong,
+    .media-card div,
+    .chip strong,
+    .status-flag strong {
+      display: block;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+    .banner.ok { border-color: rgba(0, 212, 170, 0.42); background: rgba(0, 212, 170, 0.1); }
+    .banner.bad { border-color: rgba(255, 107, 122, 0.46); background: rgba(255, 107, 122, 0.12); }
+    .field input[type=range] { width: 100%; accent-color: var(--accent); }
+    .meta { margin-top: 6px; display: flex; justify-content: space-between; gap: 10px; color: var(--muted); font-size: 0.84rem; }
+    .actions, .seg { display: flex; gap: 10px; flex-wrap: wrap; }
+    .action-strip {
+      position: sticky;
+      bottom: -2px;
+      z-index: 8;
+      padding: 10px 0 2px;
+      margin-top: -2px;
+      background: linear-gradient(180deg, rgba(18, 18, 26, 0), rgba(18, 18, 26, 0.94) 26%);
+    }
+    button {
+      appearance: none;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text);
+      padding: 12px 16px;
+      border-radius: 999px;
+      cursor: pointer;
+      font: inherit;
+      font-weight: 700;
+      transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
+    }
+    button:hover:not(:disabled) { border-color: rgba(255, 255, 255, 0.18); transform: translateY(-1px); }
+    button.primary { background: linear-gradient(135deg, rgba(0, 212, 170, 0.24), rgba(83, 183, 255, 0.24)); border-color: rgba(0, 212, 170, 0.44); }
+    button.active, button[data-active="true"] { background: linear-gradient(135deg, rgba(83, 183, 255, 0.2), rgba(0, 212, 170, 0.22)); border-color: rgba(83, 183, 255, 0.42); }
+    button:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+    .list { display: grid; gap: 10px; max-height: 220px; overflow: auto; }
+    .item { padding: 14px 16px; border-radius: 16px; border: 1px solid rgba(255, 255, 255, 0.08); background: rgba(255, 255, 255, 0.04); min-width: 0; }
+    .terminal { border-radius: 20px; overflow: hidden; border: 1px solid rgba(255, 255, 255, 0.08); background: #020307; }
+    .terminal-head {
+      padding: 12px 16px;
+      display: grid;
+      grid-template-columns: minmax(0, 1.6fr) minmax(140px, 0.8fr);
+      gap: 10px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(255, 255, 255, 0.03);
+      align-items: start;
+    }
+    .terminal-body {
+      min-height: 250px;
+      max-height: 360px;
+      overflow: auto;
+      padding: 16px;
+      white-space: pre-wrap;
+      font-family: Consolas, monospace;
+      font-size: 0.86rem;
+      line-height: 1.5;
+      color: #bce7da;
+    }
+    .error { color: #ff9aaa; }
+    .info { color: #8ed8ff; }
+    .head, .toolbar {
+      padding: 18px 22px 0;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+.map-shell, .scene-shell {
+      position: relative;
+      margin: 16px 18px 18px;
+      height: calc(100% - 76px);
+      min-height: 320px;
+      border-radius: 22px;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      background: #05070b;
+      min-width: 0;
+    }
+    #map, #scene { position: absolute; inset: 0; z-index: 1; }
+    .overlay {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      z-index: 500;
+      display: grid;
+      gap: 10px;
+      width: min(340px, calc(100% - 32px));
+      pointer-events: none;
+    }
+    .overlay .card, .hud, .floating-panel { background: rgba(8, 11, 18, 0.76); backdrop-filter: blur(14px); }
+    .leaflet-control-attribution { background: rgba(10, 10, 15, 0.68); color: var(--muted); }
+    .leaflet-control-attribution a { color: var(--accent); }
+    .home-icon, .drone-icon, .wp-icon, .pulse-icon {
+      border-radius: 999px;
+      border: 2px solid rgba(255, 255, 255, 0.86);
+      box-shadow: 0 0 20px rgba(0, 0, 0, 0.35);
+    }
+    .home-icon { width: 20px; height: 20px; background: var(--accent); }
+    .drone-icon { width: 20px; height: 20px; background: var(--accent-blue); }
+    .wp-icon { width: 16px; height: 16px; background: var(--warn); }
+    .pulse-icon {
+      width: 16px;
+      height: 16px;
+      background: radial-gradient(circle, rgba(255,107,122,0.85) 0%, rgba(255,107,122,0.25) 55%, transparent 72%);
+      border-color: rgba(255, 107, 122, 0.65);
+    }
+    .hud-wrap {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      right: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      pointer-events: none;
+      z-index: 20;
+    }
+    .hud-grid {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 10px;
+      flex: 1 1 auto;
+      max-width: min(920px, calc(100% - 410px));
+      min-width: 0;
+    }
+    .legend { flex: 0 0 190px; max-width: 190px; min-width: 0; }
+    .legend ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; color: var(--muted); }
+    .legend li { display: flex; align-items: center; gap: 8px; }
+    .sw { width: 12px; height: 12px; border-radius: 999px; display: inline-block; }
+    .media-card { overflow: hidden; }
+    .media-card video { width: 100%; display: block; margin-top: 10px; border-radius: 14px; background: #04060a; }
+    .scene-shell::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background: linear-gradient(180deg, rgba(0, 0, 0, 0.04), transparent 22%, transparent 76%, rgba(0, 0, 0, 0.22));
+    }
+    .fpv-shell {
+      position: absolute;
+      right: 18px;
+      bottom: 18px;
+      width: min(31vw, 390px);
+      min-width: min(300px, calc(100% - 36px));
+      max-width: calc(100% - 36px);
+      max-height: calc(100% - 36px);
+      z-index: 25;
+      overflow: hidden;
+      border-radius: 22px;
+      pointer-events: auto;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+    }
+    .fpv-shell.hidden { display: none; }
+    .fpv-header {
+      position: relative;
+      z-index: 8;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 12px 14px 0;
+      font-size: 0.76rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: rgba(232, 232, 237, 0.88);
+      min-width: 0;
+    }
+    .fpv-header span { min-width: 0; overflow-wrap: anywhere; word-break: break-word; }
+    .fpv-header span:last-child { color: var(--accent); text-align: right; }
+    .fpv-media {
+      position: relative;
+      min-height: 220px;
+      aspect-ratio: 16 / 9;
+      margin: 10px 12px 0;
+      border-radius: 18px;
+      overflow: hidden;
+      background: #000;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+    }
+    .fpv-shell img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+      z-index: 2;
+      opacity: 1;
+      background: #000;
+    }
+    .fpv-placeholder {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: 28px;
+      text-align: center;
+      color: var(--muted);
+      background: linear-gradient(180deg, rgba(3, 4, 8, 0.82), rgba(5, 9, 16, 0.76));
+      z-index: 3;
+    }
+    .fpv-shell.live .fpv-placeholder { display: none !important; }
+    .fpv-ar { position: absolute; inset: 0; z-index: 6; pointer-events: none; }
+    .fpv-ar .heading-tape,
+    .fpv-ar .horizon-frame { display: none; }
+    .fpv-detection-layer { position: absolute; inset: 0; z-index: 8; pointer-events: none; }
+    .fpv-detection-layer.stale { display: none; }
+    .fpv-detection-box {
+      position: absolute;
+      border: 2px solid var(--accent);
+      box-shadow: 0 0 18px rgba(0, 212, 170, 0.42);
+      background: rgba(0, 212, 170, 0.06);
+    }
+    .fpv-detection-crosshair {
+      position: absolute;
+      width: 32px;
+      height: 32px;
+      border: 1px solid rgba(255, 255, 255, 0.72);
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+    }
+    .fpv-detection-crosshair::before,
+    .fpv-detection-crosshair::after {
+      content: "";
+      position: absolute;
+      background: var(--accent);
+    }
+    .fpv-detection-crosshair::before { left: 50%; top: -7px; width: 1px; height: 44px; }
+    .fpv-detection-crosshair::after { top: 50%; left: -7px; width: 44px; height: 1px; }
+    .fpv-detection-label {
+      position: absolute;
+      transform: translateY(-100%);
+      padding: 4px 7px;
+      border-radius: 6px;
+      background: rgba(0, 0, 0, 0.72);
+      border: 1px solid rgba(0, 212, 170, 0.55);
+      color: #e8fffb;
+      font-size: 0.66rem;
+      font-weight: 800;
+      letter-spacing: 0;
+      white-space: nowrap;
+    }
+    .heading-tape {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      right: 12px;
+      height: 42px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: rgba(2, 4, 8, 0.38);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+    }
+    .heading-center {
+      position: absolute;
+      left: 50%;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      transform: translateX(-50%);
+      background: rgba(255, 255, 255, 0.66);
+    }
+    .heading-track {
+      position: absolute;
+      top: 0;
+      left: 50%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      transform: translateX(0);
+      white-space: nowrap;
+      will-change: transform;
+    }
+    .heading-mark { width: 56px; flex: 0 0 56px; text-align: center; font-size: 0.72rem; color: rgba(232, 232, 237, 0.86); }
+    .heading-mark strong { display: block; margin-top: 6px; font-size: 0.8rem; color: #ffffff; }
+    .horizon-frame {
+      position: absolute;
+      inset: 64px 12px 18px 12px;
+      border-radius: 20px;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: radial-gradient(circle at center, rgba(255, 255, 255, 0.04), transparent 65%);
+    }
+    .horizon-roll, .horizon-pitch { position: absolute; inset: -42%; will-change: transform; }
+    .sky, .earth { position: absolute; left: 0; width: 100%; height: 50%; }
+    .sky { top: 0; background: linear-gradient(180deg, rgba(72, 132, 255, 0.55), rgba(24, 47, 96, 0.46)); }
+    .earth { bottom: 0; background: linear-gradient(180deg, rgba(74, 51, 28, 0.86), rgba(32, 21, 12, 0.94)); }
+    .pitch-ladder { position: absolute; inset: 0; }
+    .pitch-mark {
+      position: absolute;
+      left: 50%;
+      width: 54%;
+      margin-left: -27%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: rgba(255, 255, 255, 0.82);
+      font-size: 0.72rem;
+      letter-spacing: 0.04em;
+    }
+    .pitch-line { width: 34%; height: 2px; background: rgba(255, 255, 255, 0.72); }
+    .pitch-line.short { width: 22%; opacity: 0.6; }
+    .horizon-center {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 120px;
+      height: 60px;
+      transform: translate(-50%, -50%);
+    }
+    .horizon-center::before, .horizon-center::after {
+      content: "";
+      position: absolute;
+      top: 50%;
+      width: 44px;
+      height: 2px;
+      background: var(--accent);
+      transform: translateY(-50%);
+      box-shadow: 0 0 12px rgba(0, 212, 170, 0.32);
+    }
+    .horizon-center::before { left: 0; }
+    .horizon-center::after { right: 0; }
+    .horizon-center span {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 18px;
+      height: 18px;
+      transform: translate(-50%, -50%);
+      border: 2px solid var(--accent);
+      border-radius: 50%;
+      background: rgba(0, 212, 170, 0.08);
+    }
+    .fpv-bottom {
+      position: relative;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      padding: 12px;
+      background: linear-gradient(180deg, rgba(10, 12, 18, 0.28), rgba(10, 12, 18, 0.72));
+      font-size: 0.76rem;
+    }
+    .status-flag {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 10px 12px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      min-width: 0;
+    }
+    .status-flag::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent-blue);
+      box-shadow: 0 0 10px rgba(83, 183, 255, 0.6);
+    }
+    .status-flag.alert::before {
+      background: var(--danger);
+      box-shadow: 0 0 10px rgba(255, 107, 122, 0.6);
+    }
+    .status-copy {
+      min-width: 0;
+      display: grid;
+      gap: 4px;
+    }
+    .status-copy span {
+      color: rgba(232, 232, 237, 0.92);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+    .status-copy strong {
+      display: block;
+      font-size: 0.88rem;
+      color: #fff;
+      letter-spacing: 0;
+      text-transform: none;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 12px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--muted);
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .chip strong { color: var(--text); letter-spacing: 0; text-transform: none; }
+    @media (max-width: 1480px) {
+      .hud-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); max-width: calc(100% - 360px); }
+      .fpv-shell { width: min(36vw, 370px); }
+    }
+    @media (max-width: 1320px) {
+      body { overflow-y: auto; }
+      .page { grid-template-columns: 1fr; height: auto; min-height: calc(100vh - 24px); }
+      .right { grid-template-rows: 500px 640px; }
+      .hud-grid { max-width: calc(100% - 320px); }
+      .fpv-shell { width: min(54vw, 380px); }
+    }
+@media (max-width: 860px) {
+      .page { width: min(100% - 12px, 1680px); margin: 8px auto; }
+      .grid2, .grid3, .grid4, .terminal-head, .hud-grid { grid-template-columns: 1fr; }
+      .hud-wrap { position: static; padding: 12px; flex-direction: column; pointer-events: auto; }
+      .scene-shell { height: auto; min-height: 760px; }
+      .legend { max-width: none; }
+      .fpv-shell { left: 12px; right: 12px; bottom: 12px; width: auto; min-width: 0; max-width: none; }
+      .fpv-bottom { grid-template-columns: 1fr; }
+      .event-timeline { height: 44px; padding: 0 10px; }
+      .event-timeline-label { display: none; }
+    }
+    .event-timeline {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 52px;
+      flex-shrink: 0;
+      background: rgba(8, 11, 18, 0.88);
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 16px;
+      z-index: 15;
+      overflow: hidden;
+    }
+    .event-timeline-track {
+      flex: 1;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 999px;
+      position: relative;
+      cursor: pointer;
+    }
+    .event-timeline-progress {
+      position: absolute;
+      left: 0;
+      top: 0;
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), var(--accent-blue));
+      border-radius: 999px;
+      transition: width 0.3s ease;
+    }
+    .event-marker {
+      position: absolute;
+      top: -4px;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      transform: translateX(-50%);
+      cursor: pointer;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      transition: transform 0.15s ease, border-color 0.15s ease;
+    }
+    .event-marker:hover {
+      transform: translateX(-50%) scale(1.3);
+      border-color: rgba(255, 255, 255, 0.7);
+      z-index: 2;
+    }
+    .event-marker.rtl { background: var(--warn); }
+    .event-marker.land { background: var(--accent); }
+    .event-marker.mode { background: var(--accent-blue); }
+    .event-marker.battery { background: var(--danger); }
+    .event-marker.wind { background: var(--danger); }
+    .event-marker.dock { background: var(--accent); }
+    .event-timeline-label {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+    .event-detail-popup {
+      display: none;
+      position: absolute;
+      bottom: 58px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(12, 14, 20, 0.96);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 12px;
+      padding: 10px 14px;
+      min-width: 200px;
+      max-width: 280px;
+      z-index: 30;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    }
+    .event-detail-popup.visible { display: block; }
+    .event-detail-popup .event-time {
+      font-size: 0.72rem;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 4px;
+    }
+    .event-detail-popup .event-message {
+      font-size: 0.84rem;
+      color: var(--text);
+      line-height: 1.4;
+    }
+    .event-count {
+      font-size: 0.72rem;
+      color: var(--muted);
+      white-space: nowrap;
+      padding: 4px 8px;
+      background: rgba(255, 255, 255, 0.06);
+      border-radius: 999px;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <aside class="panel">
+      <div class="scroll">
+        <div class="eyebrow">Unified Ground Control</div>
+        <h1>SkyLink Mega-Dashboard</h1>
+        <p>Planner, weather injection, live telemetry, FPV, and judge-facing proof fused into one control surface.</p>
+        <div class="grid2">
+          <div class="card"><label>Geofence</label><strong id="m-geofence">100 m</strong></div>
+          <div class="card"><label>Home</label><strong id="m-home">47.3979, 8.5461</strong></div>
+          <div class="card"><label>Latest Dock Error</label><strong id="m-dock">0.00 m</strong></div>
+          <div class="card"><label>Latest Proof</label><strong id="m-proof">idle</strong></div>
+        </div>
+        <div class="actions"><button id="undo">Undo</button><button id="clear">Clear</button></div>
+        <div class="grid2">
+          <div class="field"><label>Mission Altitude</label><input id="alt" type="range" min="5" max="100" step="1" value="10"><div class="meta"><span>Altitude AGL</span><strong id="alt-v">10 m</strong></div></div>
+          <div class="field"><label>Cruise Speed</label><input id="speed" type="range" min="3" max="7" step="0.1" value="5"><div class="meta"><span>Mission Cruise</span><strong id="speed-v">5.0 m/s</strong></div></div>
+        </div>
+        <div class="card">
+          <label>Simulation Profile</label>
+          <div class="seg">
+            <button class="weather-mode active" data-weather-mode="proof">Proof RTL</button>
+            <button class="weather-mode" data-weather-mode="full_trip">Full Trip</button>
+          </div>
+        </div>
+        <div id="banner" class="banner"><strong id="banner-t">Waiting for mission geometry</strong><div id="banner-d">Add at least two waypoints inside the geofence to unlock execution.</div></div>
+        <div class="grid3">
+          <div class="card"><label>Geofence</label><strong id="c-geofence">pending</strong></div>
+          <div class="card"><label>Waypoints</label><strong id="c-waypoints">pending</strong></div>
+          <div class="card"><label>Altitude</label><strong id="c-altitude">pending</strong></div>
+        </div>
+        <div id="waypoints" class="list"></div>
+        <div class="field"><label>Wind Speed</label><input id="wind" type="range" min="0" max="12" step="0.1" value="3.2"><div class="meta"><span>Initial world wind</span><strong id="wind-v">3.2 m/s</strong></div></div>
+        <div class="field"><label>Wind Direction</label><input id="dir" type="range" min="0" max="359" step="1" value="45"><div class="meta"><span>0 north, 90 east</span><strong id="dir-v">45 deg</strong></div></div>
+        <div class="field"><label>Gust Multiplier</label><input id="gust" type="range" min="1" max="2.5" step="0.01" value="1.31"><div class="meta"><span>Dynamic weather trigger</span><strong id="gust-v">1.31x</strong></div></div>
+        <div class="grid2">
+          <div class="field"><label>Starting Battery</label><input id="battery" type="range" min="10" max="100" step="1" value="100"><div class="meta"><span>SITL battery injection</span><strong id="battery-v">100%</strong></div></div>
+          <div class="field"><label>Warn Threshold</label><input id="warn" type="range" min="12" max="50" step="1" value="25"><div class="meta"><span>PX4 low threshold</span><strong id="warn-v">25%</strong></div></div>
+          <div class="field"><label>RTL Battery Threshold</label><input id="rtl" type="range" min="5" max="50" step="1" value="20"><div class="meta"><span>PX4 critical threshold</span><strong id="rtl-v">20%</strong></div></div>
+          <div class="field"><label>Emergency Threshold</label><input id="emergency" type="range" min="3" max="50" step="1" value="18"><div class="meta"><span>PX4 land threshold</span><strong id="emergency-v">18%</strong></div></div>
+          <div class="field"><label>Battery Drain Rate</label><input id="battery-drain" type="range" min="0.1" max="5" step="0.1" value="1.0"><div class="meta"><span>1x = nominal</span><strong id="battery-drain-v">1.0x</strong></div></div>
+        </div>
+        <div class="card">
+          <label>Low Battery Action</label>
+          <div class="seg">
+            <button class="battery-action" data-battery-action="warning">Warn</button>
+            <button class="battery-action" data-battery-action="land">Land</button>
+            <button class="battery-action active" data-battery-action="return">RTL</button>
+          </div>
+        </div>
+        <div class="actions action-strip"><button id="launch" class="primary" disabled>Launch Simulation</button><button id="reload">View Last Simulation</button></div>
+        <div class="grid2"><div class="chip"><span>FPV Mode</span><strong id="fpv-mode-summary">simulation</strong></div><div class="chip"><span>Load State</span><strong id="load-state">Nominal</strong></div></div>
+        <div class="terminal"><div class="terminal-head"><div class="terminal-meta"><label>Target</label><strong id="target">udpin://0.0.0.0:14540</strong></div><div class="terminal-meta"><label>Status</label><strong id="status">Bridge Active</strong></div></div><div id="term" class="terminal-body"></div></div>
+        <div id="media" class="list"></div>
+      </div>
+    </aside>
+    <main class="right">
+      <section class="panel">
+        <div class="head"><div><div class="eyebrow">Top Right</div><h2>2D GPS Mission Map</h2></div><div class="grid4" style="min-width:420px"><div class="card"><label>Mode</label><strong id="map-mode">idle</strong></div><div class="card"><label>Battery</label><strong id="map-battery">n/a</strong></div><div class="card"><label>Satellites</label><strong id="map-sats">n/a</strong></div><div class="card"><label>Wind Load</label><strong id="map-load">0%</strong></div></div></div>
+        <div class="map-shell"><div id="map"></div><div class="overlay"><div class="card"><label>Simulation Phase</label><div id="sim-phase" style="color:var(--accent)">Ready</div></div><div class="card"><label>Map Controls</label><div id="map-text">Click inside the geofence to place mission waypoints.</div></div><div class="card"><label>Live Telemetry</label><div id="map-live">Awaiting live mission start.</div></div></div></div>
+      </section>
+      <section class="panel">
+        <div class="toolbar"><div><div class="eyebrow">Bottom Right</div><h2>Live 3D Telemetry Viewer</h2></div><div class="seg"><button class="cam active" data-cam="follow">Follow</button><button class="cam" data-cam="top">Top-down</button><button class="cam" data-cam="side">Side</button><button class="cam" data-cam="free">Free</button><button id="cinematic-toggle">Cinematic Mode</button></div></div>
+        <div class="scene-shell">
+          <div id="scene"></div>
+          <div class="hud-wrap"><div class="hud-grid"><div class="hud"><label>Altitude</label><strong id="h-alt">0.0 m</strong></div><div class="hud"><label>Speed</label><strong id="h-speed">0.0 m/s</strong></div><div class="hud"><label>Mode</label><strong id="h-mode">idle</strong></div><div class="hud"><label>Battery</label><strong id="h-battery">n/a</strong></div><div class="hud"><label>Dock Error</label><strong id="h-dock">0.00 m</strong></div><div class="hud"><label>Wind Load</label><strong id="h-load">0%</strong></div></div><div class="hud legend"><label>Trail Legend</label><ul><li><span class="sw" style="background:#53b7ff"></span>Replay Context</li><li><span class="sw" style="background:#00d4aa"></span>Live Ribbon Core</li><li><span class="sw" style="background:#ff6b7a"></span>High Wind Resistance</li></ul></div></div>
+          <div id="fpv-shell" class="fpv-shell glass hidden">
+            <div class="fpv-header"><span>FPV Camera</span><span id="fpv-status">Awaiting stream</span></div>
+            <div class="fpv-media">
+              <img id="fpv-feed" alt="Live FPV MJPEG stream">
+              <div class="fpv-placeholder">
+                <div>
+                  <strong style="display:block;margin-bottom:10px">FPV Stream Offline</strong>
+                  <div id="fpv-placeholder-text" style="font-size: 0.82rem; margin-bottom: 16px;">Connecting to companion simulator...</div>
+                  <button id="fpv-retry" style="font-size: 0.72rem; padding: 6px 14px; border-radius: 8px;">Force Retry Stream</button>
+                </div>
+              </div>
+              <div class="fpv-ar">
+                <div class="heading-tape"><div id="heading-track" class="heading-track"></div><div class="heading-center"></div></div>
+                <div class="horizon-frame"><div id="horizon-roll" class="horizon-roll"><div id="horizon-pitch" class="horizon-pitch"><div class="sky"></div><div class="earth"></div><div id="pitch-ladder" class="pitch-ladder"></div></div></div><div class="horizon-center"><span></span></div></div>
+                <div id="fpv-detection-layer" class="fpv-detection-layer stale"></div>
+              </div>
+            </div>
+            <div class="fpv-bottom">
+              <div class="status-flag" id="fpv-flag"><div class="status-copy"><span>Heading</span><strong id="fpv-heading">000 deg</strong></div></div>
+              <div class="status-flag" id="stress-flag"><div class="status-copy"><span>Pitch / Roll</span><strong id="fpv-attitude">0.0 / 0.0 deg</strong></div></div>
+              <div class="status-flag" id="load-flag"><div class="status-copy"><span>Stress</span><strong id="fpv-stress">0%</strong></div></div>
+            </div>
+          </div>
+          <div id="event-timeline" class="event-timeline">
+            <span class="event-timeline-label">Events</span>
+            <div id="timeline-track" class="event-timeline-track">
+              <div id="timeline-progress" class="event-timeline-progress" style="width: 0%"></div>
+            </div>
+            <span id="event-count" class="event-count">0 events</span>
+            <div id="event-detail-popup" class="event-detail-popup">
+              <div class="event-time" id="popup-time"></div>
+              <div class="event-message" id="popup-message"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script>window.DASHBOARD_DATA = __DASHBOARD_DATA__;</script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script type="module">
+    import * as THREE from "three";
+    import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+    import { Line2 } from "three/addons/lines/Line2.js";
+    import { LineGeometry } from "three/addons/lines/LineGeometry.js";
+    import { LineMaterial } from "three/addons/lines/LineMaterial.js";
+    const data = window.DASHBOARD_DATA || {};
+    const replay = data.latest_replay || {};
+    const base = data.baseline || {};
+    const home = base.home || { lat: 47.397971, lon: 8.546164, alt_m: 0 };
+    const limits = base.mission_limits || { max_radius_m: 100, max_altitude_m: 100 };
+    const dock = replay.simulation?.dock_target || { north_m: 0, east_m: 0, down_m: 0 };
+    const fpvCfg = base.visualization?.fpv || { enabled: false, source_url: "", proxy_url: "/api/fpv/stream", mode: "simulation" };
+    const cinematicCfg = base.visualization?.cinematic || { redline_pitch_deg: 15.0, redline_roll_deg: 15.0 };
+    const FPV_DETECTION_STALE_MS = 500;
+    const S = { waypoints: [], valid: false, locked: false, cam: "follow", cinematic: false, job: null, log: null, tel: null, logTimeout: null, telTimeout: null, last: null, liveFrames: [], liveFrameLimit: 1200, potholePulse: null, weatherMode: "proof", lowBatteryAction: "return", events: [], missionStartTime: null, lastBattery: null, lastMode: null, windThreshold: 7.0, fpvDetectionStaleTimer: null };
+    const $ = (id) => document.getElementById(id);
+const E = {
+      timelineTrack: $("timeline-track"),
+      timelineProgress: $("timeline-progress"),
+      eventCount: $("event-count"),
+      eventDetailPopup: $("event-detail-popup"),
+      popupTime: $("popup-time"),
+      popupMessage: $("popup-message"),
+      simPhase: $("sim-phase"),
+      batteryDrain: $("battery-drain"),
+      alt: $("alt"), speed: $("speed"), wind: $("wind"), dir: $("dir"), gust: $("gust"), battery: $("battery"), warn: $("warn"), rtl: $("rtl"), emergency: $("emergency"), launch: $("launch"), reload: $("reload"), undo: $("undo"), clear: $("clear"), term: $("term"), waypoints: $("waypoints"), banner: $("banner"), bannerT: $("banner-t"), bannerD: $("banner-d"), cGeo: $("c-geofence"), cWp: $("c-waypoints"), cAlt: $("c-altitude"), mapText: $("map-text"), mapLive: $("map-live"), target: $("target"), status: $("status"), mGeo: $("m-geofence"), mHome: $("m-home"), mDock: $("m-dock"), mProof: $("m-proof"), mapMode: $("map-mode"), mapBattery: $("map-battery"), mapSats: $("map-sats"), mapLoad: $("map-load"), hAlt: $("h-alt"), hSpeed: $("h-speed"), hMode: $("h-mode"), hBattery: $("h-battery"), hDock: $("h-dock"), hLoad: $("h-load"), media: $("media"), fpvModeSummary: $("fpv-mode-summary"), loadState: $("load-state"), cinematicToggle: $("cinematic-toggle"), fpvShell: $("fpv-shell"), fpvFeed: $("fpv-feed"), fpvStatus: $("fpv-status"), fpvPlaceholderText: $("fpv-placeholder-text"), fpvDetectionLayer: $("fpv-detection-layer"), headingTrack: $("heading-track"), horizonRoll: $("horizon-roll"), horizonPitch: $("horizon-pitch"), pitchLadder: $("pitch-ladder"), fpvHeading: $("fpv-heading"), fpvAttitude: $("fpv-attitude"), fpvStress: $("fpv-stress"), fpvFlag: $("fpv-flag"), stressFlag: $("stress-flag"), loadFlag: $("load-flag") };
+    const fmt = (value, digits = 1) => Number(value || 0).toFixed(digits);
+    const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+    const modeText = (mode) => (mode || "idle").replaceAll("_", " ");
+    const ll = (northM, eastM) => [home.lat + (northM / 111320), home.lon + (eastM / (111320 * Math.cos(home.lat * Math.PI / 180)))];
+    const ned = (lat, lon) => ({ north_m: (lat - home.lat) * 111320, east_m: (lon - home.lon) * 111320 * Math.cos(home.lat * Math.PI / 180) });
+    function normalizeHeading(heading) { const raw = Number(heading || 0); return ((raw % 360) + 360) % 360; }
+    function modeColor(mode) { if (mode === "return_to_launch") return 0xffb454; if (mode === "land" || mode === "dock") return 0x00d4aa; return 0x53b7ff; }
+    function sliderText() { $("alt-v").textContent = `${fmt(E.alt.value, 0)} m`; $("speed-v").textContent = `${fmt(E.speed.value)} m/s`; $("wind-v").textContent = `${fmt(E.wind.value)} m/s`; $("dir-v").textContent = `${fmt(E.dir.value, 0)} deg`; $("gust-v").textContent = `${fmt(E.gust.value, 2)}x`; $("battery-v").textContent = `${fmt(E.battery.value, 0)}%`; $("warn-v").textContent = `${fmt(E.warn.value, 0)}%`; $("rtl-v").textContent = `${fmt(E.rtl.value, 0)}%`; $("emergency-v").textContent = `${fmt(E.emergency.value, 0)}%`; $("battery-drain-v").textContent = `${fmt(E.batteryDrain.value, 1)}x`; }
+    function setSegmentValue(selector, dataName, value) { document.querySelectorAll(selector).forEach((button) => button.classList.toggle("active", button.dataset[dataName] === value)); }
+    function setWeatherMode(mode) { S.weatherMode = mode; setSegmentValue(".weather-mode", "weatherMode", mode); }
+    function setLowBatteryAction(action) { S.lowBatteryAction = action; setSegmentValue(".battery-action", "batteryAction", action); }
+function buildPayload() {
+      return { mission_id: "dashboard-live-mission", cruise_speed_mps: Number(E.speed.value), weather_profile_mode: S.weatherMode, waypoints: S.waypoints.map((waypoint) => ({ north_m: waypoint.north_m, east_m: waypoint.east_m, altitude_m: waypoint.altitude_m })), environment: { wind_speed_mps: Number(E.wind.value), wind_direction_deg: Number(E.dir.value), gust_multiplier: Number(E.gust.value) }, battery: { initial_battery_percent: Number(E.battery.value), warn_battery_threshold_percent: Number(E.warn.value), rtl_battery_threshold_percent: Number(E.rtl.value), emergency_battery_threshold_percent: Number(E.emergency.value), low_battery_action: S.lowBatteryAction, battery_drain_multiplier: Number(E.batteryDrain.value) } };
+    }
+    function log(message, className = "") { const node = document.createElement("div"); node.className = className; node.textContent = message; E.term.appendChild(node); E.term.scrollTop = E.term.scrollHeight; updateSimPhase(message); }
+    const PHASE_PATTERNS = [
+      { pattern: /launching generated Gazebo world/i, phase: "Starting Gazebo" },
+      { pattern: /Gazebo world ready/i, phase: "Gazebo Ready" },
+      { pattern: /launching PX4 SITL/i, phase: "Starting PX4" },
+      { pattern: /PX4 SITL ready/i, phase: "PX4 Ready" },
+      { pattern: /starting validator/i, phase: "Running Validator" },
+      { pattern: /building replay bundle/i, phase: "Building Replay" },
+      { pattern: /building showcase/i, phase: "Building Showcase" },
+      { pattern: /building dashboard/i, phase: "Building Dashboard" },
+      { pattern: /completed/i, phase: "Complete!" },
+      { pattern: /error|fail|exception/i, phase: "Error!" },
+    ];
+    function updateSimPhase(message) { if (!E.simPhase || !S.locked) return; for (const { pattern, phase } of PHASE_PATTERNS) { if (pattern.test(message)) { E.simPhase.textContent = phase; E.simPhase.style.color = phase.includes("Error") ? "var(--danger)" : "var(--accent)"; break; } } }
+    function setBanner(ok, title, detail, geofenceState, waypointState, altitudeState) { E.banner.className = `banner ${ok ? "ok" : "bad"}`; E.bannerT.textContent = title; E.bannerD.textContent = detail; E.cGeo.textContent = geofenceState; E.cWp.textContent = waypointState; E.cAlt.textContent = altitudeState; S.valid = ok; E.launch.disabled = !ok || S.locked; }
+    function renderWaypointList() {
+      E.waypoints.innerHTML = "";
+      S.waypoints.forEach((waypoint, index) => {
+        const item = document.createElement("div");
+        item.className = "item";
+        item.innerHTML = `<label>Waypoint ${index + 1}</label><strong>N ${fmt(waypoint.north_m)} m, E ${fmt(waypoint.east_m)} m</strong><div style="margin-top:6px;color:var(--muted)">Altitude ${fmt(waypoint.altitude_m)} m</div>`;
+        E.waypoints.appendChild(item);
+      });
+    }
+    async function validateMission() {
+      if (!S.waypoints.length) {
+        renderWaypointList();
+        syncMapWaypoints();
+        sync3DWaypoints();
+        setBanner(false, "Waiting for mission geometry", "Add at least two waypoints inside the geofence to unlock execution.", "pending", "pending", "pending");
+        return;
+      }
+      const response = await fetch("/api/mission/validate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(buildPayload()) });
+      if (response.ok) {
+        const payload = await response.json();
+        setBanner(true, "Mission constraints validated", "Geometry passed the live Python rule engine.", payload.checks.geofence ? "pass" : "fail", payload.checks.min_waypoints ? "pass" : "fail", payload.checks.altitude ? "pass" : "fail");
+      } else {
+        const payload = await response.json();
+        setBanner(false, "Constraint violated", payload.detail || "Validation failed.", "blocked", S.waypoints.length >= 2 ? "pass" : "blocked", S.waypoints.every((waypoint) => waypoint.altitude_m <= limits.max_altitude_m) ? "pass" : "blocked");
+      }
+      renderWaypointList();
+      syncMapWaypoints();
+      sync3DWaypoints();
+    }
+    async function loadConstraints() {
+      const response = await fetch("/api/constraints");
+      const payload = await response.json();
+      E.target.textContent = payload.connection.target;
+      E.status.textContent = payload.connection.status;
+      E.alt.max = String(payload.mission_limits.max_altitude_m);
+      E.wind.value = String(payload.default_environment.wind_speed_mps);
+      E.dir.value = String(payload.default_environment.wind_direction_deg);
+      E.gust.value = String(payload.default_environment.gust_multiplier);
+      E.battery.value = String(payload.default_battery.initial_battery_percent);
+      E.warn.value = String(payload.default_battery.warn_battery_threshold_percent);
+      E.rtl.value = String(payload.default_battery.rtl_battery_threshold_percent);
+      E.emergency.value = String(payload.default_battery.emergency_battery_threshold_percent);
+      setWeatherMode(payload.default_simulation?.weather_profile_mode || "proof");
+      setLowBatteryAction(payload.default_battery.low_battery_action || "return");
+      E.fpvModeSummary.textContent = payload.fpv?.mode || fpvCfg.mode || "simulation";
+      sliderText();
+    }
+    function renderMedia(mediaList) {
+      E.media.innerHTML = "";
+      if (!mediaList.length) {
+        const item = document.createElement("div");
+        item.className = "media-card";
+        item.innerHTML = `<label>Media</label><strong>No recordings bound yet.</strong><div style='margin-top:8px;color:var(--muted)'>Drop .mp4, .webm, or .mov files into artifacts/media/latest and rebuild the dashboard.</div>`;
+        E.media.appendChild(item);
+        return;
+      }
+      mediaList.forEach((media) => {
+        const src = media.web_path || media.showcase_rel_path;
+        const item = document.createElement("div");
+        item.className = "media-card";
+        item.innerHTML = `<label>${media.label || media.id}</label><strong>${media.kind || "video"}</strong><div style="margin-top:6px;color:var(--muted)">${src}</div><video controls preload="metadata" src="${src}"></video>`;
+        E.media.appendChild(item);
+      });
+    }
+    E.mGeo.textContent = `${fmt(limits.max_radius_m, 0)} m`;
+    E.mHome.textContent = `${home.lat.toFixed(4)}, ${home.lon.toFixed(4)}`;
+    E.mDock.textContent = `${fmt(replay.dock?.final_horizontal_distance_m || 0, 2)} m`;
+    E.mProof.textContent = replay.dock?.proof_status || replay.summary?.dock_proof_status || "idle";
+    renderMedia(replay.media || []);
+    const map = L.map("map").setView([home.lat, home.lon], 18);
+    L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+      maxZoom: 20,
+      attribution: "Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community",
+    }).addTo(map);
+    const homeIcon = L.divIcon({ className: "", html: '<div class="home-icon"></div>', iconSize: [20, 20], iconAnchor: [10, 10] });
+    const droneIcon = L.divIcon({ className: "", html: '<div class="drone-icon"></div>', iconSize: [20, 20], iconAnchor: [10, 10] });
+    const waypointIcon = L.divIcon({ className: "", html: '<div class="wp-icon"></div>', iconSize: [16, 16], iconAnchor: [8, 8] });
+    const pulseIcon = L.divIcon({ className: "", html: '<div class="pulse-icon"></div>', iconSize: [16, 16], iconAnchor: [8, 8] });
+    L.marker([home.lat, home.lon], { icon: homeIcon }).addTo(map);
+    L.circle([home.lat, home.lon], { radius: limits.max_radius_m, color: "#00d4aa", weight: 2, fillColor: "#00d4aa", fillOpacity: 0.08 }).addTo(map);
+    const droneMarker = L.marker([home.lat, home.lon], { icon: droneIcon }).addTo(map);
+    const missionPolyline = L.polyline([], { color: "#53b7ff", weight: 3 }).addTo(map);
+    const livePolyline = L.polyline([], { color: "#ffb454", weight: 3 }).addTo(map);
+    let waypointMarkers = [];
+    map.on("click", async (event) => {
+      if (S.locked) return;
+      const projected = ned(event.latlng.lat, event.latlng.lng);
+      S.waypoints.push({ north_m: projected.north_m, east_m: projected.east_m, altitude_m: Number(E.alt.value) });
+      await validateMission();
+    });
+function syncMapWaypoints() {
+      waypointMarkers.forEach((marker) => marker.remove());
+      waypointMarkers = S.waypoints.map((waypoint, index) => {
+        const marker = L.marker(ll(waypoint.north_m, waypoint.east_m), { icon: waypointIcon, draggable: !S.locked }).addTo(map);
+        if (!S.locked) {
+          marker.on("dragend", async (e) => {
+            const projected = ned(e.target.getLatLng().lat, e.target.getLatLng().lng);
+            S.waypoints[index] = { north_m: projected.north_m, east_m: projected.east_m, altitude_m: waypoint.altitude_m };
+            sync3DWaypoints();
+            await validateMission();
+          });
+        }
+        return marker;
+      });
+      missionPolyline.setLatLngs(S.waypoints.map((waypoint) => ll(waypoint.north_m, waypoint.east_m)));
+      E.mapText.textContent = S.locked ? "Mission is locked during live execution. Waypoints can be edited before preparation." : "Click inside the geofence to place or drag waypoints.";
+    }
+    const sceneEl = $("scene");
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.shadowMap.enabled = true;
+    sceneEl.appendChild(renderer.domElement);
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x07090f);
+    scene.fog = new THREE.Fog(0x07090f, 80, 280);
+    const camera = new THREE.PerspectiveCamera(52, 1, 0.1, 600);
+    camera.position.set(26, 22, 30);
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.enablePan = true;
+    controls.target.set(0, 2, 0);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.75));
+    const sun = new THREE.DirectionalLight(0xffffff, 1.45);
+    sun.position.set(34, 44, 18);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(2048, 2048);
+    scene.add(sun);
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(260, 260), new THREE.MeshStandardMaterial({ color: 0x0f131a, metalness: 0.08, roughness: 0.94 }));
+    ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = true;
+    scene.add(ground);
+    const grid = new THREE.GridHelper(260, 52, 0x33424f, 0x16202a);
+    grid.position.y = 0.02;
+    scene.add(grid);
+    const geofencePoints = [];
+    for (let index = 0; index < 144; index += 1) {
+      const angle = (index / 144) * Math.PI * 2;
+      geofencePoints.push(new THREE.Vector3(Math.sin(angle) * limits.max_radius_m, 0.22, Math.cos(angle) * limits.max_radius_m));
+    }
+    const geofenceRing = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(geofencePoints), new THREE.LineBasicMaterial({ color: 0x00d4aa }));
+    scene.add(geofenceRing);
+    const landingPad = new THREE.Mesh(new THREE.CylinderGeometry(4.5, 4.5, 0.26, 48), new THREE.MeshStandardMaterial({ color: 0x00d4aa, emissive: 0x00362d, metalness: 0.22, roughness: 0.45 }));
+    landingPad.position.set(0, 0.13, 0);
+    landingPad.receiveShadow = true;
+    scene.add(landingPad);
+    const padCross = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-2.6, 0.28, 0), new THREE.Vector3(2.6, 0.28, 0), new THREE.Vector3(0, 0.28, -2.6), new THREE.Vector3(0, 0.28, 2.6)]), new THREE.LineBasicMaterial({ color: 0x052b24 }));
+    scene.add(padCross);
+    const drone = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.72, 0.82, 0.62, 24), new THREE.MeshStandardMaterial({ color: 0x53b7ff, metalness: 0.32, roughness: 0.4 }));
+    body.rotation.x = Math.PI / 2;
+    body.castShadow = true;
+    drone.add(body);
+    const armMaterial = new THREE.MeshStandardMaterial({ color: 0xe8e8ed, metalness: 0.2, roughness: 0.45 });
+    const rotorMaterial = new THREE.MeshStandardMaterial({ color: 0x00d4aa, emissive: 0x00362d });
+    [[1.7, 1.7], [1.7, -1.7], [-1.7, 1.7], [-1.7, -1.7]].forEach(([eastM, northM]) => {
+      const arm = new THREE.Mesh(new THREE.BoxGeometry(3.35, 0.12, 0.12), armMaterial);
+      arm.position.set(eastM / 2, 0, northM / 2);
+      arm.rotation.y = Math.atan2(northM, eastM);
+      arm.castShadow = true;
+      drone.add(arm);
+      const rotor = new THREE.Mesh(new THREE.TorusGeometry(0.44, 0.03, 8, 28), rotorMaterial);
+      rotor.rotation.x = Math.PI / 2;
+      rotor.position.set(eastM, 0.22, northM);
+      drone.add(rotor);
+    });
+    scene.add(drone);
+    const altitudeLineMaterial = new THREE.LineDashedMaterial({ color: 0xe8e8ed, dashSize: 0.8, gapSize: 0.45, transparent: true, opacity: 0.7 });
+    const altitudeLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]), altitudeLineMaterial);
+    altitudeLine.computeLineDistances();
+    scene.add(altitudeLine);
+    const waypointGroup = new THREE.Group();
+    scene.add(waypointGroup);
+    const ghostLines = {};
+    const ribbonCoreGeometry = new LineGeometry();
+    const ribbonGlowGeometry = new LineGeometry();
+    const ribbonCoreMaterial = new LineMaterial({ linewidth: 4.5, transparent: true, opacity: 0.95, vertexColors: true, dashed: false });
+    const ribbonGlowMaterial = new LineMaterial({ linewidth: 10.5, transparent: true, opacity: 0.24, vertexColors: true, dashed: false });
+    const ribbonCore = new Line2(ribbonCoreGeometry, ribbonCoreMaterial);
+    const ribbonGlow = new Line2(ribbonGlowGeometry, ribbonGlowMaterial);
+    ribbonCore.visible = false;
+    ribbonGlow.visible = false;
+    scene.add(ribbonGlow);
+    scene.add(ribbonCore);
+    function pointToVector(point) { return new THREE.Vector3(Number(point.east_m || 0), Math.max(0.02, -Number(point.down_m || 0)), Number(point.north_m || 0)); }
+    function clearTrail(store) { Object.values(store).forEach((line) => { scene.remove(line); line.geometry.dispose(); line.material.dispose(); }); Object.keys(store).forEach((key) => delete store[key]); }
+    function groupByMode(frames) { const grouped = {}; frames.forEach((frame) => { const mode = frame.mode || "mission"; if (!grouped[mode]) grouped[mode] = []; grouped[mode].push(pointToVector(frame)); }); return grouped; }
+    function setGhostTrail(frames) {
+      clearTrail(ghostLines);
+      const grouped = groupByMode(frames);
+      Object.entries(grouped).forEach(([mode, points]) => {
+        if (points.length < 2) return;
+        const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), new THREE.LineBasicMaterial({ color: modeColor(mode), transparent: true, opacity: 0.34 }));
+        scene.add(line);
+        ghostLines[mode] = line;
+      });
+    }
+    function sync3DWaypoints() {
+      while (waypointGroup.children.length) {
+        const child = waypointGroup.children[0];
+        waypointGroup.remove(child);
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) child.material.dispose();
+      }
+      S.waypoints.forEach((waypoint) => {
+        const sphere = new THREE.Mesh(new THREE.SphereGeometry(0.38, 18, 18), new THREE.MeshStandardMaterial({ color: 0xffb454, emissive: 0x4e2f10 }));
+        sphere.position.set(waypoint.east_m, waypoint.altitude_m, waypoint.north_m);
+        sphere.castShadow = true;
+        waypointGroup.add(sphere);
+        const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(waypoint.east_m, 0.02, waypoint.north_m), new THREE.Vector3(waypoint.east_m, waypoint.altitude_m, waypoint.north_m)]), new THREE.LineDashedMaterial({ color: 0xffb454, dashSize: 0.35, gapSize: 0.2, transparent: true, opacity: 0.66 }));
+        line.computeLineDistances();
+        waypointGroup.add(line);
+      });
+    }
+    function telemetryFrameLocalPose(frame) { return frame.local_pose || frame.vehicle_local_pose || { north_m: frame.north_m, east_m: frame.east_m, down_m: frame.down_m, yaw_deg: frame.yaw_deg, roll_deg: frame.roll_deg, pitch_deg: frame.pitch_deg }; }
+    function telemetryAttitude(frame) { return frame.attitude_euler || telemetryFrameLocalPose(frame); }
+    function telemetryBattery(frame) { return frame.battery?.percent ?? frame.snapshot?.battery_percent ?? frame.battery_percent ?? null; }
+    function telemetryMode(frame) { return frame.snapshot?.mode || frame.mode || "mission"; }
+    function telemetryInAir(frame) { return frame.snapshot?.in_air ?? frame.in_air ?? true; }
+    function telemetryDockError(frame) {
+      if (frame.horizontal_distance_to_dock_m != null) return Number(frame.horizontal_distance_to_dock_m);
+      const localPose = telemetryFrameLocalPose(frame);
+      return Math.hypot(Number(localPose.north_m || 0) - Number(dock.north_m || 0), Number(localPose.east_m || 0) - Number(dock.east_m || 0));
+    }
+    function telemetryGps(frame) { const gps = frame.gps_info || frame.snapshot?.position || {}; return { lat: gps.lat ?? gps.latitude_deg, lon: gps.lon ?? gps.longitude_deg, alt: gps.relative_altitude_m ?? gps.alt_m ?? null, sats: gps.num_satellites }; }
+    function resistanceMetric(frame) {
+      const attitude = telemetryAttitude(frame);
+      const pitchRatio = Math.abs(Number(attitude.pitch_deg || 0)) / Number(cinematicCfg.redline_pitch_deg || 15);
+      const rollRatio = Math.abs(Number(attitude.roll_deg || 0)) / Number(cinematicCfg.redline_roll_deg || 15);
+      return clamp(Math.max(pitchRatio, rollRatio), 0, 1);
+    }
+    function ribbonColor(metric) { const blue = new THREE.Color(0x53b7ff); const red = new THREE.Color(0xff4b5f); return blue.lerp(red, metric); }
+    function updateRibbon() {
+      if (S.liveFrames.length < 2) { ribbonCore.visible = false; ribbonGlow.visible = false; return; }
+      const positions = [];
+      const colors = [];
+      S.liveFrames.forEach((frame) => {
+        const vector = pointToVector(telemetryFrameLocalPose(frame));
+        const color = ribbonColor(resistanceMetric(frame));
+        positions.push(vector.x, vector.y, vector.z);
+        colors.push(color.r, color.g, color.b);
+      });
+      ribbonCoreGeometry.setPositions(positions);
+      ribbonCoreGeometry.setColors(colors);
+      ribbonGlowGeometry.setPositions(positions);
+      ribbonGlowGeometry.setColors(colors);
+      ribbonCore.computeLineDistances();
+      ribbonGlow.computeLineDistances();
+      ribbonCore.visible = true;
+      ribbonGlow.visible = true;
+    }
+    function buildPitchLadder() {
+      E.pitchLadder.innerHTML = "";
+      for (let pitch = -90; pitch <= 90; pitch += 5) {
+        const line = document.createElement("div");
+        const pixelOffset = -(pitch * 6.2);
+        const longMark = pitch % 10 === 0;
+        line.className = "pitch-mark";
+        line.style.top = `calc(50% + ${pixelOffset}px)`;
+        line.innerHTML = `<span>${Math.abs(pitch)}</span><span class="pitch-line ${longMark ? "" : "short"}"></span><span>${Math.abs(pitch)}</span>`;
+        E.pitchLadder.appendChild(line);
+      }
+    }
+    function buildHeadingTape() {
+      E.headingTrack.innerHTML = "";
+      for (let loop = 0; loop < 3; loop += 1) {
+        for (let heading = 0; heading < 360; heading += 10) {
+          const mark = document.createElement("div");
+          mark.className = "heading-mark";
+          mark.innerHTML = `<div>${heading.toString().padStart(3, "0")}</div><strong>${heading === 0 ? "N" : heading === 90 ? "E" : heading === 180 ? "S" : heading === 270 ? "W" : "·"}</strong>`;
+          E.headingTrack.appendChild(mark);
+        }
+      }
+    }
+    function updateAttitudeHud(frame) {
+      const attitude = telemetryAttitude(frame);
+      const pitch = Number(attitude.pitch_deg || 0);
+      const roll = Number(attitude.roll_deg || 0);
+      const yaw = normalizeHeading(attitude.yaw_deg || 0);
+      const metric = resistanceMetric(frame);
+      const translateY = clamp(pitch * 4.8, -120, 120);
+      const stepPx = 56;
+      const offset = ((yaw / 10) * stepPx) + (stepPx * 36);
+      E.horizonRoll.style.transform = `rotate(${roll.toFixed(3)}deg)`;
+      E.horizonPitch.style.transform = `translateY(${translateY.toFixed(3)}px)`;
+      E.headingTrack.style.transform = `translateX(${-offset.toFixed(3)}px)`;
+      E.fpvHeading.textContent = `${yaw.toFixed(0).padStart(3, "0")} deg`;
+      E.fpvAttitude.textContent = `${pitch.toFixed(1)} / ${roll.toFixed(1)} deg`;
+      E.fpvStress.textContent = `${Math.round(metric * 100)}%`;
+      E.hLoad.textContent = `${Math.round(metric * 100)}%`;
+      E.mapLoad.textContent = `${Math.round(metric * 100)}%`;
+      E.loadState.textContent = metric >= 0.8 ? "Critical" : metric >= 0.45 ? "Elevated" : "Nominal";
+      const alert = metric >= 0.8;
+      E.stressFlag.classList.toggle("alert", alert);
+      E.loadFlag.classList.toggle("alert", alert);
+      E.fpvFlag.classList.toggle("alert", telemetryMode(frame) === "return_to_launch");
+    }
+    function clearFpvDetection() {
+      if (S.fpvDetectionStaleTimer) {
+        clearTimeout(S.fpvDetectionStaleTimer);
+        S.fpvDetectionStaleTimer = null;
+      }
+      if (!E.fpvDetectionLayer) return;
+      E.fpvDetectionLayer.innerHTML = "";
+      E.fpvDetectionLayer.classList.add("stale");
+    }
+    function fpvCoordPercent(value, maxValue) {
+      const numeric = Number(value);
+      if (!Number.isFinite(numeric)) return null;
+      if (numeric >= 0 && numeric <= 1) return numeric * 100;
+      return clamp((numeric / maxValue) * 100, 0, 100);
+    }
+    function fpvPoint(point) {
+      if (Array.isArray(point)) {
+        return { x: Number(point[0]), y: Number(point[1]) };
+      }
+      if (point && typeof point === "object") {
+        return {
+          x: Number(point.x_px ?? point.x ?? point.u ?? point[0]),
+          y: Number(point.y_px ?? point.y ?? point.v ?? point[1]),
+        };
+      }
+      return null;
+    }
+    function fpvCornerSets(rawCorners) {
+      if (!Array.isArray(rawCorners)) return [];
+      if (rawCorners.length > 0 && !Array.isArray(rawCorners[0]) && typeof rawCorners[0] === "object") {
+        return [rawCorners.map(fpvPoint).filter(Boolean)];
+      }
+      return rawCorners
+        .map((corner) => (Array.isArray(corner) ? corner.map(fpvPoint).filter(Boolean) : []))
+        .filter((corner) => corner.length > 0);
+    }
+    function fpvDetectionFromFrame(frame) {
+      const candidates = [
+        frame?.fpv_detection,
+        frame?.aruco_detection,
+        frame?.qr_detection,
+        frame?.companion_detection,
+        frame?.landing_target_detection,
+        frame?.detection,
+      ];
+      const raw = candidates.find((candidate) => candidate && typeof candidate === "object");
+      if (!raw) return null;
+      if (raw.detected === false || raw.acquired === false || raw.target_acquired === false) return null;
+      const width = Number(raw.image_width_px ?? raw.width_px ?? raw.width ?? 512) || 512;
+      const height = Number(raw.image_height_px ?? raw.height_px ?? raw.height ?? 512) || 512;
+      const corners = fpvCornerSets(raw.corners ?? raw.marker_corners ?? raw.boxes);
+      const centroid = fpvPoint(raw.centroid ?? raw.center ?? raw.target ?? {
+        x: raw.centroid_x_px ?? raw.center_x_px ?? raw.x_px ?? raw.x,
+        y: raw.centroid_y_px ?? raw.center_y_px ?? raw.y_px ?? raw.y,
+      });
+      if (!corners.length && (!centroid || !Number.isFinite(centroid.x) || !Number.isFinite(centroid.y))) return null;
+      return {
+        width,
+        height,
+        corners,
+        centroid,
+        confidence: raw.confidence ?? raw.quality,
+        label: raw.label || raw.marker_id || raw.id || "QR",
+      };
+    }
+    function updateFpvDetection(frame) {
+      const detection = fpvDetectionFromFrame(frame);
+      if (!detection || !E.fpvDetectionLayer) {
+        clearFpvDetection();
+        return;
+      }
+      if (S.fpvDetectionStaleTimer) clearTimeout(S.fpvDetectionStaleTimer);
+      E.fpvDetectionLayer.innerHTML = "";
+      E.fpvDetectionLayer.classList.remove("stale");
+      detection.corners.forEach((corner) => {
+        const xs = corner.map((point) => fpvCoordPercent(point.x, detection.width)).filter((value) => value != null);
+        const ys = corner.map((point) => fpvCoordPercent(point.y, detection.height)).filter((value) => value != null);
+        if (!xs.length || !ys.length) return;
+        const left = Math.min(...xs);
+        const top = Math.min(...ys);
+        const right = Math.max(...xs);
+        const bottom = Math.max(...ys);
+        const box = document.createElement("div");
+        box.className = "fpv-detection-box";
+        box.style.left = `${left}%`;
+        box.style.top = `${top}%`;
+        box.style.width = `${Math.max(1.5, right - left)}%`;
+        box.style.height = `${Math.max(1.5, bottom - top)}%`;
+        E.fpvDetectionLayer.appendChild(box);
+      });
+      const centroidX = fpvCoordPercent(detection.centroid?.x, detection.width);
+      const centroidY = fpvCoordPercent(detection.centroid?.y, detection.height);
+      if (centroidX != null && centroidY != null) {
+        const crosshair = document.createElement("div");
+        crosshair.className = "fpv-detection-crosshair";
+        crosshair.style.left = `${centroidX}%`;
+        crosshair.style.top = `${centroidY}%`;
+        E.fpvDetectionLayer.appendChild(crosshair);
+        const label = document.createElement("div");
+        label.className = "fpv-detection-label";
+        label.style.left = `${clamp(centroidX + 2, 1, 84)}%`;
+        label.style.top = `${clamp(centroidY - 3, 8, 96)}%`;
+        const confidence = Number(detection.confidence);
+        label.textContent = Number.isFinite(confidence)
+          ? `TARGET ${detection.label} ${Math.round(confidence * 100)}%`
+          : `TARGET ${detection.label}`;
+        E.fpvDetectionLayer.appendChild(label);
+      }
+      S.fpvDetectionStaleTimer = setTimeout(clearFpvDetection, FPV_DETECTION_STALE_MS);
+    }
+    function updateDrone(frame) {
+      const pose = telemetryFrameLocalPose(frame);
+      const attitude = telemetryAttitude(frame);
+      const northM = Number(pose.north_m || 0);
+      const eastM = Number(pose.east_m || 0);
+      const downM = Number(pose.down_m || 0);
+      const altitude = Math.max(0, -downM);
+      const roll = Number(attitude.roll_deg ?? pose.roll_deg ?? 0);
+      const pitch = Number(attitude.pitch_deg ?? pose.pitch_deg ?? 0);
+      const yaw = Number(attitude.yaw_deg ?? pose.yaw_deg ?? 0);
+      const dockError = telemetryDockError(frame);
+      const batteryPercent = telemetryBattery(frame);
+      drone.position.set(eastM, altitude, northM);
+      drone.rotation.order = "ZYX";
+      drone.rotation.z = THREE.MathUtils.degToRad(-roll);
+      drone.rotation.x = THREE.MathUtils.degToRad(pitch);
+      drone.rotation.y = THREE.MathUtils.degToRad(-yaw);
+      altitudeLine.geometry.setFromPoints([new THREE.Vector3(eastM, 0.02, northM), new THREE.Vector3(eastM, altitude, northM)]);
+      altitudeLine.computeLineDistances();
+      E.hAlt.textContent = `${fmt(altitude)} m`;
+      E.hMode.textContent = modeText(telemetryMode(frame));
+      E.hBattery.textContent = batteryPercent == null ? "n/a" : `${fmt(batteryPercent, 0)}%`;
+      E.hDock.textContent = `${fmt(dockError, 2)} m`;
+      E.mDock.textContent = `${fmt(dockError, 2)} m`;
+    }
+    function applyCamera(nowMs) {
+      if (!S.last) return;
+      const pose = telemetryFrameLocalPose(S.last);
+      const attitude = telemetryAttitude(S.last);
+      const target = new THREE.Vector3(Number(pose.east_m || 0), Math.max(0.2, -Number(pose.down_m || 0)) * 0.45, Number(pose.north_m || 0));
+      const altitude = Math.max(0.2, -Number(pose.down_m || 0));
+      const yawRad = THREE.MathUtils.degToRad(normalizeHeading(attitude.yaw_deg || 0));
+      const load = resistanceMetric(S.last);
+      if (S.cinematic) {
+        controls.enabled = false;
+        const mode = telemetryMode(S.last);
+        const modeFactor = mode === "return_to_launch" ? 0.86 : (mode === "land" || !telemetryInAir(S.last)) ? 0.62 : 1.0;
+        const radius = clamp((24 - (load * 11) - (altitude < 5 ? (5 - altitude) * 2.0 : 0)) * modeFactor, 7, 30);
+        const height = clamp(altitude + 10 - (load * 4), 3.5, 24);
+        const sweep = (nowMs * 0.00022) + (yawRad * 0.4);
+        const desired = new THREE.Vector3(Number(pose.east_m || 0) + Math.cos(sweep) * radius, height, Number(pose.north_m || 0) + Math.sin(sweep) * radius);
+        camera.position.lerp(desired, 0.05);
+        camera.lookAt(target);
+        return;
+      }
+      controls.enabled = S.cam === "free";
+      let desired;
+      if (S.cam === "top") desired = new THREE.Vector3(Number(pose.east_m || 0) + 0.01, Math.max(70, altitude + 60), Number(pose.north_m || 0) + 0.01);
+      else if (S.cam === "side") desired = new THREE.Vector3(Number(pose.east_m || 0) + 42, Math.max(16, altitude + 12), Number(pose.north_m || 0) + 10);
+      else if (S.cam === "follow") desired = new THREE.Vector3(Number(pose.east_m || 0) - (Math.sin(yawRad) * 18), Math.max(9, altitude + 11), Number(pose.north_m || 0) - (Math.cos(yawRad) * 18));
+      else { controls.target.copy(target); return; }
+      camera.position.lerp(desired, 0.08);
+      controls.target.copy(target);
+    }
+    function liveFrame(frame) {
+      const previous = S.last;
+      S.last = frame;
+      S.liveFrames.push(frame);
+      if (S.liveFrames.length > S.liveFrameLimit) S.liveFrames.shift();
+      updateRibbon();
+      updateDrone(frame);
+      updateAttitudeHud(frame);
+      updateFpvDetection(frame);
+      if (previous) {
+        const currentPose = telemetryFrameLocalPose(frame);
+        const previousPose = telemetryFrameLocalPose(previous);
+        const deltaTime = Math.max(0.1, Number(frame.elapsed_s || 0) - Number(previous.elapsed_s || 0));
+        const distance = Math.sqrt(((Number(currentPose.north_m || 0) - Number(previousPose.north_m || 0)) ** 2) + ((Number(currentPose.east_m || 0) - Number(previousPose.east_m || 0)) ** 2) + ((Number(currentPose.down_m || 0) - Number(previousPose.down_m || 0)) ** 2));
+        E.hSpeed.textContent = `${fmt(distance / deltaTime)} m/s`;
+      }
+      const gps = telemetryGps(frame);
+      const pose = telemetryFrameLocalPose(frame);
+      let lat = gps.lat;
+      let lon = gps.lon;
+      if (lat == null || lon == null) [lat, lon] = ll(Number(pose.north_m || 0), Number(pose.east_m || 0));
+      droneMarker.setLatLng([lat, lon]);
+      const livePoints = livePolyline.getLatLngs();
+      livePoints.push([lat, lon]);
+      livePolyline.setLatLngs(livePoints);
+E.mapMode.textContent = modeText(telemetryMode(frame));
+      const batteryPercent = telemetryBattery(frame);
+      E.mapBattery.textContent = batteryPercent == null ? "n/a" : `${fmt(batteryPercent, 0)}%`;
+      E.mapSats.textContent = gps.sats != null ? String(gps.sats) : "n/a";
+      const altitudeText = gps.alt == null ? Math.max(0, -Number(pose.down_m || 0)) : gps.alt;
+      E.mapLive.textContent = `Lat ${Number(lat).toFixed(6)}, Lon ${Number(lon).toFixed(6)}, Alt ${fmt(altitudeText)} m`;
+      detectEvents(frame, previous, batteryPercent);
+      updateTimeline();
+    }
+    function preloadReplay() {
+      const frames = replay.flight_telemetry || [];
+      setGhostTrail(frames);
+      if (!frames.length) return;
+      const lastFrame = frames[frames.length - 1];
+      const syntheticFrame = { local_pose: { north_m: lastFrame.north_m, east_m: lastFrame.east_m, down_m: lastFrame.down_m, yaw_deg: lastFrame.yaw_deg, roll_deg: lastFrame.roll_deg, pitch_deg: lastFrame.pitch_deg }, attitude_euler: { roll_deg: lastFrame.roll_deg, pitch_deg: lastFrame.pitch_deg, yaw_deg: lastFrame.yaw_deg }, battery: { percent: lastFrame.battery_percent }, snapshot: { mode: lastFrame.mode, battery_percent: lastFrame.battery_percent, in_air: lastFrame.in_air }, horizontal_distance_to_dock_m: lastFrame.horizontal_distance_to_dock_m };
+      updateDrone(syntheticFrame);
+      updateAttitudeHud(syntheticFrame);
+    }
+    function resetLiveState() { S.liveFrames = []; S.events = []; S.missionStartTime = Date.now(); S.lastBattery = null; S.lastMode = null; clearFpvDetection(); livePolyline.setLatLngs([]); updateRibbon(); updateTimeline(); E.mapLive.textContent = "Awaiting live mission start."; E.simPhase.textContent = "Starting..."; E.simPhase.style.color = "var(--warn)"; log("[META] Live telemetry stream armed", "info"); }
+    function detectEvents(frame, previous, batteryPercent) {
+      const currentMode = telemetryMode(frame);
+      const elapsed = (Date.now() - S.missionStartTime) / 1000;
+      const rtlThreshold = Number(E.rtl.value) || 20;
+      const warnThreshold = Number(E.warn.value) || 25;
+      if (previous) {
+        if (currentMode === "return_to_launch" && S.lastMode !== "return_to_launch") {
+          S.events.push({ t: elapsed, type: "rtl", message: `RTL triggered at ${fmt(batteryPercent, 0)}% battery` });
+          log(`[EVENT] Return-to-Launch at ${fmt(batteryPercent, 0)}%`, "info");
+        }
+        if (currentMode === "land" && S.lastMode !== "land") {
+          S.events.push({ t: elapsed, type: "land", message: "Landing sequence initiated" });
+          log("[EVENT] Landing initiated", "info");
+        }
+        if (currentMode === "auto_mission" && S.lastMode !== "auto_mission" && S.lastMode !== "return_to_launch") {
+          S.events.push({ t: elapsed, type: "mode", message: "Mission execution started" });
+        }
+      }
+      if (batteryPercent != null && S.lastBattery != null) {
+        if (batteryPercent <= rtlThreshold && S.lastBattery > rtlThreshold) {
+          S.events.push({ t: elapsed, type: "battery", message: `Battery at ${fmt(batteryPercent, 0)}% - RTL threshold` });
+          log(`[EVENT] Battery RTL threshold reached: ${fmt(batteryPercent, 0)}%`, "info");
+        }
+        if (batteryPercent <= warnThreshold && S.lastBattery > warnThreshold) {
+          S.events.push({ t: elapsed, type: "battery", message: `Battery warning: ${fmt(batteryPercent, 0)}%` });
+          log(`[EVENT] Battery warning: ${fmt(batteryPercent, 0)}%`, "info");
+        }
+      }
+      if (frame.wind_speed_mps != null && frame.wind_speed_mps > S.windThreshold && (previous == null || previous.wind_speed_mps <= S.windThreshold)) {
+        S.events.push({ t: elapsed, type: "wind", message: `Wind limit exceeded: ${fmt(frame.wind_speed_mps, 1)} m/s` });
+        log(`[EVENT] Wind limit exceeded: ${fmt(frame.wind_speed_mps, 1)} m/s`, "info");
+      }
+      if (frame.horizontal_distance_to_dock_m != null && frame.horizontal_distance_to_dock_m < 5 && (previous == null || previous.horizontal_distance_to_dock_m >= 5)) {
+        S.events.push({ t: elapsed, type: "dock", message: "Dock approach initiated" });
+        log("[EVENT] Dock approach started", "info");
+      }
+      S.lastBattery = batteryPercent;
+      S.lastMode = currentMode;
+    }
+    function updateTimeline() {
+      if (!E.timelineTrack) return;
+      const totalTime = S.liveFrames.length > 0 ? (Number(S.liveFrames[S.liveFrames.length - 1].elapsed_s || 0)) || Math.max(1, (Date.now() - S.missionStartTime) / 1000) : 1;
+      const progress = Math.min(100, (totalTime > 0 ? ((Date.now() - S.missionStartTime) / 1000 / totalTime) * 100 : 0));
+      E.timelineProgress.style.width = `${progress}%`;
+      E.timelineTrack.querySelectorAll(".event-marker").forEach(m => m.remove());
+      S.events.forEach(event => {
+        const marker = document.createElement("div");
+        marker.className = `event-marker ${event.type}`;
+        const pct = totalTime > 0 ? (event.t / totalTime) * 100 : 0;
+        marker.style.left = `${Math.min(98, Math.max(2, pct))}%`;
+        marker.title = `[${fmt(event.t, 1)}s] ${event.message}`;
+        marker.addEventListener("click", (e) => {
+          e.stopPropagation();
+          showEventPopup(event);
+        });
+        E.timelineTrack.appendChild(marker);
+      });
+      const count = S.events.length;
+      E.eventCount.textContent = `${count} event${count !== 1 ? "s" : ""}`;
+    }
+    function showEventPopup(event) {
+      E.popupTime.textContent = `T+${fmt(event.t, 1)}s`;
+      E.popupMessage.textContent = event.message;
+      E.eventDetailPopup.classList.add("visible");
+      setTimeout(() => E.eventDetailPopup.classList.remove("visible"), 3000);
+    }
+    function configureFpv(config) {
+      if (!config.enabled) { E.fpvShell.classList.add("hidden"); E.fpvStatus.textContent = "FPV disabled"; return; }
+      E.fpvShell.classList.remove("hidden");
+
+      const proxyUrl = config.proxy_url || "/api/fpv/stream";
+      const sourceUrl = (config.source_url || "").replace("http://127.0.0.1:5050/stream", "http://127.0.0.1:8765/camera");
+      const proxiedUrl = sourceUrl ? `${proxyUrl}?source_url=${encodeURIComponent(sourceUrl)}` : proxyUrl;
+      const directUrl = "http://127.0.0.1:18765/camera";
+      const cacheBust = (url) => `${url}${url.includes("?") ? "&" : "?"}t=${Date.now()}`;
+      const showStream = (targetUrl) => {
+        E.fpvPlaceholderText.textContent = `Proxy source: ${sourceUrl || "dashboard local stream"}`;
+        E.fpvStatus.textContent = `${config.mode || "simulation"} live`;
+        E.fpvShell.classList.add("live");
+        E.fpvFeed.style.visibility = "visible";
+        E.fpvFeed.src = cacheBust(targetUrl);
+      };
+
+      E.fpvFeed.onload = () => {
+        E.fpvShell.classList.add("live");
+        E.fpvStatus.textContent = `${config.mode || "simulation"} live`;
+      };
+      E.fpvFeed.onerror = () => {
+        if (!E.fpvFeed.src.includes("18765")) {
+          E.fpvStatus.textContent = "Switching to camera tunnel";
+          showStream(directUrl);
+          return;
+        }
+        E.fpvShell.classList.remove("live");
+        E.fpvStatus.textContent = "Stream unavailable";
+      };
+
+      $("fpv-retry")?.addEventListener("click", () => showStream(proxiedUrl));
+      showStream(proxiedUrl);
+    }
+    function renderPotholePulse() {
+      const detections = replay.companion?.pothole_detections || [];
+      if (!detections.length || S.potholePulse) return;
+      const detection = detections[0];
+      const lat = Number(detection.lat_deg || home.lat);
+      const lon = Number(detection.lon_deg || home.lon);
+      S.potholePulse = L.marker([lat, lon], { icon: pulseIcon }).addTo(map);
+    }
+function streamLogs(jobId) {
+      if (S.log) S.log.close();
+      if (S.logTimeout) clearTimeout(S.logTimeout);
+      if (S.telTimeout) clearTimeout(S.telTimeout);
+      S.log = new EventSource(`/api/system/logs?job_id=${encodeURIComponent(jobId)}`);
+      S.log.addEventListener("metadata", (event) => { const payload = JSON.parse(event.data); log(`[META] job=${payload.job_id} target=${payload.target} bridge=${payload.bridge_status}`, "info"); });
+      S.log.addEventListener("status", (event) => { const payload = JSON.parse(event.data); log(`[STATUS] ${payload.message}`, "info"); });
+      S.log.addEventListener("log", (event) => { const payload = JSON.parse(event.data); const message = payload.message || ""; log(message, /error|fail|traceback/i.test(message) ? "error" : ""); });
+      S.log.addEventListener("complete", async () => { if (S.logTimeout) clearTimeout(S.logTimeout); if (S.telTimeout) clearTimeout(S.telTimeout); log("[STATUS] Mission execution completed. Reloading latest evidence.", "info"); S.locked = false; E.launch.disabled = !S.valid; await refreshArtifacts(); await validateMission(); });
+      S.log.addEventListener("failed", async (event) => { if (S.logTimeout) clearTimeout(S.logTimeout); if (S.telTimeout) clearTimeout(S.telTimeout); const payload = JSON.parse(event.data); log(`[ERROR] Mission job failed with exit code ${payload.exit_code}`, "error"); S.locked = false; E.launch.disabled = !S.valid; await validateMission(); });
+      S.log.onerror = () => { if (S.log) S.log.close(); };
+      S.logTimeout = setTimeout(() => { log("[WARN] SSE timeout after 5min - unlocking UI", "info"); S.locked = false; E.launch.disabled = !S.valid; if (S.log) S.log.close(); if (S.tel) S.tel.close(); }, 300000);
+    }
+function streamTelemetry(jobId) {
+      if (S.tel) S.tel.close();
+      if (S.telTimeout) clearTimeout(S.telTimeout);
+      S.tel = new EventSource(`/api/telemetry/live?job_id=${encodeURIComponent(jobId)}`);
+      S.tel.addEventListener("telemetry", (event) => liveFrame(JSON.parse(event.data)));
+S.tel.onerror = () => { if (S.tel) S.tel.close(); };
+    }
+    function undoLastWaypoint() { if (S.locked || S.waypoints.length === 0) return; S.waypoints.pop(); syncMapWaypoints(); sync3DWaypoints(); validateMission(); }
+    function clearWaypoints() { if (S.locked) return; S.waypoints = []; syncMapWaypoints(); sync3DWaypoints(); validateMission(); }
+    async function launchMission() {
+      if (!S.valid || S.locked) return;
+      S.locked = true;
+      E.launch.disabled = true;
+      resetLiveState();
+      log("[META] Launching live simulator mission", "info");
+      const response = await fetch("/api/mission/execute", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(buildPayload()) });
+      if (!response.ok) {
+        const payload = await response.json();
+        log(`[ERROR] ${payload.detail || "Mission launch failed."}`, "error");
+        S.locked = false;
+        await validateMission();
+        return;
+      }
+      const payload = await response.json();
+      S.job = payload.job_id;
+      streamLogs(payload.job_id);
+      streamTelemetry(payload.job_id);
+      E.status.textContent = payload.bridge_status;
+      E.mapText.textContent = "Live mission active. Map editing is locked until the job completes.";
+    }
+    async function refreshArtifacts() {
+      const response = await fetch(`/artifacts/dashboard/dashboard_data.json?ts=${Date.now()}`);
+      if (!response.ok) { log("[ERROR] Failed to reload dashboard evidence bundle", "error"); return; }
+      const payload = await response.json();
+      renderMedia(payload.latest_replay?.media || []);
+    }
+    function seedFromReplay() {
+      const source = replay.mission?.waypoints || [];
+      if (source.length >= 2) S.waypoints = source.map((waypoint) => ({ north_m: Number(waypoint.north_m || 0), east_m: Number(waypoint.east_m || 0), altitude_m: Number(waypoint.altitude_m || 10) || 10 }));
+      E.alt.value = String(source[0]?.altitude_m || 10);
+      E.speed.value = String(replay.mission?.cruise_speed_mps || base.speed_band?.nominal_mps || 5);
+      sliderText();
+      renderWaypointList();
+      syncMapWaypoints();
+      sync3DWaypoints();
+      preloadReplay();
+      renderPotholePulse();
+    }
+    function resizeScene() {
+      renderer.setSize(sceneEl.clientWidth, sceneEl.clientHeight);
+      camera.aspect = sceneEl.clientWidth / sceneEl.clientHeight;
+      camera.updateProjectionMatrix();
+      ribbonCoreMaterial.resolution.set(sceneEl.clientWidth, sceneEl.clientHeight);
+      ribbonGlowMaterial.resolution.set(sceneEl.clientWidth, sceneEl.clientHeight);
+    }
+    function renderLoop(nowMs) { requestAnimationFrame(renderLoop); applyCamera(nowMs); controls.update(); renderer.render(scene, camera); }
+    document.querySelectorAll(".cam").forEach((button) => {
+      button.addEventListener("click", () => {
+        document.querySelectorAll(".cam").forEach((node) => node.classList.remove("active"));
+        button.classList.add("active");
+        S.cam = button.dataset.cam;
+      });
+    });
+    E.cinematicToggle.addEventListener("click", () => { S.cinematic = !S.cinematic; E.cinematicToggle.classList.toggle("active", S.cinematic); E.cinematicToggle.dataset.active = String(S.cinematic); });
+    [E.alt, E.speed, E.wind, E.dir, E.gust, E.battery, E.warn, E.rtl, E.emergency, E.batteryDrain].forEach((element) => element.addEventListener("input", sliderText));
+    document.querySelectorAll(".weather-mode").forEach((button) => button.addEventListener("click", async () => { if (S.locked) return; setWeatherMode(button.dataset.weatherMode || "proof"); await validateMission(); }));
+    document.querySelectorAll(".battery-action").forEach((button) => button.addEventListener("click", async () => { if (S.locked) return; setLowBatteryAction(button.dataset.batteryAction || "return"); await validateMission(); }));
+    E.alt.addEventListener("input", async () => { S.waypoints = S.waypoints.map((waypoint) => ({ ...waypoint, altitude_m: Number(E.alt.value) })); await validateMission(); });
+    [E.wind, E.dir, E.gust, E.battery, E.warn, E.rtl, E.emergency].forEach((element) => element.addEventListener("change", validateMission));
+    E.launch.addEventListener("click", launchMission);
+    E.undo.addEventListener("click", undoLastWaypoint);
+    E.clear.addEventListener("click", clearWaypoints);
+    E.reload.addEventListener("click", refreshArtifacts);
+    E.undo.addEventListener("click", async () => { if (S.locked) return; S.waypoints.pop(); await validateMission(); });
+    E.clear.addEventListener("click", async () => { if (S.locked) return; S.waypoints = []; await validateMission(); });
+    window.addEventListener("resize", resizeScene);
+    buildPitchLadder();
+    buildHeadingTape();
+    configureFpv(fpvCfg);
+    await loadConstraints();
+    sliderText();
+    seedFromReplay();
+    await validateMission();
+    resizeScene();
+    renderLoop(performance.now());
+  </script>
+</body>
+</html>
