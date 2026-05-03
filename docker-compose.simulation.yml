@@ -1,0 +1,24 @@
+services:
+  skylink-simulation:
+    build:
+      context: .
+      dockerfile: deploy/simulation/Dockerfile
+    image: ${SKYLINK_SIMULATION_IMAGE:-skylink-simulation:local}
+    container_name: skylink-simulation
+    restart: unless-stopped
+    environment:
+      SKYLINK_API_CPU_CORE: ${SKYLINK_API_CPU_CORE:-0}
+      SKYLINK_BOOTSTRAP_ON_START: ${SKYLINK_BOOTSTRAP_ON_START:-false}
+      SKYLINK_EXECUTION_CPU_CORES: ${SKYLINK_EXECUTION_CPU_CORES:-2,3}
+      SKYLINK_MISSION_API_PORT: 8625
+    ports:
+      - "${SKYLINK_MISSION_API_PORT:-8625}:8625"
+      # MAVLink offboard link: PX4 listens on 14580 (commands in), pushes telemetry to 14540
+      - "14580:14580/udp"
+      - "14540:14540/udp"
+      # MAVLink GCS link: QGC / MAVProxy on host connects here
+      - "18570:18570/udp"
+      # Companion sim MJPEG stream (rpi_companion_sim.py autostart)
+      - "${SKYLINK_COMPANION_MJPEG_PORT:-8765}:8765"
+    volumes:
+      - ./artifacts:/opt/skylink2/artifacts
