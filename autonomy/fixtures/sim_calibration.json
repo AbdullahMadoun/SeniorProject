@@ -1,0 +1,12 @@
+{
+  "status": "calibrated",
+  "rms_error": 0.0,
+  "camera_matrix": [
+    [400.0, 0.0, 256.0],
+    [0.0, 400.0, 256.0],
+    [0.0, 0.0, 1.0]
+  ],
+  "dist_coeffs": [0.0, 0.0, 0.0, 0.0, 0.0],
+  "image_size": [512, 512],
+  "note": "Synthetic simulation calibration for the downward-camera landing-pad renderer."
+}
