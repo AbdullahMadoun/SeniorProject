@@ -1,0 +1,120 @@
+{
+  "mission_id": "interactive-mission",
+  "weather_profile_mode": "full_trip",
+  "weather_profile": [
+    {
+      "t_s": 0.0,
+      "steady_wind_mps": 3.2,
+      "gust_wind_mps": 4.2
+    },
+    {
+      "t_s": 5.0,
+      "steady_wind_mps": 4.2,
+      "gust_wind_mps": 5.2
+    },
+    {
+      "t_s": 12.0,
+      "steady_wind_mps": 9.2,
+      "gust_wind_mps": 10.2
+    },
+    {
+      "t_s": 36.0,
+      "steady_wind_mps": 4.5,
+      "gust_wind_mps": 5.5
+    }
+  ],
+  "trigger_timeout_s": 45.0,
+  "dock_wait_timeout_s": 30.0,
+  "observations": [
+    {
+      "elapsed_s": 38.035,
+      "weather": {
+        "steady_wind_mps": 4.5,
+        "gust_wind_mps": 5.5,
+        "source": "profile@36.0s",
+        "effective_wind_mps": 5.5
+      },
+      "gate_decision": {
+        "launch_allowed": true,
+        "mission_continue_allowed": true,
+        "dock_allowed": true,
+        "reasons": [],
+        "details": [
+          "Effective wind 5.5 m/s is within configured limit 7.0 m/s."
+        ]
+      },
+      "inflight_decision": {
+        "action": "continue",
+        "reasons": [],
+        "details": []
+      },
+      "snapshot_before": {
+        "connected": true,
+        "armed": true,
+        "in_air": true,
+        "mode": "mission",
+        "battery_percent": 100.0,
+        "position": {
+          "lat": 47.3975748,
+          "lon": 8.545642899999999,
+          "alt_m": 9.983000755310059
+        },
+        "mission_progress": {
+          "current": 4,
+          "total": 4
+        }
+      },
+      "local_pose_before": {
+        "north_m": -18.623950958251953,
+        "east_m": 3.3848772048950195,
+        "down_m": -9.755887985229492,
+        "yaw_deg": -138.45668029785156,
+        "roll_deg": 0.4006420969963074,
+        "pitch_deg": 4.14719820022583
+      },
+      "snapshot_after": {
+        "connected": true,
+        "armed": true,
+        "in_air": true,
+        "mode": "mission",
+        "battery_percent": 100.0,
+        "position": {
+          "lat": 47.3975748,
+          "lon": 8.545642899999999,
+          "alt_m": 9.983000755310059
+        },
+        "mission_progress": {
+          "current": 4,
+          "total": 4
+        }
+      },
+      "local_pose_after": {
+        "north_m": -18.623950958251953,
+        "east_m": 3.3848772048950195,
+        "down_m": -9.755887985229492,
+        "yaw_deg": -138.45668029785156,
+        "roll_deg": 0.4006420969963074,
+        "pitch_deg": 4.14719820022583
+      }
+    }
+  ],
+  "dock_weather_observations": [
+    {
+      "elapsed_s": 38.035,
+      "weather": {
+        "steady_wind_mps": 4.5,
+        "gust_wind_mps": 5.5,
+        "source": "profile@36.0s",
+        "effective_wind_mps": 5.5
+      },
+      "dock_allowed": true,
+      "details": [
+        "Effective wind 5.5 m/s is within configured limit 7.0 m/s."
+      ]
+    }
+  ],
+  "triggered_action": null,
+  "triggered_at_s": null,
+  "dock_recovered_at_s": 38.035,
+  "proof_status": "nominal_weather_profile_no_forced_rtl"
+}

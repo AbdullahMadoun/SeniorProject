@@ -1,0 +1,119 @@
+# Python caches
+__pycache__/
+*.py[cod]
+*.pyd
+*.so
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Build/test artifacts
+.coverage
+.coverage.*
+htmlcov/
+dist/
+build/
+*.egg-info/
+pip-wheel-metadata/
+
+# Virtual environments
+.venv/
+.venv-training/
+.venv-wsl/
+venv/
+env/
+
+# Local secrets/config
+.env
+.env.*
+!.env.example
+.tokens/
+.streamlit/secrets.toml
+deploy/backend/ssh/*
+!deploy/backend/ssh/.gitkeep
+
+# Logs
+*.log
+companion_video_logger/*.npy
+companion_video_logger/*.csv
+autonomy/companion/artifacts/latest/
+diff_check_utf8.patch
+
+# IDE/OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Session archives (Pi-side, not version-controlled)
+.skylink_session/
+
+# Local upstream simulator checkouts
+vendor/**
+!vendor/README.md
+!vendor/PATCHES.md
+
+# Generated autonomy artifacts (track curated latest evidence only)
+artifacts/**
+!artifacts/live_px4/
+artifacts/live_px4/**
+!artifacts/live_px4/latest_execution_validation.json
+!artifacts/live_px4/latest_mission_validation.json
+!artifacts/live_px4/latest_precision_landing_profile.json
+!artifacts/live_px4/latest_landing_target_consumption.json
+!artifacts/live_px4/latest_dock_approach_validation.json
+!artifacts/live_px4/latest_live_weather_validation.json
+!artifacts/media/
+artifacts/media/**
+!artifacts/media/latest/
+artifacts/media/latest/**
+!artifacts/media/latest/README.md
+!artifacts/dashboard/
+artifacts/dashboard/**
+!artifacts/dashboard/index.html
+!artifacts/dashboard/dashboard_data.json
+!artifacts/planner/
+artifacts/planner/**
+!artifacts/planner/index.html
+!artifacts/sitl_logs/
+artifacts/sitl_logs/**
+!artifacts/sitl_logs/mission_api_http_smoke_result.json
+!artifacts/precision_landing/
+artifacts/precision_landing/**
+!artifacts/precision_landing/latest/
+artifacts/precision_landing/latest/**
+!artifacts/precision_landing/latest/manifest.json
+!artifacts/precision_landing/latest/summary.md
+!artifacts/replay_bundle/
+artifacts/replay_bundle/**
+!artifacts/replay_bundle/latest/
+artifacts/replay_bundle/latest/**
+!artifacts/replay_bundle/latest/manifest.json
+!artifacts/replay_bundle/latest/summary.md
+!artifacts/replay_bundle/latest/dock_approach_timeline.csv
+!artifacts/showcase/
+artifacts/showcase/**
+!artifacts/showcase/latest/
+artifacts/showcase/latest/**
+!artifacts/showcase/latest/index.html
+!artifacts/showcase/latest/showcase_data.json
+!artifacts/weather_scenarios/
+artifacts/weather_scenarios/**
+!artifacts/weather_scenarios/latest/
+artifacts/weather_scenarios/latest/**
+!artifacts/weather_scenarios/latest/manifest.json
+!artifacts/weather_scenarios/latest/summary.md
+
+# Runtime data (keep folders only)
+data/raw/*
+!data/raw/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+!data/processed/history/
+data/processed/history/*
+!data/processed/history/.gitkeep
+
+# Web bridge runtime history
+src/static/history.json
+src/static/history_images/*
+!src/static/history_images/.gitkeep

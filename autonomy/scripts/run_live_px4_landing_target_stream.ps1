@@ -1,0 +1,1 @@
+wsl bash -lc "export LIVE_PX4_VALIDATOR_SCRIPT='/mnt/d/downloads/SeniorProject/Skylink2/autonomy/scripts/stream_live_px4_landing_target.py'; export LIVE_PX4_VALIDATOR_LABEL='LANDING_TARGET_STREAM'; bash /mnt/d/downloads/SeniorProject/Skylink2/autonomy/scripts/live_px4_probe.sh"
