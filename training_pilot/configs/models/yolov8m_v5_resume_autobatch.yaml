@@ -1,0 +1,37 @@
+trainer: ultralytics
+model: runs/yolov8m_v5_production_final2/weights/best.pt
+data: data/unified_bridge/dataset.yaml
+epochs: 204
+imgsz: 1024
+batch: -1
+optimizer: AdamW
+patience: 80
+cache: ram
+
+lr0: 0.00025
+lrf: 0.01
+warmup_epochs: 1
+warmup_momentum: 0.8
+
+box: 7.5
+cls: 0.5
+dfl: 1.5
+
+weight_decay: 0.001
+mosaic: 1.0
+close_mosaic: 20
+mixup: 0.15
+erasing: 0.2
+copy_paste: 0.1
+label_smoothing: 0.1
+degrees: 10.0
+translate: 0.2
+scale: 0.9
+flipud: 0.5
+fliplr: 0.5
+
+project: runs
+name: yolov8m_v5_resume_autobatch
+save_period: 25
+workers: 8
+single_cls: true

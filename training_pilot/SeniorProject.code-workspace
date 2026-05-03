@@ -1,0 +1,11 @@
+{
+	"folders": [
+		{
+			"path": "../.."
+		},
+		{
+			"path": "../../../SkyLinkLabeledDataSet.yolov8"
+		}
+	],
+	"settings": {}
+}

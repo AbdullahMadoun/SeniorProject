@@ -1,0 +1,146 @@
+project_root: training_pilot
+
+dataset:
+  data_yaml: data/unified_bridge/dataset.yaml
+  raw_dir: data/raw
+  filtered_dir: data/filtered
+  split_seed: 42
+  split_ratios:
+    train: 0.70
+    val: 0.15
+    test: 0.15
+  class_names:
+    keep:
+      - pothole
+      - crack
+    drop:
+      - manhole
+    final_name: damage
+
+training:
+  imgsz: 1024
+  optimizer: AdamW
+  cos_lr: false
+  amp: true
+  single_cls: true
+  deterministic: true
+  box: 7.5
+  cls: 0.5
+  dfl: 1.5
+  lrf: 0.01
+  warmup_epochs: 5
+  warmup_momentum: 0.8
+  close_mosaic: 20
+  mosaic: 1.0
+  mixup: 0.15
+  copy_paste: 0.1
+  erasing: 0.2
+  label_smoothing: 0.1
+  degrees: 10.0
+  translate: 0.2
+  scale: 0.9
+  flipud: 0.5
+  fliplr: 0.5
+  cache: false
+  save_period: 25
+  seed: 0
+  val_conf: 0.001
+  second_pass:
+    epochs: 12
+    lr_scale: 0.1
+    freeze: 0
+
+albumentations: []
+
+weights:
+  pretrained_dir: weights/pretrained
+  finetuned_dir: weights/finetuned
+  obc_repo_weight_default: best.pt
+
+external:
+  yolov12_repo: external/yolov12
+  oracl4_repo: external/RoadDamageDetection
+  obc_repo: external/OBC-YOLOv8
+
+models:
+  - id: yolo12s_rezzzq
+    display_name: rezzzq YOLOv12s
+    run_name: yolo12s_rezzzq_v5align
+    backend: yolov12
+    pretrained: weights/pretrained/yolo12s_rdd2022.pt
+    repo_dir: external/yolov12
+    epochs: 300
+    batch: 0.92
+    lr0: 0.00025
+    freeze: 0
+    patience: 80
+    weight_decay: 0.001
+  - id: ozair_yolov8
+    display_name: ozair YOLOv8
+    run_name: ozair_yolov8_v5align
+    backend: ultralytics
+    pretrained: weights/pretrained/ozair_yolov8_rdd.pt
+    epochs: 300
+    batch: 128
+    lr0: 0.0005
+    freeze: 0
+    patience: 80
+    weight_decay: 0.001
+  - id: oracl4_yolov8
+    display_name: oracl4 YOLOv8
+    run_name: oracl4_yolov8_v5align
+    backend: ultralytics
+    pretrained: weights/pretrained/oracl4_yolov8_rdd.pt
+    epochs: 300
+    batch: 0.92
+    lr0: 0.0005
+    freeze: 0
+    patience: 80
+    weight_decay: 0.001
+  - id: obc_yolov8
+    display_name: OBC-YOLOv8
+    run_name: obc_yolov8_v5align
+    backend: obc
+    pretrained: weights/pretrained/obc_yolov8_rdd.pt
+    repo_dir: external/OBC-YOLOv8/ultralytics10.24
+    epochs: 300
+    batch: 0.88
+    lr0: 0.0005
+    freeze: 0
+    patience: 80
+    weight_decay: 0.001
+
+inference:
+  tile_size: 640
+  tile_overlap: 100
+  scales:
+    - 530
+    - 640
+    - 800
+  flips:
+    - none
+    - horizontal
+  model_weight_conf: 0.10
+  precision_floor: 0.30
+  primary_iou: 0.5
+  all_damage_found_iou: 0.4
+  per_tile_wbf:
+    iou_grid:
+      - 0.35
+      - 0.40
+      - 0.45
+      - 0.50
+    skip_box_grid:
+      - 0.01
+      - 0.02
+      - 0.03
+      - 0.05
+    conf_type: weighted
+  merge_wbf:
+    iou_thr: 0.40
+    skip_box_thr: 0.01
+    conf_type: weighted
+  conf_sweep:
+    start: 0.01
+    stop: 0.5
+    step: 0.01

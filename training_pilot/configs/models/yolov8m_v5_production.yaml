@@ -1,0 +1,44 @@
+﻿# PRODUCTION RUN ? Final Submission Config
+# Every value below is deliberately chosen. Do NOT change without justification.
+
+trainer: ultralytics
+model: weights/pretrained/yolov8m.pt
+data: data/unified_bridge/dataset.yaml
+epochs: 300
+imgsz: 1024
+batch: -1
+optimizer: AdamW
+patience: 80
+
+# --- Learning Rate: Conservative start, deep cosine decay ---
+lr0: 0.0005
+lrf: 0.01
+warmup_epochs: 5
+warmup_momentum: 0.8
+
+# --- Loss Weights: BALANCED (this is the critical fix) ---
+box: 7.5
+cls: 0.5
+dfl: 1.5
+
+# --- Regularization: Anti-Overfit Shield ---
+weight_decay: 0.001
+mosaic: 1.0
+close_mosaic: 20
+mixup: 0.15
+erasing: 0.2
+copy_paste: 0.1
+label_smoothing: 0.1
+degrees: 10.0
+translate: 0.2
+scale: 0.9
+flipud: 0.5
+fliplr: 0.5
+
+# --- Infrastructure ---
+project: runs
+name: yolov8m_v5_production_final
+save_period: 25
+workers: 8
+single_cls: true
+
