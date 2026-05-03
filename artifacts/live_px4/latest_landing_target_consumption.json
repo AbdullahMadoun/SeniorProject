@@ -1,0 +1,111 @@
+{
+  "endpoint": "gcs",
+  "connection_string": "udpout:172.23.68.199:14550",
+  "sent_count": 50,
+  "duration_s": 5.0,
+  "rate_hz": 10.0,
+  "first_sample": {
+    "time_usec": 1775039927129675,
+    "x_m": 1.25,
+    "y_m": -0.75,
+    "z_m": 0.0,
+    "target_num": 0,
+    "frame": 1,
+    "angle_x_rad": 0.0,
+    "angle_y_rad": 0.0,
+    "distance_m": 0.0,
+    "size_x_rad": 0.0,
+    "size_y_rad": 0.0,
+    "q": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "target_type": 2,
+    "position_valid": 1
+  },
+  "last_sample": {
+    "time_usec": 1775039932029675,
+    "x_m": 1.25,
+    "y_m": -0.75,
+    "z_m": 0.0,
+    "target_num": 0,
+    "frame": 1,
+    "angle_x_rad": 0.0,
+    "angle_y_rad": 0.0,
+    "distance_m": 0.0,
+    "size_x_rad": 0.0,
+    "size_y_rad": 0.0,
+    "q": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "target_type": 2,
+    "position_valid": 1
+  },
+  "proof_status": "consumed",
+  "bridge_host_to_px4_count": 54,
+  "observer_connection_string": "udpin:0.0.0.0:14550",
+  "observer_heartbeat": {
+    "mavpackettype": "HEARTBEAT",
+    "type": 2,
+    "autopilot": 12,
+    "base_mode": 29,
+    "custom_mode": 50593792,
+    "system_status": 3,
+    "mavlink_version": 3
+  },
+  "observer_set_message_interval_ack": {
+    "command": 511,
+    "result": 0
+  },
+  "observer_outbound_landing_target": {
+    "count": 50,
+    "first_message": {
+      "mavpackettype": "LANDING_TARGET",
+      "time_usec": 1702204000,
+      "target_num": 0,
+      "frame": 1,
+      "angle_x": 0.0,
+      "angle_y": 0.0,
+      "distance": 0.0,
+      "size_x": 0.0,
+      "size_y": 0.0,
+      "x": 0.0,
+      "y": 0.0,
+      "z": 0.0,
+      "q": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "type": 0,
+      "position_valid": 0
+    },
+    "first_nonzero_message": {},
+    "position_valid_count": 0
+  },
+  "receiver_observation": {
+    "count": 50,
+    "first_match": {
+      "position_valid": 1,
+      "frame": 1,
+      "x": 1.25,
+      "y": -0.75,
+      "z": 0.0
+    }
+  },
+  "sitl_log_path": "D:\\downloads\\SeniorProject\\Skylink2\\artifacts\\sitl_logs\\landing_target_consumption_20260401_133803.log",
+  "bridge_log_path": "D:\\downloads\\SeniorProject\\Skylink2\\artifacts\\sitl_logs\\landing_target_consumption_20260401_133803_bridge.log",
+  "ulog_summary": {
+    "ulog_path": "D:\\downloads\\SeniorProject\\Skylink2\\vendor\\PX4-Autopilot\\build\\px4_sitl_default\\rootfs\\log\\2026-04-01\\10_38_40.ulg",
+    "landing_target_pose_samples": 0,
+    "irlock_report_samples": 0,
+    "landing_target_pose_preview": {},
+    "irlock_report_preview": {}
+  }
+}
