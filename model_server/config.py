@@ -32,14 +32,14 @@ class Settings(BaseSettings):
     )
     ENSEMBLE_MODE: str = os.getenv("ENSEMBLE_MODE", "msflip").strip().lower()
     ENSEMBLE_WEIGHT_MODE: str = os.getenv("ENSEMBLE_WEIGHT_MODE", "equal").strip().lower()
-    ENSEMBLE_WBF_IOU: float = float(os.getenv("ENSEMBLE_WBF_IOU", "0.40"))
+    ENSEMBLE_WBF_IOU: float = float(os.getenv("ENSEMBLE_WBF_IOU", "0.30"))
     ENSEMBLE_WBF_SKIP: float = float(os.getenv("ENSEMBLE_WBF_SKIP", "0.05"))
-    ENSEMBLE_FINAL_THRESHOLD: float = float(os.getenv("ENSEMBLE_FINAL_THRESHOLD", "0.30"))
+    ENSEMBLE_FINAL_THRESHOLD: float = float(os.getenv("ENSEMBLE_FINAL_THRESHOLD", "0.20"))
     ENSEMBLE_MIN_SUPPORT: int = int(os.getenv("ENSEMBLE_MIN_SUPPORT", "2"))
     ENSEMBLE_BASE_CONF: float = float(os.getenv("ENSEMBLE_BASE_CONF", "0.001"))
     ENSEMBLE_BASE_IOU: float = float(os.getenv("ENSEMBLE_BASE_IOU", "0.90"))
     ENSEMBLE_MAX_DET: int = int(os.getenv("ENSEMBLE_MAX_DET", "1200"))
-    ENSEMBLE_TTA_WBF_IOU: float = float(os.getenv("ENSEMBLE_TTA_WBF_IOU", "0.45"))
+    ENSEMBLE_TTA_WBF_IOU: float = float(os.getenv("ENSEMBLE_TTA_WBF_IOU", "0.35"))
     ENSEMBLE_TTA_WBF_SKIP: float = float(os.getenv("ENSEMBLE_TTA_WBF_SKIP", "0.00"))
     ENSEMBLE_SUPPORT_IOU: float = float(os.getenv("ENSEMBLE_SUPPORT_IOU", "0.50"))
     ENSEMBLE_MODEL_REZZZQ: str = os.getenv(
@@ -106,6 +106,10 @@ class Settings(BaseSettings):
     VLM_API_AUTH_SCHEME: str = os.getenv("VLM_API_AUTH_SCHEME", "x-api-key").strip().lower()
     VLM_API_TYPE: str = os.getenv("VLM_API_TYPE", "proprietary").strip().lower()
     VLM_API_TIMEOUT: float = float(os.getenv("VLM_API_TIMEOUT", "180"))
+    VLM_API_MODEL_OPTIONS: list[str] = _env_csv(
+        "VLM_API_MODEL_OPTIONS",
+        "qwen/qwen2.5-vl-72b-instruct,google/gemini-2.5-flash,openai/gpt-4o-mini,anthropic/claude-3.5-sonnet",
+    )
 
 
 

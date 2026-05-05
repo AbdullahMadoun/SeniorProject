@@ -6,6 +6,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const videoPreviewContainer = document.getElementById('videoPreviewContainer');
     const videoPreview = document.getElementById('videoPreview');
     const missionNameInput = document.getElementById('missionNameInput');
+    const vlmModelSelect = document.getElementById('vlmModelSelect');
+    const detectorConfInput = document.getElementById('detectorConfInput');
+    const detectorIouInput = document.getElementById('detectorIouInput');
+    const detectorWbfIouInput = document.getElementById('detectorWbfIouInput');
+    const detectorWbfSkipInput = document.getElementById('detectorWbfSkipInput');
+    const detectorFinalThresholdInput = document.getElementById('detectorFinalThresholdInput');
+    const detectorMinSupportInput = document.getElementById('detectorMinSupportInput');
     const videoOverlapInput = document.getElementById('videoOverlapInput');
     const videoDedupInput = document.getElementById('videoDedupInput');
     const videoMaxFramesInput = document.getElementById('videoMaxFramesInput');
@@ -38,6 +45,29 @@ document.addEventListener('DOMContentLoaded', () => {
     const tunnelError = document.getElementById('tunnelError');
     const modelError = document.getElementById('modelError');
     const supabaseStatus = document.getElementById('supabaseStatus');
+    const refreshRuntimeBtn = document.getElementById('refreshRuntimeBtn');
+    const openPublicTunnelLink = document.getElementById('openPublicTunnelLink');
+    const openModelLink = document.getElementById('openModelLink');
+    const dashboardSeverityFilter = document.getElementById('dashboardSeverityFilter');
+    const dashboardTimeFilter = document.getElementById('dashboardTimeFilter');
+    const dashboardConfidenceFilter = document.getElementById('dashboardConfidenceFilter');
+    const recenterMapBtn = document.getElementById('recenterMapBtn');
+    const resetDashboardFilters = document.getElementById('resetDashboardFilters');
+    const evidenceDrawer = document.getElementById('evidenceDrawer');
+    const toggleEvidenceDrawerBtn = document.getElementById('toggleEvidenceDrawerBtn');
+    const evidenceEmpty = document.getElementById('evidenceEmpty');
+    const evidenceImage = document.getElementById('evidenceImage');
+    const evidenceTitle = document.getElementById('evidenceTitle');
+    const evidenceSeverity = document.getElementById('evidenceSeverity');
+    const evidenceConfidence = document.getElementById('evidenceConfidence');
+    const evidenceTimestamp = document.getElementById('evidenceTimestamp');
+    const evidenceCoords = document.getElementById('evidenceCoords');
+    const evidenceMission = document.getElementById('evidenceMission');
+    const evidenceSource = document.getElementById('evidenceSource');
+    const evidenceCluster = document.getElementById('evidenceCluster');
+    const evidenceImageName = document.getElementById('evidenceImageName');
+    const evidenceSummary = document.getElementById('evidenceSummary');
+    const dashboardCountLabel = document.getElementById('dashboardCountLabel');
 
     const appConfig = window.APP_CONFIG || {};
     const AL_KHOBAR_LAT = 26.2833;
@@ -52,6 +82,9 @@ document.addEventListener('DOMContentLoaded', () => {
     let localHistory = [];
     let dashboardMarkers = [];
     let activeAnalysis = null;
+    let selectedHistoryKey = '';
+    let hasUserSelectedVlmMode = false;
+    let hasUserSelectedVlmModel = false;
 
     let runtimeConfig = {
         BRIDGE_BASE_URL: String(appConfig.BRIDGE_BASE_URL || '').trim().replace(/\/+$/, ''),
@@ -73,6 +106,7 @@ document.addEventListener('DOMContentLoaded', () => {
         MODEL_SERVER_REMOTE_HOST: String(appConfig.MODEL_SERVER_REMOTE_HOST || '').trim(),
         DEFAULT_VLM_MODE: String(appConfig.DEFAULT_VLM_MODE || 'local').trim(),
         VLM_MODE_OPTIONS: Array.isArray(appConfig.VLM_MODE_OPTIONS) ? appConfig.VLM_MODE_OPTIONS : ['local', 'api', 'disabled'],
+        VLM_API_MODEL_OPTIONS: Array.isArray(appConfig.VLM_API_MODEL_OPTIONS) ? appConfig.VLM_API_MODEL_OPTIONS : [],
         VIDEO_ANALYSIS_ENABLED: Boolean(appConfig.VIDEO_ANALYSIS_ENABLED),
         VIDEO_ANALYSIS_ERROR: String(appConfig.VIDEO_ANALYSIS_ERROR || '').trim(),
         SUPABASE_CONFIGURED: Boolean(appConfig.SUPABASE_CONFIGURED)
@@ -102,12 +136,61 @@ document.addEventListener('DOMContentLoaded', () => {
         return runtimeConfig.DEFAULT_MODEL_API_KEY;
     }
 
+    function historyKey(record) {
+        return `${record.timestamp || ''}|${record.image || ''}|${record.lat || ''}|${record.lon || ''}`;
+    }
+
     function selectedVlmMode() {
         const checked = document.querySelector('input[name="vlmMode"]:checked');
         return checked ? checked.value : runtimeConfig.DEFAULT_VLM_MODE || 'local';
     }
 
-    function applyDefaultVlmMode() {
+    function selectedVlmModel() {
+        const value = String(vlmModelSelect?.value || '').trim();
+        return value;
+    }
+
+    function detectorOverrides() {
+        return {
+            detector_conf: parseNumericInput(detectorConfInput, 0.001),
+            detector_iou: parseNumericInput(detectorIouInput, 0.90),
+            detector_wbf_iou: parseNumericInput(detectorWbfIouInput, 0.40),
+            detector_wbf_skip: parseNumericInput(detectorWbfSkipInput, 0.01),
+            detector_final_threshold: parseNumericInput(detectorFinalThresholdInput, 0.03),
+            detector_min_support: parseIntegerInput(detectorMinSupportInput, 1),
+        };
+    }
+
+    function renderVlmModelOptions(force = false) {
+        if (!vlmModelSelect) {
+            return;
+        }
+        const options = Array.isArray(runtimeConfig.VLM_API_MODEL_OPTIONS) ? runtimeConfig.VLM_API_MODEL_OPTIONS : [];
+        const previous = force ? '' : selectedVlmModel();
+        vlmModelSelect.innerHTML = '<option value="">Use server default</option>';
+        options.forEach(model => {
+            const option = document.createElement('option');
+            option.value = model;
+            option.textContent = model;
+            vlmModelSelect.appendChild(option);
+        });
+        if (previous && options.includes(previous)) {
+            vlmModelSelect.value = previous;
+        }
+    }
+
+    function syncVlmModelControl() {
+        if (!vlmModelSelect) {
+            return;
+        }
+        const isApi = selectedVlmMode() === 'api';
+        vlmModelSelect.disabled = !isApi;
+    }
+
+    function applyDefaultVlmMode(force = false) {
+        if (!force && hasUserSelectedVlmMode) {
+            return;
+        }
         const desired = runtimeConfig.DEFAULT_VLM_MODE || 'local';
         const target = document.querySelector(`input[name="vlmMode"][value="${desired}"]`);
         if (target) {
@@ -135,6 +218,18 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (modelEndpoint) {
             modelEndpoint.textContent = runtimeConfig.ACTIVE_MODEL_API_URL || directApiUrl() || 'Not configured';
+        }
+        if (openPublicTunnelLink) {
+            const target = runtimeConfig.PUBLIC_BRIDGE_URL || runtimeConfig.BRIDGE_BASE_URL || '';
+            openPublicTunnelLink.href = target || '#';
+            openPublicTunnelLink.classList.toggle('is-disabled', !target);
+            openPublicTunnelLink.setAttribute('aria-disabled', target ? 'false' : 'true');
+        }
+        if (openModelLink) {
+            const target = runtimeConfig.ACTIVE_MODEL_API_URL || directApiUrl() || '';
+            openModelLink.href = target || '#';
+            openModelLink.classList.toggle('is-disabled', !target);
+            openModelLink.setAttribute('aria-disabled', target ? 'false' : 'true');
         }
         if (modelStatus) {
             const provider = runtimeConfig.MODEL_SERVER_PROVIDER ? ` (${runtimeConfig.MODEL_SERVER_PROVIDER})` : '';
@@ -199,13 +294,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 TUNNEL_ERROR: String(payload.TUNNEL_ERROR || '').trim(),
                 MODEL_SERVER_ERROR: String(payload.MODEL_SERVER_ERROR || '').trim(),
                 DEFAULT_VLM_MODE: String(payload.DEFAULT_VLM_MODE || runtimeConfig.DEFAULT_VLM_MODE || 'local').trim(),
-                VIDEO_ANALYSIS_ERROR: String(payload.VIDEO_ANALYSIS_ERROR || '').trim()
+                VIDEO_ANALYSIS_ERROR: String(payload.VIDEO_ANALYSIS_ERROR || '').trim(),
+                VLM_API_MODEL_OPTIONS: Array.isArray(payload.VLM_API_MODEL_OPTIONS) ? payload.VLM_API_MODEL_OPTIONS : runtimeConfig.VLM_API_MODEL_OPTIONS
             };
             applyDefaultVlmMode();
+            if (!hasUserSelectedVlmModel) {
+                renderVlmModelOptions(true);
+            }
         } catch (error) {
             console.error('Failed to refresh runtime config', error);
         }
         updateConnectionPanel();
+        syncVlmModelControl();
         checkInputs();
     }
 
@@ -315,11 +415,37 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function ensureImageSource(value) {
-        if (!value) return '';
-        if (value.startsWith('data:image') || value.startsWith('http') || value.startsWith('/')) {
-            return value;
+        const normalized = String(value || '').trim();
+        if (!normalized) return '';
+        if (normalized.startsWith('data:image') || normalized.startsWith('http')) {
+            return normalized;
         }
-        return `data:image/jpeg;base64,${value}`;
+
+        // Comprehensive Base64 detection
+        // 1. Check for known Base64 starters (JPEG: /9j/, PNG: iVBO, etc.)
+        // 2. Check for length and character set (no spaces, and not just a short path)
+        const isLikelyBase64 = (
+            normalized.startsWith('/9j/') ||
+            normalized.startsWith('iVBOR') ||
+            (normalized.length > 500 && !normalized.includes(' ') && !normalized.includes('\\'))
+        );
+
+        if (isLikelyBase64) {
+            // Ensure data URI prefix is present
+            if (normalized.startsWith('data:')) return normalized;
+            return `data:image/jpeg;base64,${normalized}`;
+        }
+
+        // It's likely a path. Ensure it's absolute for the bridge.
+        if (normalized.startsWith('/')) {
+            // If we have a bridge URL configured, use it
+            if (typeof bridgeUrl === 'function') {
+                return bridgeUrl(normalized);
+            }
+        }
+
+        // Fallback for relative paths or malformed strings
+        return normalized;
     }
 
     function drawImageOnCanvas(source) {
@@ -329,6 +455,9 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             return;
         }
+        if (resultImage) {
+            resultImage.src = source;
+        }
         const ctx = canvas.getContext('2d');
         const img = new Image();
         img.onload = () => {
@@ -336,14 +465,8 @@ document.addEventListener('DOMContentLoaded', () => {
             canvas.height = img.height;
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             ctx.drawImage(img, 0, 0);
-            if (resultImage) {
-                resultImage.src = source;
-            }
         };
         img.onerror = () => {
-            if (resultImage) {
-                resultImage.removeAttribute('src');
-            }
             console.error('Failed to render annotated image source.');
         };
         img.src = source;
@@ -430,7 +553,10 @@ document.addEventListener('DOMContentLoaded', () => {
         session.frames.forEach((frame, index) => {
             const button = document.createElement('button');
             button.className = `frame-chip ${index === selectedIndex ? 'active' : ''}`;
-            const thumb = frame.thumb_url || frame.frame_url || '';
+            const thumbRaw = frame.thumb_url || frame.frame_url || '';
+            const thumb = (thumbRaw.length > 200 && thumbRaw.startsWith('/9j/') && !thumbRaw.startsWith('data:'))
+                ? `data:image/jpeg;base64,${thumbRaw}`
+                : thumbRaw;
             button.innerHTML = `
                 <span class="frame-chip-index">F${index + 1}</span>
                 ${thumb ? `<img src="${thumb}" alt="Frame ${index + 1}"/>` : '<span class="frame-chip-placeholder">No Preview</span>'}
@@ -451,7 +577,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         renderVideoFrameButtons(session, selectedIndex);
-        const mediaSource = frame.annotated_url || frame.frame_url || '';
+        const mediaSource = ensureImageSource(frame.annotated_url || frame.frame_url || frame.thumb_url || '');
         const resolvedMode = frame.detector_debug?.resolved_vlm_mode || selectedVlmMode();
         const metaText = `Video session • frame ${selectedIndex + 1}/${session.frames.length} • ${frame.processing_seconds || '-'}s • VLM ${resolvedMode}`;
         renderReport(
@@ -470,7 +596,11 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderImageAnalysis(report, durationSeconds) {
         videoFramesStrip.classList.add('hidden');
         videoFramesStrip.innerHTML = '';
-        const mediaSource = ensureImageSource(report.annotated_image_b64) || currentImageDataUrl;
+        const mediaSource =
+            ensureImageSource(report.annotated_image_b64)
+            || ensureImageSource(report.persisted_finding?.local_image_url)
+            || ensureImageSource(report.persisted_finding?.image)
+            || currentImageDataUrl;
         const resolvedMode = report.detector_debug?.resolved_vlm_mode || selectedVlmMode();
         const metaText = `Photo analysis • detector ensemble • VLM ${resolvedMode} • ${report.boxes?.length || 0} box(es)`;
         renderReport(
@@ -492,6 +622,11 @@ document.addEventListener('DOMContentLoaded', () => {
             api_key: directApiKey(),
             api_url: directApiUrl(),
             vlm_mode: selectedVlmMode(),
+            vlm_model: selectedVlmModel(),
+            ...detectorOverrides(),
+            mission_name: missionNameInput.value.trim() || currentSelection?.file?.name || 'SkyLink Photo Mission',
+            persist_db: persistDbToggle.checked,
+            image_name: currentSelection?.file?.name || '',
         };
 
         let response;
@@ -511,7 +646,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: JSON.stringify({
                     image_b64: currentImageBase64,
                     location: [defaultLocation.lat, defaultLocation.lon],
-                    vlm_mode: selectedVlmMode()
+                    vlm_mode: selectedVlmMode(),
+                    vlm_model: selectedVlmModel(),
+                    ...detectorOverrides()
                 })
             });
         }
@@ -522,7 +659,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         const result = await response.json();
         const data = result.data || result;
-        return data.report || data.vlm_report || data;
+        const report = data.report || data.vlm_report || data;
+        if (data.persisted_finding) {
+            report.persisted_finding = data.persisted_finding;
+        }
+        if (typeof data.persisted_to_supabase !== 'undefined') {
+            report.persisted_to_supabase = Boolean(data.persisted_to_supabase);
+        }
+        return report;
     }
 
     async function analyzeVideo() {
@@ -534,6 +678,13 @@ document.addEventListener('DOMContentLoaded', () => {
         formData.append('video', currentSelection.file);
         formData.append('mission_name', missionNameInput.value.trim() || currentSelection.file.name || 'SkyLink Video Mission');
         formData.append('vlm_mode', selectedVlmMode());
+        formData.append('vlm_model', selectedVlmModel());
+        formData.append('detector_conf', String(parseNumericInput(detectorConfInput, 0.001)));
+        formData.append('detector_iou', String(parseNumericInput(detectorIouInput, 0.90)));
+        formData.append('detector_wbf_iou', String(parseNumericInput(detectorWbfIouInput, 0.40)));
+        formData.append('detector_wbf_skip', String(parseNumericInput(detectorWbfSkipInput, 0.01)));
+        formData.append('detector_final_threshold', String(parseNumericInput(detectorFinalThresholdInput, 0.03)));
+        formData.append('detector_min_support', String(parseIntegerInput(detectorMinSupportInput, 1)));
         formData.append('overlap_fraction', String(parseNumericInput(videoOverlapInput, 0.10)));
         formData.append('dedup_distance', String(parseIntegerInput(videoDedupInput, 4)));
         formData.append('max_frames', String(parseIntegerInput(videoMaxFramesInput, 24)));
@@ -550,7 +701,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return response.json();
     }
 
-    async function trackHistoricalAnalysis(boxes, summary, thumbUrl, location = defaultLocation) {
+    async function trackHistoricalAnalysis(boxes, summary, thumbUrl, location = defaultLocation, metadata = {}) {
         const severityStatus = boxes.some(b => String(b.severity || '').toLowerCase() === 'high')
             ? 'High Severity'
             : (boxes.length > 0 ? 'Moderate' : 'Low Severity');
@@ -562,7 +713,16 @@ document.addEventListener('DOMContentLoaded', () => {
             summary,
             confidence: _maxConfidence(boxes),
             image: thumbUrl,
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
+            mission_id: metadata.mission_id || '',
+            mission_name: metadata.mission_name || '',
+            image_id: metadata.image_id || '',
+            image_name: metadata.image_name || '',
+            source: metadata.source || 'bridge',
+            box_count: Number(metadata.box_count || boxes.length || 0),
+            defect_types: Array.isArray(metadata.defect_types) ? metadata.defect_types : [],
+            cluster_key: metadata.cluster_key || metadata.mission_id || metadata.mission_name || 'standalone',
+            persisted_to_supabase: Boolean(metadata.persisted_to_supabase)
         };
 
         if (hasBridge()) {
@@ -590,20 +750,146 @@ document.addEventListener('DOMContentLoaded', () => {
         return boxes.reduce((max, box) => Math.max(max, Number(box.confidence || 0)), 0);
     }
 
+    function getFilteredHistory() {
+        const severity = String(dashboardSeverityFilter?.value || 'all').toLowerCase();
+        const maxAgeDays = Number.parseInt(String(dashboardTimeFilter?.value || 'all'), 10);
+        const minConfidence = Number.parseFloat(String(dashboardConfidenceFilter?.value || '0'));
+        const now = Date.now();
+
+        return localHistory.filter(record => {
+            const normalizedSeverity = String(record.severity || '').toLowerCase();
+            const severityPass = severity === 'all'
+                || (severity === 'high' && normalizedSeverity.includes('high'))
+                || (severity === 'moderate' && normalizedSeverity.includes('moderate'))
+                || (severity === 'low' && normalizedSeverity.includes('low'));
+
+            const confidencePass = Number(record.confidence || 0) >= (Number.isFinite(minConfidence) ? minConfidence : 0);
+
+            let timePass = true;
+            if (Number.isFinite(maxAgeDays)) {
+                const ts = Date.parse(record.timestamp || '');
+                timePass = Number.isFinite(ts) ? (now - ts) <= maxAgeDays * 86400000 : false;
+            }
+
+            return severityPass && confidencePass && timePass;
+        });
+    }
+
+    function applySeverityClass(element, severityText) {
+        if (!element) return;
+        const normalized = String(severityText || '').toLowerCase();
+        element.classList.remove('high', 'moderate', 'low');
+        if (normalized.includes('high') || normalized.includes('critical')) {
+            element.classList.add('high');
+        } else if (normalized.includes('moderate')) {
+            element.classList.add('moderate');
+        } else if (normalized.includes('low')) {
+            element.classList.add('low');
+        }
+    }
+
+    function renderEvidenceDetail(record) {
+        if (!record) {
+            selectedHistoryKey = '';
+            if (evidenceEmpty) evidenceEmpty.classList.remove('hidden');
+            if (evidenceImage) evidenceImage.removeAttribute('src');
+            if (evidenceTitle) evidenceTitle.textContent = 'No finding selected';
+            if (evidenceSeverity) {
+                evidenceSeverity.textContent = 'No Evidence';
+                applySeverityClass(evidenceSeverity, '');
+            }
+            if (evidenceConfidence) evidenceConfidence.textContent = '-';
+            if (evidenceTimestamp) evidenceTimestamp.textContent = '-';
+            if (evidenceCoords) evidenceCoords.textContent = '-';
+            if (evidenceMission) evidenceMission.textContent = '-';
+            if (evidenceSource) evidenceSource.textContent = '-';
+            if (evidenceCluster) evidenceCluster.textContent = '-';
+            if (evidenceImageName) evidenceImageName.textContent = '-';
+            if (evidenceSummary) evidenceSummary.textContent = 'History-backed detections will appear here as you analyze images or videos.';
+            return;
+        }
+
+        selectedHistoryKey = historyKey(record);
+        if (evidenceEmpty) evidenceEmpty.classList.add('hidden');
+
+        let imgSrc = record.image || '';
+        if (imgSrc.length > 200 && imgSrc.startsWith('/9j/') && !imgSrc.startsWith('data:')) {
+            imgSrc = `data:image/jpeg;base64,${imgSrc}`;
+        }
+        if (evidenceImage) evidenceImage.src = imgSrc;
+        if (evidenceTitle) evidenceTitle.textContent = record.summary || 'Detection';
+        if (evidenceSeverity) {
+            evidenceSeverity.textContent = record.severity || 'Unknown';
+            applySeverityClass(evidenceSeverity, record.severity);
+        }
+        if (evidenceConfidence) {
+            const confidence = Number(record.confidence || 0);
+            evidenceConfidence.textContent = Number.isFinite(confidence) && confidence > 0
+                ? `${(confidence * 100).toFixed(1)}% conf`
+                : 'Unscored';
+        }
+        if (evidenceTimestamp) {
+            evidenceTimestamp.textContent = record.timestamp
+                ? new Date(record.timestamp).toLocaleString()
+                : '-';
+        }
+        if (evidenceCoords) {
+            evidenceCoords.textContent = `${Number(record.lat || 0).toFixed(4)}, ${Number(record.lon || 0).toFixed(4)}`;
+        }
+        if (evidenceMission) {
+            evidenceMission.textContent = record.mission_name || record.mission_id || 'Standalone';
+        }
+        if (evidenceSource) {
+            evidenceSource.textContent = record.persisted_to_supabase ? 'Supabase' : (record.source || 'Bridge');
+        }
+        if (evidenceCluster) {
+            evidenceCluster.textContent = `${record.cluster_size || 1} item(s)`;
+        }
+        if (evidenceImageName) {
+            evidenceImageName.textContent = record.image_name || 'Rendered evidence';
+        }
+        if (evidenceSummary) {
+            evidenceSummary.textContent = record.summary || 'No summary available.';
+        }
+    }
+
+    function recenterDashboardMap(records) {
+        if (!window.dashboardMap) return;
+        const usable = (records || []).filter(record => Number.isFinite(Number(record.lat)) && Number.isFinite(Number(record.lon)));
+        if (usable.length === 0) {
+            window.dashboardMap.setView([AL_KHOBAR_LAT, AL_KHOBAR_LON], 12);
+            return;
+        }
+        if (usable.length === 1) {
+            window.dashboardMap.setView([usable[0].lat, usable[0].lon], 15);
+            return;
+        }
+        const bounds = L.latLngBounds(usable.map(record => [record.lat, record.lon]));
+        window.dashboardMap.fitBounds(bounds.pad(0.18));
+    }
+
     async function loadHistoricalAnalysis() {
         if (hasBridge()) {
             try {
-                const response = await fetch(bridgeUrl('/api/history'));
+                const response = await fetch(bridgeUrl('/api/findings'));
                 if (!response.ok) {
-                    throw new Error(`History request failed with ${response.status}`);
+                    throw new Error(`Findings request failed with ${response.status}`);
                 }
                 localHistory = await response.json();
             } catch (error) {
-                console.error('Failed to load bridge history, falling back to local storage', error);
+                console.error('Failed to load bridge findings, falling back to local history', error);
                 try {
-                    localHistory = JSON.parse(localStorage.getItem(historyStorageKey) || '[]');
+                    const historyResponse = await fetch(bridgeUrl('/api/history'));
+                    if (!historyResponse.ok) {
+                        throw new Error(`History request failed with ${historyResponse.status}`);
+                    }
+                    localHistory = await historyResponse.json();
                 } catch (_) {
-                    localHistory = [];
+                    try {
+                        localHistory = JSON.parse(localStorage.getItem(historyStorageKey) || '[]');
+                    } catch (__){
+                        localHistory = [];
+                    }
                 }
             }
         } else {
@@ -617,19 +903,23 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function updateDashboardKPI() {
-        document.getElementById('kpiTotal').textContent = localHistory.length;
-        const criticalCount = localHistory.filter(h => h.severity === 'High Severity').length;
+        const filteredHistory = getFilteredHistory();
+        document.getElementById('kpiTotal').textContent = filteredHistory.length;
+        const criticalCount = filteredHistory.filter(h => h.severity === 'High Severity').length;
         document.getElementById('kpiCritical').textContent = criticalCount;
-        const avgConf = localHistory.length
-            ? (localHistory.reduce((sum, item) => sum + Number(item.confidence || 0), 0) / localHistory.length)
+        const avgConf = filteredHistory.length
+            ? (filteredHistory.reduce((sum, item) => sum + Number(item.confidence || 0), 0) / filteredHistory.length)
             : 0;
         document.getElementById('kpiAvgConf').textContent = avgConf > 0 ? `${(avgConf * 100).toFixed(1)}%` : 'Moderate';
+        if (dashboardCountLabel) {
+            dashboardCountLabel.textContent = `${filteredHistory.length} record${filteredHistory.length === 1 ? '' : 's'}`;
+        }
 
         if (window.dashboardMap) {
             dashboardMarkers.forEach(m => window.dashboardMap.removeLayer(m));
             dashboardMarkers = [];
 
-            localHistory.forEach(record => {
+            filteredHistory.forEach(record => {
                 let color = '#22c55e';
                 if (record.severity === 'High Severity') color = '#ef4444';
                 else if (record.severity === 'Moderate') color = '#f59e0b';
@@ -641,6 +931,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     weight: 2,
                     fillOpacity: 0.9
                 }).bindPopup(`<b>${record.severity}</b><br/>${record.summary}`).addTo(window.dashboardMap);
+                marker.on('click', () => {
+                    renderEvidenceDetail(record);
+                    updateDashboardKPI();
+                });
                 dashboardMarkers.push(marker);
             });
         }
@@ -648,9 +942,16 @@ document.addEventListener('DOMContentLoaded', () => {
         const grid = document.getElementById('historyGrid');
         if (grid) {
             grid.innerHTML = '';
-            [...localHistory].reverse().forEach(record => {
+            if (filteredHistory.length === 0) {
+                const emptyCard = document.createElement('div');
+                emptyCard.className = 'drawer-summary';
+                emptyCard.textContent = 'No evidence matches the current filters yet.';
+                grid.appendChild(emptyCard);
+            }
+            [...filteredHistory].reverse().forEach(record => {
                 const card = document.createElement('div');
-                card.className = 'history-card';
+                const recordKey = historyKey(record);
+                card.className = `history-card ${selectedHistoryKey === recordKey ? 'active' : ''}`;
 
                 const sevClass = record.severity === 'High Severity' ? 'high'
                     : record.severity === 'Moderate' ? 'moderate' : 'low';
@@ -660,11 +961,27 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div class="history-card-content">
                         <div class="history-date">${new Date(record.timestamp).toLocaleString()}</div>
                         <div class="history-severity ${sevClass}">${record.severity}</div>
+                        <div class="history-date">${record.mission_name || record.mission_id || 'Standalone'} • ${record.cluster_size || 1} item cluster</div>
                         <div class="history-summary">${record.summary}</div>
                     </div>
                 `;
+                card.addEventListener('click', () => {
+                    renderEvidenceDetail(record);
+                    if (window.dashboardMap) {
+                        window.dashboardMap.setView([record.lat, record.lon], Math.max(window.dashboardMap.getZoom(), 15));
+                    }
+                    updateDashboardKPI();
+                });
                 grid.appendChild(card);
             });
+        }
+
+        const selectedStillVisible = filteredHistory.some(record => historyKey(record) === selectedHistoryKey);
+        if (!selectedStillVisible) {
+            renderEvidenceDetail(filteredHistory[0] || null);
+        } else {
+            const selected = filteredHistory.find(record => historyKey(record) === selectedHistoryKey);
+            renderEvidenceDetail(selected || null);
         }
     }
 
@@ -839,14 +1156,58 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    [dashboardSeverityFilter, dashboardTimeFilter, dashboardConfidenceFilter].forEach(input => {
+        if (!input) return;
+        input.addEventListener('change', () => {
+            updateDashboardKPI();
+            recenterDashboardMap(getFilteredHistory());
+        });
+    });
+
+    if (recenterMapBtn) {
+        recenterMapBtn.addEventListener('click', () => {
+            recenterDashboardMap(getFilteredHistory());
+        });
+    }
+
+    if (resetDashboardFilters) {
+        resetDashboardFilters.addEventListener('click', () => {
+            if (dashboardSeverityFilter) dashboardSeverityFilter.value = 'all';
+            if (dashboardTimeFilter) dashboardTimeFilter.value = 'all';
+            if (dashboardConfidenceFilter) dashboardConfidenceFilter.value = '0';
+            updateDashboardKPI();
+            recenterDashboardMap(getFilteredHistory());
+        });
+    }
+
+    if (toggleEvidenceDrawerBtn && evidenceDrawer) {
+        toggleEvidenceDrawerBtn.addEventListener('click', () => {
+            evidenceDrawer.classList.toggle('collapsed');
+        });
+    }
+
+    if (refreshRuntimeBtn) {
+        refreshRuntimeBtn.addEventListener('click', () => {
+            void refreshRuntimeConfig();
+        });
+    }
+
     document.querySelectorAll('input[name="vlmMode"]').forEach(input => {
         input.addEventListener('change', () => {
+            hasUserSelectedVlmMode = true;
+            syncVlmModelControl();
             checkInputs();
             if (activeAnalysis && activeAnalysis.kind === 'video') {
                 resultMetaLine.textContent = resultMetaLine.textContent.replace(/VLM [^•]+/, `VLM ${selectedVlmMode()}`);
             }
         });
     });
+
+    if (vlmModelSelect) {
+        vlmModelSelect.addEventListener('change', () => {
+            hasUserSelectedVlmModel = true;
+        });
+    }
 
     analyzeBtn.addEventListener('click', async () => {
         clearError();
@@ -879,7 +1240,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         bestFrame.boxes || [],
                         summarizeVideoSession(session),
                         bestFrame.thumb_url || bestFrame.frame_url,
-                        defaultLocation
+                        defaultLocation,
+                        bestFrame.finding_record || {}
                     );
                 }
             } else {
@@ -888,8 +1250,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 await trackHistoricalAnalysis(
                     report.boxes || [],
                     report.summary || 'Analysis complete',
-                    ensureImageSource(report.annotated_image_b64) || currentImageDataUrl,
-                    defaultLocation
+                    report.persisted_finding?.image || ensureImageSource(report.annotated_image_b64) || currentImageDataUrl,
+                    defaultLocation,
+                    report.persisted_finding || {}
                 );
             }
             resultSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -942,8 +1305,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }, 500);
 
-    applyDefaultVlmMode();
+    applyDefaultVlmMode(true);
+    renderVlmModelOptions(true);
     updateConnectionPanel();
+    syncVlmModelControl();
     void refreshRuntimeConfig();
     setInterval(() => {
         void refreshRuntimeConfig();

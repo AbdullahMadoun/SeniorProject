@@ -354,7 +354,6 @@ class ManagedRemoteModelState:
         for host, port in [
             (normalized["ssh_host"], int(normalized["ssh_port"])),
             (normalized["public_ip"], int(normalized["ssh_port"])),
-            (normalized["public_ip"], 22),
         ]:
             if not host or not port:
                 continue
@@ -521,7 +520,7 @@ class ManagedRemoteModelState:
                     target,
                     f"mkdir -p {quoted_remote_path} {quoted_training_path} {quoted_external_path}",
                 ],
-                timeout=120,
+                timeout=300,
             )
 
             self._append_output("Uploading model_server bundle.")
@@ -543,7 +542,8 @@ class ManagedRemoteModelState:
                 timeout=900,
             )
             self._append_output("Uploading remote bootstrap script.")
-            _run_command([scp_command, *self._scp_base_args(port), str(bootstrap_script), f"{target}:{remote_path}/bootstrap_remote.sh"], timeout=120)
+            _run_command([ssh_command, *ssh_args, target, f"mkdir -p {quoted_remote_path}"], timeout=120)
+            _run_command([scp_command, *scp_args, str(bootstrap_script), f"{target}:{remote_path}/bootstrap_remote.sh"], timeout=300)
             self._append_output("Uploading runtime environment.")
             _run_command([scp_command, *self._scp_base_args(port), str(temp_env_file), f"{target}:{remote_path}/.env"], timeout=120)
 
@@ -739,6 +739,12 @@ class ManagedRemoteModelState:
         source = Path(key_file)
         if not source.exists():
             return key_file
+
+        # On Windows, os.chmod(0o600) is a no-op for ACLs, causing SSH to reject the key
+        # if it's copied to a directory with inherited permissive ACLs.
+        # We skip the preparation/copying step entirely on Windows to avoid this.
+        if os.name == "nt":
+            return str(source.resolve())
 
         runtime_dir = self.bundle_root / "data" / "tmp" / "ssh"
         runtime_dir.mkdir(parents=True, exist_ok=True)

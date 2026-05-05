@@ -17,8 +17,9 @@ except ImportError as exc:  # pragma: no cover
 
 
 MODE_TO_TTA = {
+    "single1024": {"imgsz": [1024], "flip": False},
     "single640": {"imgsz": [640], "flip": False},
-    "msflip": {"imgsz": [544, 640, 800], "flip": True},
+    "msflip": {"imgsz": [640, 800, 1024], "flip": True},
 }
 
 
@@ -295,7 +296,34 @@ class EnsembleDetector:
                 pass
         return [1.0] * len(self.models)
 
-    def predict(self, image_bgr: np.ndarray) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    def predict(
+        self,
+        image_bgr: np.ndarray,
+        overrides: dict[str, Any] | None = None,
+    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        overrides = overrides or {}
+        selection = dict(self.selection)
+        try:
+            if overrides.get("wbf_iou") is not None:
+                selection["wbf_iou"] = float(overrides["wbf_iou"])
+            if overrides.get("wbf_skip") is not None:
+                selection["wbf_skip"] = float(overrides["wbf_skip"])
+            if overrides.get("final_threshold") is not None:
+                selection["final_threshold"] = float(overrides["final_threshold"])
+            if overrides.get("min_support") is not None:
+                selection["min_support"] = max(1, int(overrides["min_support"]))
+        except (TypeError, ValueError):
+            pass
+
+        try:
+            base_conf = float(overrides.get("base_conf", self.settings.base_conf))
+        except (TypeError, ValueError):
+            base_conf = self.settings.base_conf
+        try:
+            base_iou = float(overrides.get("base_iou", self.settings.base_iou))
+        except (TypeError, ValueError):
+            base_iou = self.settings.base_iou
+
         height, width = image_bgr.shape[:2]
         boxes_list: list[list[list[float]]] = []
         scores_list: list[list[float]] = []
@@ -317,8 +345,8 @@ class EnsembleDetector:
                             width,
                             height,
                             imgsz=imgsz,
-                            conf=self.settings.base_conf,
-                            iou_thr=self.settings.base_iou,
+                            conf=base_conf,
+                            iou_thr=base_iou,
                             max_det=self.settings.max_det,
                             flipped=flipped,
                         )
@@ -379,16 +407,16 @@ class EnsembleDetector:
                 boxes_list,
                 scores_list,
                 weights=active_weights,
-                iou_thr=float(self.selection["wbf_iou"]),
-                skip_box_thr=float(self.selection["wbf_skip"]),
+                iou_thr=float(selection["wbf_iou"]),
+                skip_box_thr=float(selection["wbf_skip"]),
             )
 
-        effective_min_support = min(int(self.selection["min_support"]), len(active_aliases))
+        effective_min_support = min(int(selection["min_support"]), len(active_aliases))
 
         detections: list[dict[str, Any]] = []
         filtered_count = 0
         for index, (box, score) in enumerate(zip(final_boxes, final_scores)):
-            if score < float(self.selection["final_threshold"]):
+            if score < float(selection["final_threshold"]):
                 continue
             matches = supporting_members(
                 box,
@@ -413,13 +441,15 @@ class EnsembleDetector:
             "detector_mode": "ensemble",
             "selection": {
                 "members": active_aliases,
-                "mode": self.selection["mode"],
-                "weight_mode": self.selection["weight_mode"],
-                "wbf_iou": float(self.selection["wbf_iou"]),
-                "wbf_skip": float(self.selection["wbf_skip"]),
-                "final_threshold": float(self.selection["final_threshold"]),
+                "mode": selection["mode"],
+                "weight_mode": selection["weight_mode"],
+                "wbf_iou": float(selection["wbf_iou"]),
+                "wbf_skip": float(selection["wbf_skip"]),
+                "final_threshold": float(selection["final_threshold"]),
                 "min_support": effective_min_support,
-                "requested_min_support": int(self.selection["min_support"]),
+                "requested_min_support": int(selection["min_support"]),
+                "base_conf": float(base_conf),
+                "base_iou": float(base_iou),
             },
             "member_weights": {
                 alias: weight for alias, weight in zip(active_aliases, active_weights)

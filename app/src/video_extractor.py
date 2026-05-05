@@ -35,6 +35,8 @@ from pathlib import Path
 from typing import List
 
 import cv2
+import imagehash
+from PIL import Image
 
 
 # ---------------------------------------------------------------------------
@@ -154,19 +156,23 @@ def compute_capture_interval(params: DroneParams) -> float:
     return interval_s
 
 
-def _average_hash(frame: cv2.typing.MatLike, hash_size: int = 8) -> int:
+def _compute_frame_hash(frame: cv2.typing.MatLike, hash_size: int = 8) -> imagehash.ImageHash:
+    """Compute the Difference Hash (dHash) for a frame.
+    dHash is more robust for sequential motion than regular average hashing.
+    """
+    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    pil_img = Image.fromarray(rgb)
+    return imagehash.dhash(pil_img, hash_size=hash_size)
+
+
+def _compute_blur_variance(frame: cv2.typing.MatLike) -> float:
+    """Compute the Laplacian variance to detect motion blur."""
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    small = cv2.resize(gray, (hash_size, hash_size), interpolation=cv2.INTER_AREA)
-    mean = float(small.mean())
-    bits = (small >= mean).astype("uint8").flatten().tolist()
-    value = 0
-    for bit in bits:
-        value = (value << 1) | int(bit)
-    return value
+    return float(cv2.Laplacian(gray, cv2.CV_64F).var())
 
 
-def _hamming_distance(value_a: int, value_b: int) -> int:
-    return int((value_a ^ value_b).bit_count())
+def _hamming_distance(hash_a: imagehash.ImageHash, hash_b: imagehash.ImageHash) -> int:
+    return int(hash_a - hash_b)
 
 
 # ---------------------------------------------------------------------------
@@ -181,7 +187,8 @@ def extract_frames(
     image_format: str = "jpg",
     jpeg_quality: int = 95,
     max_frames: int | None = None,
-    dedup_hamming_threshold: int | None = 4,
+    dedup_hamming_threshold: int | None = 8,
+    blur_threshold: float | None = 80.0,
     verbose: bool = True,
 ) -> List[Path]:
     # Validate jpeg_quality early so the error is clear before we open the video.
@@ -261,7 +268,7 @@ def extract_frames(
     saved_paths: List[Path] = []
     frame_idx = 0        # current frame position inside the video
     capture_count = 0    # number of frames we have saved
-    accepted_hash: int | None = None
+    accepted_hash: imagehash.ImageHash | None = None
     ext = image_format.lstrip(".")
     stem = video_path.stem
 
@@ -283,19 +290,38 @@ def extract_frames(
                 # End of video or read error — clean exit
                 break
 
-            if dedup_hamming_threshold is not None and dedup_hamming_threshold >= 0:
-                frame_hash = _average_hash(frame)
-                if accepted_hash is not None and _hamming_distance(accepted_hash, frame_hash) <= dedup_hamming_threshold:
+            # Stage 3: Laplacian Blur Filter (Optional)
+            if blur_threshold is not None and blur_threshold >= 0:
+                blur_var = _compute_blur_variance(frame)
+                if blur_var < blur_threshold:
                     if verbose:
                         timestamp_s = frame_idx / video_fps
                         mm = int(timestamp_s // 60)
                         ss = timestamp_s % 60
-                        print(
-                            f"  [SKIP] Near-duplicate frame @{mm:02d}:{ss:05.2f} "
-                            f"(hash distance <= {dedup_hamming_threshold})"
-                        )
+                        print(f"  [SKIP] Blurry frame @{mm:02d}:{ss:05.2f} (variance {blur_var:.1f} < {blur_threshold})")
+
+                    # Fallback: if this is the only potential frame (short video) and it's blurry,
+                    # we keep it anyway if we have nothing else, OR we just let the loop continue
+                    # but we'll add a final catch-all after the loop.
                     frame_idx += interval_frames
                     continue
+
+            # Stage 2: Perceptual Hash Gating
+            if dedup_hamming_threshold is not None and dedup_hamming_threshold >= 0:
+                frame_hash = _compute_frame_hash(frame)
+                if accepted_hash is not None:
+                    dist = _hamming_distance(accepted_hash, frame_hash)
+                    if dist < dedup_hamming_threshold:
+                        if verbose:
+                            timestamp_s = frame_idx / video_fps
+                            mm = int(timestamp_s // 60)
+                            ss = timestamp_s % 60
+                            print(
+                                f"  [SKIP] Near-duplicate frame @{mm:02d}:{ss:05.2f} "
+                                f"(hash distance {dist} < {dedup_hamming_threshold})"
+                            )
+                        frame_idx += interval_frames
+                        continue
             else:
                 frame_hash = None
 
@@ -327,6 +353,19 @@ def extract_frames(
             frame_idx += interval_frames
 
     finally:
+        # Final safety check: if we saved 0 frames (due to aggressive filtering or very short video),
+        # take the FIRST frame regardless of blur/duplicates.
+        if not saved_paths and total_frames > 0:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, 0.0)
+            ret, frame = cap.read()
+            if ret:
+                filename = f"{stem}_frame00000_fallback.{ext}"
+                dest = output_dir / filename
+                cv2.imwrite(str(dest), frame, encode_params)
+                saved_paths.append(dest)
+                if verbose:
+                    print(f"\n  [FALLBACK] Saved first frame as safety (all filters were too strict).")
+
         # Always release the VideoCapture, regardless of exceptions.
         cap.release()
 

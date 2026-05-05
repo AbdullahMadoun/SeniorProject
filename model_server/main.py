@@ -79,9 +79,11 @@ def load_prompt() -> str:
 
 
 SYSTEM_PROMPT = (
-    "You are an expert pavement distress inspector and asphalt repair engineer. "
-    "You analyze road images and identify cracks and potholes with precise detail. "
-    "You must output ONLY strictly valid JSON, no extra text before or after the JSON object."
+    "You are an expert Autonomous Road Safety Verification Agent. "
+    "Your role is to verify pavement distress detections (cracks, potholes) with extreme detail. "
+    "You must prioritize depth and structural failure over surface area. "
+    "You MUST output ONLY strictly valid JSON as specified in the instructions. "
+    "Do not include any conversational text, code blocks, or preamble."
 )
 
 USER_PROMPT_TEMPLATE = load_prompt()
@@ -114,6 +116,13 @@ class AnalyzeRequest(BaseModel):
     image_b64: str
     location: Optional[Union[LocationModel, List[float]]] = None
     vlm_mode: Optional[str] = None
+    vlm_model: Optional[str] = None
+    detector_conf: Optional[float] = None
+    detector_iou: Optional[float] = None
+    detector_wbf_iou: Optional[float] = None
+    detector_wbf_skip: Optional[float] = None
+    detector_final_threshold: Optional[float] = None
+    detector_min_support: Optional[int] = None
 
     @field_validator("location", mode="before")
     @classmethod
@@ -215,7 +224,7 @@ def decode_base64_image(b64_string: str) -> Image.Image:
 
 def encode_image_to_base64(image: np.ndarray, fmt: str = ".jpg") -> str:
     """Encode an OpenCV image (BGR) to base64 JPEG string."""
-    success, buffer = cv2.imencode(fmt, image, [cv2.IMWRITE_JPEG_QUALITY, 92])
+    success, buffer = cv2.imencode(fmt, image, [cv2.IMWRITE_JPEG_QUALITY, 100])
     if not success:
         raise RuntimeError("Failed to encode image")
     return base64.b64encode(buffer).decode("utf-8")
@@ -404,9 +413,11 @@ def run_external_vlm_report(
     detections: list[dict[str, Any]],
     lat: Optional[float],
     lon: Optional[float],
+    requested_model: Optional[str] = None,
 ) -> dict[str, Any]:
     if not config.VLM_API_URL:
         raise RuntimeError("VLM_BACKEND=api but VLM_API_URL is not configured.")
+    model_name = str(requested_model or "").strip() or config.VLM_MODEL
     payload = request_vlm_report(
         api_url=config.VLM_API_URL,
         api_key=config.VLM_API_KEY,
@@ -419,7 +430,7 @@ def run_external_vlm_report(
         lon=lon,
         timeout=config.VLM_API_TIMEOUT,
         api_type=config.VLM_API_TYPE,
-        model=config.VLM_MODEL,
+        model=model_name,
     )
     if "raw_text" in payload:
         try:
@@ -440,6 +451,8 @@ def run_hybrid_inference(
     lat: Optional[float] = None,
     lon: Optional[float] = None,
     requested_vlm_mode: Optional[str] = None,
+    requested_vlm_model: Optional[str] = None,
+    detector_overrides: Optional[dict[str, Any]] = None,
 ) -> tuple[Image.Image, dict, list]:
     """Run the YOLO ensemble first, then optional VLM reporting."""
     if not ensemble_detector:
@@ -449,7 +462,7 @@ def run_hybrid_inference(
     cv2_img = pil_to_cv2(pil_image)
 
     print("[PIPELINE] Running ensemble detection...")
-    detections, detector_debug = ensemble_detector.predict(cv2_img)
+    detections, detector_debug = ensemble_detector.predict(cv2_img, overrides=detector_overrides)
     draw_items = []
 
     for detection in detections:
@@ -482,6 +495,7 @@ def run_hybrid_inference(
                 detections=detections,
                 lat=lat,
                 lon=lon,
+                requested_model=requested_vlm_model,
             )
 
         severities = report_json.get("severities", {}) if isinstance(report_json, dict) else {}
@@ -526,6 +540,7 @@ def run_hybrid_inference(
         "detector_debug": {
             **detector_debug,
             "resolved_vlm_mode": resolved_vlm_mode,
+            "resolved_vlm_model": str(requested_vlm_model or "").strip() or config.VLM_MODEL,
         },
     }
     return annotated_pil, report_payload, detections
@@ -739,10 +754,33 @@ async def analyze(req: AnalyzeRequest, api_key: str = Security(verify_api_key)):
     print("[ANALYZE] Running hybrid YOLO + VLM inference...")
     try:
         annotated_pil, report_dict, detections = run_hybrid_inference(
-            pil_image, lat, lon, req.vlm_mode
+            pil_image,
+            lat,
+            lon,
+            req.vlm_mode,
+            req.vlm_model,
+            {
+                "base_conf": req.detector_conf,
+                "base_iou": req.detector_iou,
+                "wbf_iou": req.detector_wbf_iou,
+                "wbf_skip": req.detector_wbf_skip,
+                "final_threshold": req.detector_final_threshold,
+                "min_support": req.detector_min_support,
+            },
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Inference pipeline failed: {e}")
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"[ERROR] Inference pipeline failed: {e}")
+        print(f"[ERROR] Traceback: {error_trace}")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "Inference pipeline failed",
+                "message": str(e),
+                "traceback": error_trace if os.environ.get("DEBUG") else "Internal error"
+            }
+        )
 
     # 3) Merge response
     boxes = []
@@ -816,6 +854,8 @@ async def health():
         "vlm_loaded": vlm_engine is not None,
         "enable_vlm": ENABLE_VLM,
         "vlm_backend": config.VLM_BACKEND,
+        "vlm_model": config.VLM_MODEL,
+        "vlm_api_model_options": config.VLM_API_MODEL_OPTIONS,
         "detector_mode": config.DETECTOR_MODE,
         "ensemble_loaded": ensemble_detector is not None,
         "ensemble_selection": selection,

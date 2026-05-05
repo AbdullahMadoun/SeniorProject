@@ -11,7 +11,10 @@ from PIL import Image
 
 def encode_pil_to_base64(image: Image.Image, fmt: str = "JPEG") -> str:
     buffer = io.BytesIO()
-    image.save(buffer, format=fmt)
+    if fmt.upper() in ("JPEG", "JPG"):
+        image.save(buffer, format=fmt, quality=100, subsampling=0)
+    else:
+        image.save(buffer, format=fmt)
     return base64.b64encode(buffer.getvalue()).decode("utf-8")
 
 
@@ -42,7 +45,7 @@ def request_vlm_report(
     lon: float | None,
     timeout: float,
     api_type: str = "proprietary",
-    model: str = "qwen/qwen-2.5-vl-72b-instruct"
+    model: str = "qwen/qwen2.5-vl-72b-instruct"
 ) -> dict[str, Any]:
     if api_type == "openai" or "openrouter.ai" in api_url:
         payload = {

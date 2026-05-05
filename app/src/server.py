@@ -22,11 +22,20 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
 try:
-    from analyze_video_pipeline import analyze_video_session, init_supabase
+    from analyze_video_pipeline import (
+        analyze_video_session,
+        create_mission_record,
+        finalize_mission_record,
+        init_supabase,
+        persist_image_analysis,
+    )
     VIDEO_PIPELINE_IMPORT_ERROR = ""
 except Exception as exc:  # pragma: no cover
     analyze_video_session = None
+    create_mission_record = None
+    finalize_mission_record = None
     init_supabase = None
+    persist_image_analysis = None
     VIDEO_PIPELINE_IMPORT_ERROR = str(exc)
 
 from managed_remote_model import ManagedRemoteModelState
@@ -42,7 +51,7 @@ load_dotenv(ROOT_DIR / ".env")
 HISTORY_FILE = Path(os.getenv("SKYLINK_HISTORY_FILE", STATIC_DIR / "history.json"))
 HISTORY_IMAGES_DIR = Path(os.getenv("SKYLINK_HISTORY_IMAGES_DIR", STATIC_DIR / "history_images"))
 PROCESSED_HISTORY_DIR = Path(
-    os.getenv("SKYLINK_PROCESSED_HISTORY_DIR", ROOT_DIR / "data" / "processed" / "history")
+    os.getenv("SKYLINK_PROCESSED_HISTORY_DIR", ROOT_DIR / "data" / "h")
 )
 HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
 HISTORY_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
@@ -51,9 +60,27 @@ PROCESSED_HISTORY_DIR.mkdir(parents=True, exist_ok=True)
 if not HISTORY_FILE.exists():
     HISTORY_FILE.write_text("[]", encoding="utf-8")
 
+def _safe_win_path(path: Path | str) -> str:
+    r"""Add \\?\ prefix to absolute Windows paths to bypass 260-char limit."""
+    p = str(Path(path).resolve())
+    if os.name == "nt" and not p.startswith("\\\\?\\"):
+        return "\\\\?\\" + p
+    return p
+
+# Search for cloudflared in path, then bin/, then .env path
+# Simplified tunnel binary discovery
+def _resolve_cloudflared_bin(env_bin: str) -> str:
+    # Use SKYLINK_CLOUDFLARED_BIN if fixed in .env, otherwise check bin/ then fallback to 'cloudflared'
+    if env_bin and os.path.isabs(env_bin) and Path(env_bin).exists():
+        return env_bin
+    local_bin = ROOT_DIR / "bin" / "cloudflared.exe"
+    if local_bin.exists():
+        return str(local_bin.resolve())
+    return "cloudflared"
+
 STATIC_VLM_API_URL = os.getenv("SKYLINK_VLM_API_URL", "")
 STATIC_VLM_API_KEY = os.getenv("SKYLINK_VLM_API_KEY", "")
-BRIDGE_PORT = int(os.getenv("SKYLINK_BRIDGE_PORT", "8001"))
+BRIDGE_PORT = int(os.getenv("SKYLINK_BRIDGE_PORT", "8002"))
 PUBLIC_BASE_URL = os.getenv("SKYLINK_PUBLIC_BASE_URL", "").strip()
 USE_BRIDGE_PROXY = os.getenv("SKYLINK_USE_BRIDGE_PROXY", "true").strip().lower() in {"1", "true", "yes", "on"}
 FRONTEND_DIRECT_MODEL = os.getenv("SKYLINK_FRONTEND_DIRECT_MODEL", "true").strip().lower() in {
@@ -70,7 +97,17 @@ EXPOSE_VLM_API_KEY_TO_FRONTEND = os.getenv("SKYLINK_EXPOSE_VLM_API_KEY_TO_FRONTE
     "on",
 }
 DEFAULT_VLM_MODE = os.getenv("SKYLINK_DEFAULT_VLM_MODE", "local").strip().lower() or "local"
-CLOUDFLARED_BIN = os.getenv("SKYLINK_CLOUDFLARED_BIN", "cloudflared").strip() or "cloudflared"
+STATIC_VLM_API_MODEL_OPTIONS = [
+    item.strip()
+    for item in str(
+        os.getenv(
+            "SKYLINK_VLM_API_MODEL_OPTIONS",
+            "google/gemini-3.1-pro-preview,google/gemini-2.5-pro,x-ai/grok-4.20,moonshotai/kimi-k2-thinking,qwen/qwen2.5-vl-72b-instruct,openai/gpt-4o",
+        )
+    ).split(",")
+    if item.strip()
+]
+CLOUDFLARED_BIN = _resolve_cloudflared_bin(os.getenv("SKYLINK_CLOUDFLARED_BIN", "cloudflared").strip())
 CLOUDFLARED_CONFIG_FILE = os.getenv("SKYLINK_CLOUDFLARED_CONFIG_FILE", "").strip()
 TUNNEL_INFO_FILE = Path(os.getenv("SKYLINK_TUNNEL_INFO_FILE", HISTORY_FILE.parent / "tunnel_info.json"))
 TUNNEL_LOG_FILE = Path(os.getenv("SKYLINK_TUNNEL_LOG_FILE", HISTORY_FILE.parent / "cloudflared.log"))
@@ -88,6 +125,36 @@ TUNNEL_INFO_FILE.parent.mkdir(parents=True, exist_ok=True)
 TUNNEL_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
 REMOTE_MODEL_INFO_FILE.parent.mkdir(parents=True, exist_ok=True)
 REMOTE_MODEL_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+BRIDGE_VLM_API_URL = os.getenv("VLM_API_URL", "").strip()
+BRIDGE_VLM_API_KEY = os.getenv("VLM_API_KEY", "").strip()
+BRIDGE_VLM_API_AUTH_SCHEME = os.getenv("VLM_API_AUTH_SCHEME", "bearer").strip() or "bearer"
+BRIDGE_VLM_API_TYPE = os.getenv("VLM_API_TYPE", "openai").strip() or "openai"
+BRIDGE_VLM_MODEL = os.getenv("VLM_MODEL", "qwen/qwen2.5-vl-72b-instruct").strip() or "qwen/qwen2.5-vl-72b-instruct"
+BRIDGE_VLM_TIMEOUT = float(os.getenv("VLM_API_TIMEOUT", "180") or "180")
+BRIDGE_VLM_PROMPT_FILE = ROOT_DIR / "model_server" / "prompt.txt"
+BRIDGE_VLM_SYSTEM_PROMPT = (
+    "You are an expert Autonomous Road Safety Verification Agent. "
+    "Your role is to verify pavement distress detections (cracks, potholes) with extreme detail. "
+    "You must prioritize depth and structural failure over surface area. "
+    "You MUST output ONLY strictly valid JSON as specified in the instructions. "
+    "Do not include any conversational text, code blocks, or preamble."
+)
+
+
+def _load_bridge_vlm_prompt() -> str:
+    try:
+        if BRIDGE_VLM_PROMPT_FILE.exists():
+            return BRIDGE_VLM_PROMPT_FILE.read_text(encoding="utf-8").strip()
+    except Exception:
+        pass
+    return (
+        "You are an Autonomous Road Safety Verification Agent. "
+        "Return only valid JSON with report_markdown and severities."
+    )
+
+
+BRIDGE_VLM_USER_PROMPT_TEMPLATE = _load_bridge_vlm_prompt()
 
 
 @dataclass
@@ -322,6 +389,7 @@ def _runtime_config(request: Request | None = None) -> dict[str, Any]:
         "MODEL_SERVER_OUTPUT_TAIL": (remote_snapshot.get("output_tail") or []) if show_remote_details else [],
         "DEFAULT_VLM_MODE": DEFAULT_VLM_MODE,
         "VLM_MODE_OPTIONS": ["local", "api", "disabled"],
+        "VLM_API_MODEL_OPTIONS": STATIC_VLM_API_MODEL_OPTIONS,
         "VIDEO_ANALYSIS_ENABLED": _video_pipeline_available(),
         "VIDEO_ANALYSIS_ERROR": VIDEO_PIPELINE_IMPORT_ERROR,
         "SUPABASE_CONFIGURED": _supabase_configured(),
@@ -346,6 +414,17 @@ app.add_middleware(
 )
 
 
+@app.middleware("http")
+async def block_long_urls(request: Request, call_next):
+    """Prevent 'stat: path too long' crashes by rejecting insane URL paths early."""
+    if len(request.url.path) > 200:
+        return JSONResponse(
+            status_code=400,
+            content={"detail": "URL path exceeds safe length limit (200 chars)"},
+        )
+    return await call_next(request)
+
+
 def _read_history() -> list[dict]:
     try:
         return json.loads(HISTORY_FILE.read_text(encoding="utf-8"))
@@ -358,9 +437,14 @@ def _write_history(history: list[dict]) -> None:
 
 
 def _split_data_uri(value: str) -> Tuple[str, str]:
-    if not value or "," not in value:
+    cleaned = str(value or "").strip()
+    if not cleaned:
         raise ValueError("Invalid data URI payload.")
-    header, body = value.split(",", 1)
+    if "," not in cleaned:
+        return "data:image/jpeg;base64", cleaned
+    header, body = cleaned.split(",", 1)
+    if not body.strip():
+        raise ValueError("Invalid data URI payload.")
     return header, body
 
 
@@ -442,8 +526,437 @@ def _safe_stem(name: str, fallback: str = "artifact") -> str:
 
 
 def _processed_url(path: Path) -> str:
-    relative = path.resolve().relative_to(PROCESSED_HISTORY_DIR.resolve())
-    return f"/processed_history/{relative.as_posix()}"
+    # Use direct prefix /h/ for the shortened data/h directory
+    try:
+        relative = path.resolve().relative_to(PROCESSED_HISTORY_DIR.resolve())
+        return f"/h/{relative.as_posix()}"
+    except (ValueError, AttributeError):
+        return ""
+
+
+def _build_auth_headers(api_key: str, auth_scheme: str) -> dict[str, str]:
+    headers = {
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://github.com/SkyLink-Drone/SkyLink",
+        "X-Title": "SkyLink Autonomous Inspection",
+    }
+    if not api_key:
+        return headers
+    scheme = auth_scheme.strip().lower()
+    if scheme == "bearer":
+        headers["Authorization"] = f"Bearer {api_key}"
+    elif scheme == "x-api-key":
+        headers["X-API-Key"] = api_key
+    else:
+        headers["Authorization"] = api_key
+    return headers
+
+
+def _bridge_vlm_available() -> bool:
+    return bool(BRIDGE_VLM_API_URL and BRIDGE_VLM_API_KEY)
+
+
+def _coerce_float(raw: Any) -> float | None:
+    try:
+        if raw is None or str(raw).strip() == "":
+            return None
+        return float(raw)
+    except (TypeError, ValueError):
+        return None
+
+
+def _location_or_default(payload: Dict[str, Any]) -> Tuple[float, float]:
+    lat, lon = _extract_location(payload)
+    lat_num = _coerce_float(lat)
+    lon_num = _coerce_float(lon)
+    return lat_num if lat_num is not None else 26.305, lon_num if lon_num is not None else 50.146
+
+
+def _analysis_summary_from_report(report: Dict[str, Any]) -> str:
+    summary = str(report.get("summary", "")).strip()
+    if summary:
+        return summary
+    boxes = list(report.get("boxes", []))
+    if not boxes:
+        return "No visible damage detected."
+    return f"{len(boxes)} defect(s) detected."
+
+
+def _record_severity(boxes: list[dict]) -> str:
+    severities = [str(box.get("severity", "")).strip().lower() for box in boxes]
+    if any(level in {"high", "critical", "high severity", "severe"} for level in severities):
+        return "High"
+    if any(level in {"medium", "moderate"} for level in severities):
+        return "Medium"
+    if boxes:
+        return "Minor"
+    return "Minor"
+
+
+def _bridge_prompt_from_boxes(
+    boxes: list[dict[str, Any]],
+    *,
+    width: int | None,
+    height: int | None,
+    lat: float | None,
+    lon: float | None,
+) -> str:
+    lines: list[str] = []
+    for box in boxes:
+        bbox = list(box.get("bbox_xyxy") or [0, 0, 0, 0])
+        if len(bbox) != 4:
+            bbox = [0, 0, 0, 0]
+        x1, y1, x2, y2 = [int(float(value)) for value in bbox]
+        w_px = max(1, x2 - x1)
+        h_px = max(1, y2 - y1)
+        area = w_px * h_px
+        confidence = float(box.get("confidence", box.get("score", 0.0)) or 0.0) * 100.0
+        support = int(box.get("support", 1) or 1)
+        label = str(box.get("label") or box.get("class") or "Damage")
+        box_id = str(box.get("id") or f"D{len(lines)}")
+        lines.append(
+            f"- ID: {box_id}, Type: {label}, Ensemble Confidence: {confidence:.1f}%, "
+            f"Support: {support} model(s), Dimensions: {w_px}x{h_px} pixels "
+            f"(Area: {area}), Coords: [x1:{x1}, y1:{y1}, x2:{x2}, y2:{y2}]"
+        )
+
+    gps_str = f"GPS location (lat, lon): {lat}, {lon}." if lat is not None and lon is not None else "GPS location: Not provided."
+    width = int(width or 0)
+    height = int(height or 0)
+    box_str = "\n".join(lines) if lines else "No defects detected by the ensemble detector."
+    return (
+        BRIDGE_VLM_USER_PROMPT_TEMPLATE
+        + f"\n\n{gps_str}\nImage resolution: {width} x {height} pixels.\n\n"
+        + "### DETECTED BOUNDING BOXES (From YOLO ensemble):\n"
+        + box_str
+    )
+
+
+def _extract_json_from_text(text: str) -> dict[str, Any]:
+    match = re.search(r"```(?:json)?\s*\n?(.*?)```", text, re.DOTALL)
+    if match:
+        json_str = match.group(1).strip()
+    else:
+        first = text.find("{")
+        last = text.rfind("}")
+        json_str = text[first:last + 1].strip() if first != -1 and last > first else text.strip()
+    json_str = re.sub(r",\s*([}\]])", r"\1", json_str)
+    return json.loads(json_str)
+
+
+async def _run_bridge_api_vlm(
+    *,
+    image_payload: str,
+    report: dict[str, Any],
+    requested_model: str,
+    lat: float | None,
+    lon: float | None,
+) -> tuple[dict[str, Any], str]:
+    boxes = list(report.get("boxes", []))
+    if not boxes:
+        return {"report_markdown": report.get("report_markdown", ""), "severities": {}}, ""
+
+    image_header, image_body = _split_data_uri(image_payload)
+    image_mime = "image/jpeg"
+    if image_header.startswith("data:") and ";base64" in image_header:
+        image_mime = image_header[5:].split(";", 1)[0] or image_mime
+
+    width = report.get("image_width") or report.get("width")
+    height = report.get("image_height") or report.get("height")
+    user_prompt = _bridge_prompt_from_boxes(boxes, width=width, height=height, lat=lat, lon=lon)
+    model_name = str(requested_model or "").strip() or BRIDGE_VLM_MODEL
+
+    if BRIDGE_VLM_API_TYPE == "openai" or "openrouter.ai" in BRIDGE_VLM_API_URL:
+        payload = {
+            "model": model_name,
+            "messages": [
+                {"role": "system", "content": BRIDGE_VLM_SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": user_prompt},
+                        {"type": "image_url", "image_url": {"url": f"data:{image_mime};base64,{image_body}"}},
+                    ],
+                },
+            ],
+            "response_format": {"type": "json_object"} if "qwen" not in model_name.lower() else None,
+        }
+    else:
+        payload = {
+            "image_b64": image_body,
+            "system_prompt": BRIDGE_VLM_SYSTEM_PROMPT,
+            "prompt": user_prompt,
+            "detections": boxes,
+            "location": {"lat": lat, "lon": lon} if lat is not None and lon is not None else None,
+            "response_format": "report_markdown_and_severities",
+        }
+
+    async with httpx.AsyncClient(timeout=BRIDGE_VLM_TIMEOUT) as client:
+        response = await client.post(
+            BRIDGE_VLM_API_URL,
+            json=payload,
+            headers=_build_auth_headers(BRIDGE_VLM_API_KEY, BRIDGE_VLM_API_AUTH_SCHEME),
+        )
+    if response.status_code >= 400:
+        error_body = response.text
+        # Log to bridge console for debugging
+        print(f"[VLM_API_ERROR] Status {response.status_code} from {BRIDGE_VLM_API_URL}")
+        print(f"[VLM_API_ERROR] Body: {error_body[:1000]}")
+
+        # If the remote returned a 500, check if it's a known pipeline failure
+        detail_msg = f"VLM API Error {response.status_code}"
+        if response.status_code == 500:
+            detail_msg = "Remote VLM Inference Pipeline Failed. This usually indicates a GPU crash or OOM on the model server."
+
+        raise HTTPException(
+            status_code=500,  # Always return 500 to frontend for API failures to trigger error states
+            detail=f"{detail_msg}: {error_body}"
+        )
+
+    data = response.json()
+
+    if isinstance(data, dict):
+        if "report_markdown" in data or "severities" in data:
+            return data, model_name
+        report_payload = data.get("report")
+        if isinstance(report_payload, dict) and ("report_markdown" in report_payload or "severities" in report_payload):
+            return report_payload, model_name
+        text = data.get("text") or data.get("output_text") or data.get("content")
+        if isinstance(text, str):
+            return _extract_json_from_text(text), model_name
+
+    raise RuntimeError(f"Bridge VLM API returned unsupported payload shape: {json.dumps(data)[:500]}")
+
+
+async def _apply_bridge_vlm_if_requested(
+    *,
+    report: dict[str, Any],
+    source_image_payload: str,
+    location_payload: dict[str, Any] | None,
+    requested_mode: str,
+    requested_model: str,
+) -> dict[str, Any]:
+    resolved_mode = str(report.get("detector_debug", {}).get("resolved_vlm_mode", "")).strip().lower()
+    if requested_mode != "api":
+        report.setdefault("detector_debug", {})["bridge_vlm_status"] = "not_requested"
+        return report
+    if resolved_mode == "api":
+        report.setdefault("detector_debug", {})["bridge_vlm_status"] = "remote_api"
+        return report
+    if not _bridge_vlm_available():
+        report.setdefault("detector_debug", {})["bridge_vlm_status"] = "bridge_api_unconfigured"
+        return report
+    if not list(report.get("boxes", [])):
+        report.setdefault("detector_debug", {})["bridge_vlm_status"] = "skipped_no_boxes"
+        return report
+
+    lat, lon = _location_or_default(location_payload or {})
+    api_result, model_name = await _run_bridge_api_vlm(
+        image_payload=source_image_payload,
+        report=report,
+        requested_model=requested_model,
+        lat=lat,
+        lon=lon,
+    )
+
+    severities = {
+        str(key): str(value).strip().lower()
+        for key, value in dict(api_result.get("severities", {})).items()
+        if str(key).strip()
+    }
+    for box in report.get("boxes", []):
+        box_id = str(box.get("id", "")).strip()
+        if box_id and box_id in severities:
+            box["severity"] = severities[box_id]
+
+    report["report_markdown"] = str(api_result.get("report_markdown", report.get("report_markdown", "")))
+    report["summary"] = _analysis_summary_from_report(report)
+    report.setdefault("detector_debug", {})
+    report["detector_debug"]["resolved_vlm_mode"] = "api"
+    report["detector_debug"]["resolved_vlm_model"] = model_name
+    report["detector_debug"]["bridge_vlm_status"] = "bridge_api"
+    return report
+
+
+def _finding_from_analysis(
+    *,
+    report: Dict[str, Any],
+    mission_name: str,
+    mission_id: str = "",
+    image_id: str = "",
+    image_name: str = "",
+    image_url: str = "",
+    timestamp_utc: str = "",
+    location_payload: Dict[str, Any] | None = None,
+    source: str = "bridge",
+    persisted_to_supabase: bool = False,
+) -> dict[str, Any]:
+    boxes = list(report.get("boxes", []))
+    lat, lon = _location_or_default(location_payload or {})
+    confidence = _max_confidence_from_boxes(boxes, 0.0)
+    defect_types = sorted({str(box.get("label") or box.get("class") or "damage") for box in boxes})
+    # Clean image logic: ensure Base64 is prefixed correctly
+    final_image = image_url
+    if image_url and not image_url.startswith("/") and not image_url.startswith("http") and not image_url.startswith("data:"):
+        # If it looks like raw Base64 (no spaces, long), prefix it
+        if " " not in image_url and len(image_url) > 100:
+            final_image = f"data:image/jpeg;base64,{image_url}"
+
+    return {
+        "source": source,
+        "mission_id": mission_id,
+        "mission_name": mission_name or "SkyLink Mission",
+        "image_id": image_id,
+        "image_name": image_name,
+        "timestamp": timestamp_utc or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "lat": lat,
+        "lon": lon,
+        "severity": _record_severity(boxes),
+        "summary": _analysis_summary_from_report(report),
+        "confidence": confidence,
+        "image": final_image,
+        "box_count": len(boxes),
+        "defect_types": defect_types,
+        "cluster_key": mission_id or mission_name or "standalone",
+        "persisted_to_supabase": persisted_to_supabase,
+    }
+
+
+def _upsert_history_record(record: dict[str, Any]) -> None:
+    history = _read_history()
+    record_key = (
+        str(record.get("mission_id") or ""),
+        str(record.get("image_id") or ""),
+        str(record.get("timestamp") or ""),
+        str(record.get("image") or ""),
+    )
+    updated = False
+    for index, existing in enumerate(history):
+        existing_key = (
+            str(existing.get("mission_id") or ""),
+            str(existing.get("image_id") or ""),
+            str(existing.get("timestamp") or ""),
+            str(existing.get("image") or ""),
+        )
+        if existing_key == record_key:
+            history[index] = {**existing, **record}
+            updated = True
+            break
+    if not updated:
+        history.append(record)
+    _write_history(history)
+
+
+def _fetch_supabase_findings(limit: int = 120) -> list[dict[str, Any]]:
+    if not _supabase_configured() or init_supabase is None:
+        return []
+
+    supabase = init_supabase()
+    if supabase is None:
+        return []
+
+    images_resp = supabase.table("mission_images").select(
+        "id,mission_id,image_name,processed_image_path,processing_seconds,timestamp_utc"
+    ).order("timestamp_utc", desc=True).limit(limit).execute()
+    image_rows = list(images_resp.data or [])
+    if not image_rows:
+        return []
+
+    mission_ids = sorted({str(row.get("mission_id")) for row in image_rows if row.get("mission_id")})
+    missions_by_id: dict[str, dict[str, Any]] = {}
+    if mission_ids:
+        missions_resp = supabase.table("missions").select(
+            "id,name,status,started_at,ended_at,description"
+        ).in_("id", mission_ids).execute()
+        missions_by_id = {
+            str(row["id"]): row
+            for row in (missions_resp.data or [])
+            if row.get("id") is not None
+        }
+
+    image_ids = [str(row["id"]) for row in image_rows if row.get("id") is not None]
+    detections_by_image: dict[str, list[dict[str, Any]]] = {}
+    if image_ids:
+        detections_resp = supabase.table("damage_detections").select(
+            "image_id,severity,confidence,damage_type,bounding_box"
+        ).in_("image_id", image_ids).execute()
+        for detection in (detections_resp.data or []):
+            image_id = str(detection.get("image_id") or "")
+            detections_by_image.setdefault(image_id, []).append(detection)
+
+    findings: list[dict[str, Any]] = []
+    for row in image_rows:
+        image_id = str(row.get("id") or "")
+        mission_id = str(row.get("mission_id") or "")
+        mission = missions_by_id.get(mission_id, {})
+        detections = detections_by_image.get(image_id, [])
+        boxes = [
+            {
+                "severity": detection.get("severity"),
+                "confidence": detection.get("confidence"),
+                "class": detection.get("damage_type"),
+                "bbox_xyxy": detection.get("bounding_box"),
+            }
+            for detection in detections
+        ]
+        report = {
+            "boxes": boxes,
+            "summary": mission.get("description") if detections else "No persisted detections.",
+        }
+        findings.append(
+            {
+                **_finding_from_analysis(
+                    report=report,
+                    mission_name=str(mission.get("name") or "SkyLink Mission"),
+                    mission_id=mission_id,
+                    image_id=image_id,
+                    image_name=str(row.get("image_name") or ""),
+                    image_url=str(row.get("processed_image_path") or ""),
+                    timestamp_utc=str(row.get("timestamp_utc") or ""),
+                    source="supabase",
+                    persisted_to_supabase=True,
+                ),
+                "mission_status": mission.get("status") or "",
+                "mission_description": mission.get("description") or "",
+                "processing_seconds": row.get("processing_seconds"),
+            }
+        )
+    return findings
+
+
+def _combined_findings() -> list[dict[str, Any]]:
+    history = list(_read_history())
+    merged: dict[tuple[str, str, str, str], dict[str, Any]] = {}
+    for record in history:
+        key = (
+            str(record.get("mission_id") or ""),
+            str(record.get("image_id") or ""),
+            str(record.get("timestamp") or ""),
+            str(record.get("image") or ""),
+        )
+        merged[key] = dict(record)
+
+    for record in _fetch_supabase_findings():
+        key = (
+            str(record.get("mission_id") or ""),
+            str(record.get("image_id") or ""),
+            str(record.get("timestamp") or ""),
+            str(record.get("image") or ""),
+        )
+        merged[key] = {**merged.get(key, {}), **record}
+
+    counts_by_cluster: dict[str, int] = {}
+    for record in merged.values():
+        cluster_key = str(record.get("cluster_key") or "standalone")
+        counts_by_cluster[cluster_key] = counts_by_cluster.get(cluster_key, 0) + 1
+
+    findings = list(merged.values())
+    for record in findings:
+        cluster_key = str(record.get("cluster_key") or "standalone")
+        record["cluster_size"] = counts_by_cluster.get(cluster_key, 1)
+
+    findings.sort(key=lambda record: str(record.get("timestamp") or ""), reverse=True)
+    return findings[:150]
 
 
 async def _save_upload_file(upload: UploadFile, destination: Path) -> None:
@@ -484,6 +997,20 @@ def _materialize_video_result(session_dir: Path, result: dict[str, Any]) -> dict
             annotated_url = _processed_url(annotated_file)
 
         frame_url = _processed_url(frame_path) if frame_path.exists() else ""
+        mission_id = str(frame_record.get("mission_id") or result.get("mission_id") or "")
+        image_id = str(frame_record.get("image_id") or "")
+        image_source = frame_record.get("public_url") or annotated_url or frame_url
+        finding_record = _finding_from_analysis(
+            report=report,
+            mission_name=str(result.get("mission_name") or "SkyLink Video Mission"),
+            mission_id=mission_id,
+            image_id=image_id,
+            image_name=frame_path.name or f"frame_{index:04d}",
+            image_url=str(image_source or ""),
+            timestamp_utc=str(frame_record.get("timestamp_utc") or ""),
+            source="supabase" if image_id else "bridge",
+            persisted_to_supabase=bool(image_id),
+        )
         frames_out.append(
             {
                 "frame_index": index,
@@ -498,6 +1025,9 @@ def _materialize_video_result(session_dir: Path, result: dict[str, Any]) -> dict
                 "boxes": boxes,
                 "report_markdown": report.get("report_markdown", ""),
                 "detector_debug": report.get("detector_debug", {}),
+                "image_id": image_id,
+                "mission_id": mission_id,
+                "finding_record": finding_record,
                 "error": frame_record.get("error", ""),
             }
         )
@@ -554,6 +1084,11 @@ async def get_history() -> list[dict]:
     return _read_history()
 
 
+@app.get("/api/findings")
+async def get_findings() -> list[dict]:
+    return _combined_findings()
+
+
 @app.post("/api/history")
 async def save_history(request: Request) -> Dict[str, str]:
     try:
@@ -563,9 +1098,7 @@ async def save_history(request: Request) -> Dict[str, str]:
             file_path = _decode_image_to_file(image_value, HISTORY_IMAGES_DIR, prefix="thumb")
             data["image"] = f"/history_images/{file_path.name}"
 
-        history = _read_history()
-        history.append(data)
-        _write_history(history)
+        _upsert_history_record(data)
         return {"status": "success"}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
@@ -578,6 +1111,8 @@ async def analyze(request: Request) -> Any:
         request_url = ""
         request_key = ""
         forward_json: dict[str, Any] | None = None
+        mission_name = "SkyLink Photo Mission"
+        persist_db = False
 
         if "multipart/form-data" in content_type:
             form = await request.form()
@@ -587,6 +1122,8 @@ async def analyze(request: Request) -> Any:
 
             request_url = str(form.get("api_url", "")).strip()
             request_key = str(form.get("api_key", "")).strip()
+            mission_name = str(form.get("mission_name", mission_name)).strip() or mission_name
+            persist_db = _coerce_bool(form.get("persist_db"), False)
             file_bytes = await upload.read()
             content_type_hint = str(upload.content_type or "application/octet-stream")
             image_b64 = base64.b64encode(file_bytes).decode("ascii")
@@ -611,6 +1148,8 @@ async def analyze(request: Request) -> Any:
             payload = await request.json()
             request_url = str(payload.pop("api_url", "")).strip()
             request_key = str(payload.pop("api_key", "")).strip()
+            mission_name = str(payload.get("mission_name", mission_name)).strip() or mission_name
+            persist_db = _coerce_bool(payload.get("persist_db"), False)
             forward_json = payload
 
         configured_url, configured_key, _, _ = _resolved_model_target()
@@ -637,7 +1176,97 @@ async def analyze(request: Request) -> Any:
             )
         if response.status_code != 200:
             raise HTTPException(status_code=response.status_code, detail=response.text)
-        return response.json()
+
+        response_payload = response.json()
+        report = response_payload.get("report", response_payload)
+        requested_vlm_mode = str((forward_json or {}).get("vlm_mode", "")).strip().lower()
+        requested_vlm_model = str((forward_json or {}).get("vlm_model", "")).strip()
+        source_payload = str((forward_json or {}).get("image_b64", "")).strip()
+        if source_payload:
+            report = await _apply_bridge_vlm_if_requested(
+                report=report,
+                source_image_payload=source_payload,
+                location_payload=forward_json or {},
+                requested_mode=requested_vlm_mode,
+                requested_model=requested_vlm_model,
+            )
+            response_payload["report"] = report
+        persisted_finding: dict[str, Any] | None = None
+        persisted_to_supabase = False
+
+        if persist_db and _supabase_configured() and init_supabase is not None and create_mission_record and persist_image_analysis and finalize_mission_record:
+            supabase = init_supabase()
+            if supabase is not None:
+                mission_id = ""
+                started_at = time.time()
+                try:
+                    mission_id = create_mission_record(supabase, mission_name, status="processing")
+                    # Drastically shorten path for Windows compatibility
+                    session_dir = PROCESSED_HISTORY_DIR / f"p_{time.strftime('%m%d_%H%M%S')}"
+                    session_dir.mkdir(parents=True, exist_ok=True)
+                    source_payload = str((forward_json or {}).get("image_b64", "")).strip()
+                    if not source_payload:
+                        raise RuntimeError("Photo payload missing image_b64 for persistence.")
+
+                    original_file = _decode_image_to_file(source_payload, session_dir, prefix="source")
+                    annotated_payload = str(report.get("annotated_image_b64", "")).strip()
+                    storage_file = original_file
+                    local_image_url = _processed_url(original_file)
+                    if annotated_payload:
+                        annotated_file = _decode_image_to_file(annotated_payload, session_dir, prefix="annotated")
+                        storage_file = annotated_file
+                        local_image_url = _processed_url(annotated_file)
+
+                    timestamp_utc = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+                    persistence_info = persist_image_analysis(
+                        supabase,
+                        mission_id=mission_id,
+                        image_path=storage_file,
+                        report=report,
+                        timestamp_utc=timestamp_utc,
+                        processing_seconds=time.time() - started_at,
+                        image_name=_bridge_image_name((forward_json or {}).get("image_name"), storage_file.name),
+                    )
+                    finalize_mission_record(
+                        supabase,
+                        mission_id,
+                        status="completed",
+                        description=f"Processed standalone photo with {len(report.get('boxes', []))} detections.",
+                    )
+                    persisted_to_supabase = True
+                    persisted_finding = {
+                        **_finding_from_analysis(
+                            report=report,
+                            mission_name=mission_name,
+                            mission_id=mission_id,
+                            image_id=str(persistence_info.get("image_id") or ""),
+                            image_name=_bridge_image_name((forward_json or {}).get("image_name"), storage_file.name),
+                            image_url=str(persistence_info.get("public_url") or local_image_url),
+                            timestamp_utc=timestamp_utc,
+                            location_payload=forward_json or {},
+                            source="supabase",
+                            persisted_to_supabase=True,
+                        ),
+                        "local_image_url": local_image_url,
+                    }
+                    _upsert_history_record(persisted_finding)
+                except Exception as exc:
+                    print(f"Supabase Persistence Block Error: {exc}")
+                    import traceback
+                    traceback.print_exc()
+                    if mission_id:
+                        finalize_mission_record(
+                            supabase,
+                            mission_id,
+                            status="failed",
+                            description="Photo analysis persistence failed.",
+                        )
+                    raise
+
+        response_payload["persisted_to_supabase"] = persisted_to_supabase
+        if persisted_finding:
+            response_payload["persisted_finding"] = persisted_finding
+        return response_payload
     except HTTPException:
         raise
     except Exception as exc:
@@ -650,6 +1279,13 @@ async def analyze_video(
     video: UploadFile = File(...),
     mission_name: str = Form("SkyLink Video Mission"),
     vlm_mode: str = Form(""),
+    vlm_model: str = Form(""),
+    detector_conf: str = Form(""),
+    detector_iou: str = Form(""),
+    detector_wbf_iou: str = Form(""),
+    detector_wbf_skip: str = Form(""),
+    detector_final_threshold: str = Form(""),
+    detector_min_support: str = Form(""),
     speed_mps: float = Form(5.0),
     altitude_m: float = Form(10.0),
     fov: float = Form(82.6),
@@ -678,7 +1314,7 @@ async def analyze_video(
             ),
         )
 
-    session_id = f"video_{time.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
+    session_id = f"v_{time.strftime('%m%d_%H%M')}"
     session_dir = PROCESSED_HISTORY_DIR / session_id
     frames_dir = session_dir / "frames"
     session_dir.mkdir(parents=True, exist_ok=True)
@@ -690,6 +1326,20 @@ async def analyze_video(
     request_overrides = {}
     if vlm_mode.strip():
         request_overrides["vlm_mode"] = vlm_mode.strip().lower()
+    if vlm_model.strip():
+        request_overrides["vlm_model"] = vlm_model.strip()
+    if detector_conf.strip():
+        request_overrides["detector_conf"] = detector_conf.strip()
+    if detector_iou.strip():
+        request_overrides["detector_iou"] = detector_iou.strip()
+    if detector_wbf_iou.strip():
+        request_overrides["detector_wbf_iou"] = detector_wbf_iou.strip()
+    if detector_wbf_skip.strip():
+        request_overrides["detector_wbf_skip"] = detector_wbf_skip.strip()
+    if detector_final_threshold.strip():
+        request_overrides["detector_final_threshold"] = detector_final_threshold.strip()
+    if detector_min_support.strip():
+        request_overrides["detector_min_support"] = detector_min_support.strip()
 
     supabase = init_supabase() if (_coerce_bool(persist_db, True) and _supabase_configured()) else None
     try:
@@ -717,8 +1367,8 @@ async def analyze_video(
     return payload
 
 
+app.mount("/h", StaticFiles(directory=PROCESSED_HISTORY_DIR), name="processed_history")
 app.mount("/history_images", StaticFiles(directory=HISTORY_IMAGES_DIR), name="history_images")
-app.mount("/processed_history", StaticFiles(directory=PROCESSED_HISTORY_DIR), name="processed_history")
 app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")
 
 

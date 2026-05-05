@@ -17,5 +17,15 @@ window.APP_CONFIG = {
     MODEL_SERVER_ERROR: "",
     MODEL_SERVER_PROVIDER: "",
     MODEL_SERVER_PUBLIC_URL: "",
-    MODEL_SERVER_REMOTE_HOST: ""
+    MODEL_SERVER_REMOTE_HOST: "",
+    DEFAULT_VLM_MODE: "local",
+    VLM_MODE_OPTIONS: ["local", "api", "disabled"],
+    VLM_API_MODEL_OPTIONS: [
+        "google/gemini-3.1-pro-preview",
+        "google/gemini-2.5-pro",
+        "x-ai/grok-4.20",
+        "moonshotai/kimi-k2-thinking",
+        "qwen/qwen2.5-vl-72b-instruct",
+        "openai/gpt-4o"
+    ]
 };
