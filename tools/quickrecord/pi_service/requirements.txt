@@ -1,0 +1,8 @@
+fastapi==0.115.4
+uvicorn[standard]==0.32.0
+# picamera2 comes from the Pi's apt-installed python3-picamera2 package
+# bridged into the venv via libcamera.pth (see autonomy/companion/
+# bootstrap_rpi_companion.sh:62-63 for how that bridge is wired).
+# DO NOT pip-install picamera2 — the pip wheel is incomplete and will
+# not see the camera hardware. Install on the Pi with:
+#     sudo apt install -y python3-picamera2 ffmpeg

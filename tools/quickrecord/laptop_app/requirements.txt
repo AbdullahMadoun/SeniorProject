@@ -1,0 +1,6 @@
+httpx==0.27.2
+# tkinter ships with the system Python on macOS, Linux, and Windows —
+# it is NOT a pip package. If `python -c "import tkinter"` fails:
+#   - macOS (Homebrew Python):  brew install python-tk@3.12
+#   - Debian / Ubuntu:          sudo apt install python3-tk
+#   - Fedora:                   sudo dnf install python3-tkinter
