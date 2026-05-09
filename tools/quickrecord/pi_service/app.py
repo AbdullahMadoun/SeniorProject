@@ -27,6 +27,7 @@ service on a trusted network (a dev hotspot, not an open network).
 from __future__ import annotations
 
 import datetime as _dt
+import json
 import logging
 import pathlib
 import shutil
@@ -101,6 +102,33 @@ class StartRequest(BaseModel):
 
 def _utc_now_iso() -> str:
     return _dt.datetime.now(_dt.timezone.utc).isoformat()
+
+
+def _probe_duration_seconds(path: pathlib.Path) -> float:
+    """Return the encoded-video duration of an MP4 in seconds.
+
+    Uses ffprobe to read the actual finalized container duration,
+    rather than wall-clock from /start to /stop. They differ because
+    Picamera2 takes ~1 s after start_recording() before frames begin
+    flowing into the encoder, so the leading dead time appears in
+    wall-clock but not in the file. Encoded duration is what users
+    actually receive in the downloaded MP4.
+
+    Returns 0.0 on any ffprobe error rather than failing the /stop
+    response — the duration is informational, not load-bearing.
+    """
+    try:
+        result = subprocess.run(
+            ["ffprobe", "-v", "quiet", "-print_format", "json",
+             "-show_format", str(path)],
+            check=True, capture_output=True, timeout=5,
+        )
+        meta = json.loads(result.stdout)
+        return float(meta.get("format", {}).get("duration", 0.0))
+    except (subprocess.CalledProcessError,
+            subprocess.TimeoutExpired,
+            ValueError, KeyError):
+        return 0.0
 
 
 @app.post("/start")
@@ -216,10 +244,7 @@ def stop_recording() -> dict[str, Any]:
 
     path = pathlib.Path(rec["path"])
     size_bytes = path.stat().st_size if path.exists() else 0
-    started_at = _dt.datetime.fromisoformat(rec["started_at"])
-    duration_s = (
-        _dt.datetime.fromisoformat(stopped_at) - started_at
-    ).total_seconds()
+    duration_s = _probe_duration_seconds(path) if path.exists() else 0.0
 
     rec["stopped_at"] = stopped_at
     rec["size_bytes"] = size_bytes

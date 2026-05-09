@@ -20,20 +20,17 @@ sudo apt install -y python3-picamera2 ffmpeg python3-venv
 # Create the quickrecord venv next to this README:
 cd ~/path/to/SeniorProject/tools/quickrecord/pi_service
 python3 -m venv --system-site-packages .venv-quickrecord
-
-# `--system-site-packages` lets the venv see python3-picamera2 from apt
-# without needing the libcamera.pth bridge dance. If that flag doesn't
-# work for you (e.g. picamera2 still ImportErrors), copy the libcamera
-# bridge from .venv-pi:
-#
-#   cp ../../../autonomy/companion/.venv-pi/lib/python*/site-packages/libcamera.pth \
-#      .venv-quickrecord/lib/python*/site-packages/
-#
-# See autonomy/companion/bootstrap_rpi_companion.sh:62-63 for the
-# original bridge wiring.
-
 .venv-quickrecord/bin/pip install -r requirements.txt
 ```
+
+`--system-site-packages` is required: `picamera2` is installed at the
+system level via `sudo apt install -y python3-picamera2` and is exposed
+to the venv through a `.pth` file in the system site-packages. Without
+`--system-site-packages` the venv is hermetic and `import picamera2`
+fails at service startup with a misleading "no module named picamera2"
+error, even though pip reported all requirements installed cleanly.
+This is the same trick used by `autonomy/companion/.venv-pi` — see
+`autonomy/companion/bootstrap_rpi_companion.sh`.
 
 Verify the camera is reachable:
 
@@ -55,9 +52,9 @@ cd ~/path/to/SeniorProject/tools/quickrecord/pi_service
 PYTHONPATH=.. .venv-quickrecord/bin/python -m pi_service
 ```
 
-The service prints `quickrecord service ready, storage=/tmp/quickrecord`
-on startup. If `ffmpeg` is missing it will fail fast with a clear error
-message — install ffmpeg and restart.
+The service is ready when uvicorn prints `Application startup complete`.
+If `ffmpeg` is missing it will fail fast with a clear error message —
+install ffmpeg and restart.
 
 **Do not run as a systemd service.** This is an ad-hoc tool; bring it
 up by hand when you want to record, and Ctrl-C it when you're done.
@@ -120,6 +117,8 @@ to be ≤ 2 s for most players to seek smoothly.
 No body.
 
 - `200 OK` → `{"recording_id", "stopped_at", "size_bytes", "duration_s"}`
+  - `duration_s` is the encoded-video duration in seconds, as reported
+    by ffprobe; `0.0` if the probe failed.
 - `409 Conflict` → not recording
 
 ### `GET /file/{recording_id}`
